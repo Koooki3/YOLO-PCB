@@ -22,6 +22,7 @@ HImage QImageToHImage(const QImage &qImage)
     {
         throw invalid_argument("Invalid QImage");
     }
+    
 
     // 转换为32位RGB格式
     QImage converted = qImage.convertToFormat(QImage::Format_RGB32);
