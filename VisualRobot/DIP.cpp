@@ -24,7 +24,6 @@
 #define WARNNING 1
 #define INFO 0
 
-
 using namespace HalconCpp;
 using namespace Eigen;
 using namespace std;
