@@ -13,7 +13,6 @@
 using namespace HalconCpp;
 using namespace std;
 
-
 HImage QImageToHImage(const QImage &qImage);
 
 QImage HImageToQImage(const HImage &hImage);
