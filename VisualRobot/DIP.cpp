@@ -19,6 +19,10 @@
 #include <Halcon.h>
 #include <halconcpp/HDevThread.h>
 #include <cmath>
+#include <opencv2/opencv.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
 
 #define ERROR 2
 #define WARNNING 1
@@ -267,6 +271,111 @@ int Algorithm(const string& imgPath, HTuple& Row, HTuple& Col)
      return 0;
 }
 
+// OpenCV版本的圆形检测算法
+int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double size = 75.0)
+{
+    // 读取图像
+    cv::Mat image = cv::imread("/home/orangepi/Desktop/VisualRobot_local/Img/capture.jpg");
+    if(image.empty()) {
+        qDebug() << "Error: Cannot read image file";
+        return 1;
+    }
+
+    // 获取图像尺寸
+    int height = image.rows;
+    int width = image.cols;
+
+    // 计算参数（基于原始代码中的比例）
+    double r = (height * 316.0) / 2182.0;
+    double dis_col = (width * 1049.0) / 2734.0;
+    double dis_row = (height * 774.0) / 2182.0;
+    double rmin = r - 10;
+    double rmax = r + 10;
+
+    // 定义9个搜索区域
+    vector<cv::Rect> searchAreas;
+    vector<cv::Point2f> worldCoords;
+    
+    // 计算世界坐标
+    double world_dis_col = 1049.0 * size / 2734.0;
+    double world_dis_row = 774.0 * size / 2734.0;
+
+    // 定义9个区域的世界坐标
+    for(int row = 0; row < 3; row++) {
+        for(int col = 0; col < 3; col++) {
+            // 计算搜索区域
+            int x1 = (col == 0) ? 0 : static_cast<int>(r + (col - 0.5) * dis_col);
+            int x2 = (col == 2) ? width : static_cast<int>(r + (col + 0.5) * dis_col);
+            int y1 = (row == 0) ? 0 : static_cast<int>(r + (row - 0.5) * dis_row);
+            int y2 = (row == 2) ? height : static_cast<int>(r + (row + 0.5) * dis_row);
+            
+            searchAreas.push_back(cv::Rect(x1, y1, x2-x1, y2-y1));
+            worldCoords.push_back(cv::Point2f(col * world_dis_col, row * world_dis_row));
+        }
+    }
+
+    // 转换为灰度图
+    cv::Mat grayImage;
+    cv::cvtColor(image, grayImage, cv::COLOR_BGR2GRAY);
+
+    // Canny边缘检测
+    cv::Mat edges;
+    cv::Canny(grayImage, edges, 15, 40);
+
+    // 在每个区域中检测圆
+    vector<cv::Vec3f> detectedCircles;
+    cv::Mat result = image.clone();
+
+    for(size_t i = 0; i < searchAreas.size(); i++) {
+        cv::Mat roi = edges(searchAreas[i]);
+        vector<cv::Vec3f> circles;
+        
+        // 使用Hough圆变换检测圆
+        cv::HoughCircles(roi, circles, cv::HOUGH_GRADIENT, 1,
+                        roi.rows/8,  // 最小圆心距离
+                        100, 30,     // Canny高阈值，累加器阈值
+                        rmin, rmax); // 最小和最大半径
+
+        // 找到最佳匹配的圆
+        double bestFit = std::numeric_limits<double>::max();
+        cv::Vec3f bestCircle;
+        bool found = false;
+
+        for(const auto& circle : circles) {
+            float radius = circle[2];
+            float bias = std::abs(radius - r);
+            
+            if(bias < bestFit) {
+                bestFit = bias;
+                bestCircle = circle;
+                found = true;
+            }
+        }
+
+        if(found) {
+            // 调整圆心坐标到原图坐标系
+            bestCircle[0] += searchAreas[i].x;
+            bestCircle[1] += searchAreas[i].y;
+            detectedCircles.push_back(bestCircle);
+
+            // 存储结果
+            WorldCoord.append(QPointF(worldCoords[i].x, worldCoords[i].y));
+            PixelCoord.append(QPointF(bestCircle[0], bestCircle[1]));
+
+            // 绘制结果
+            cv::circle(result, cv::Point(bestCircle[0], bestCircle[1]), 
+                      bestCircle[2], cv::Scalar(0, 255, 0), 10);
+            cv::circle(result, cv::Point(bestCircle[0], bestCircle[1]), 
+                      10, cv::Scalar(0, 0, 255), -1);
+        }
+    }
+
+    // 保存结果图像
+    cv::imwrite("/home/orangepi/Desktop/VisualRobot_local/Img/circle_detected.jpg", result);
+
+    return detectedCircles.empty() ? 1 : 0;
+}
+
 Matrix3d readTransformationMatrix(const string& filename)
 {
     ifstream file(filename);
@@ -297,6 +406,112 @@ Matrix3d readTransformationMatrix(const string& filename)
     }
 
     return matrix;
+}
+
+// OpenCV版本的矩形检测算法
+int Algorithm_opencv(const string& imgPath, vector<double>& Row, vector<double>& Col)
+{
+    // 读取图像
+    cv::Mat image = cv::imread(imgPath);
+    if (image.empty()) {
+        qDebug() << "Error: Cannot read image file";
+        return 1;
+    }
+
+    // 转换为灰度图
+    cv::Mat grayImage;
+    cv::cvtColor(image, grayImage, cv::COLOR_BGR2GRAY);
+
+    // 自适应二值化
+    cv::Mat binaryImage;
+    cv::adaptiveThreshold(grayImage, binaryImage, 255,
+                         cv::ADAPTIVE_THRESH_GAUSSIAN_C,
+                         cv::THRESH_BINARY, 11, 2);
+
+    // 高斯滤波平滑处理
+    cv::Mat smoothedImage;
+    cv::GaussianBlur(binaryImage, smoothedImage, cv::Size(3, 3), 0);
+
+    // Canny边缘检测
+    cv::Mat edges;
+    cv::Canny(smoothedImage, edges, 20, 40);
+
+    // 查找轮廓
+    vector<vector<cv::Point>> contours;
+    vector<cv::Vec4i> hierarchy;
+    cv::findContours(edges, contours, hierarchy, 
+                     cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+    // 过滤短轮廓
+    vector<vector<cv::Point>> longContours;
+    for(const auto& contour : contours) {
+        if(cv::arcLength(contour, true) > 50) {
+            longContours.push_back(contour);
+        }
+    }
+
+    // 寻找最大的矩形轮廓
+    vector<cv::Point> rectContour;
+    double maxArea = 0;
+    for(const auto& contour : longContours) {
+        double area = cv::contourArea(contour);
+        if(area > maxArea) {
+            cv::RotatedRect rect = cv::minAreaRect(contour);
+            vector<cv::Point2f> boxPoints(4);
+            rect.points(boxPoints.data());
+            
+            // 转换为整数点
+            vector<cv::Point> intPoints;
+            for(const auto& pt : boxPoints) {
+                intPoints.push_back(cv::Point(static_cast<int>(pt.x), static_cast<int>(pt.y)));
+            }
+            
+            maxArea = area;
+            rectContour = intPoints;
+        }
+    }
+
+    // 如果找到矩形
+    if(!rectContour.empty()) {
+        // 按照顺时针顺序排序角点
+        vector<cv::Point> orderedPoints = rectContour;
+        // 按y坐标排序（从上到下）
+        sort(orderedPoints.begin(), orderedPoints.end(), 
+             [](const cv::Point& a, const cv::Point& b) { return a.y < b.y; });
+        
+        // 上面的两个点按x坐标排序（从左到右）
+        if(orderedPoints[0].x > orderedPoints[1].x) 
+            swap(orderedPoints[0], orderedPoints[1]);
+        
+        // 下面的两个点按x坐标排序（从左到右）
+        if(orderedPoints[2].x > orderedPoints[3].x) 
+            swap(orderedPoints[2], orderedPoints[3]);
+
+        // 存储角点坐标
+        for(const auto& pt : orderedPoints) {
+            Row.push_back(pt.y);
+            Col.push_back(pt.x);
+        }
+
+        // 可视化结果
+        cv::Mat result = image.clone();
+        
+        // 绘制矩形
+        for(int i = 0; i < 4; i++) {
+            cv::line(result, rectContour[i], rectContour[(i+1)%4], 
+                    cv::Scalar(0, 255, 0), 10);
+            // 绘制角点
+            cv::drawMarker(result, cv::Point(Col[i], Row[i]),
+                          cv::Scalar(0, 0, 255), cv::MARKER_CROSS, 200, 10);
+        }
+
+        // 保存结果图像
+        cv::imwrite("../detectedImg.jpg", result);
+        
+        return 0;
+    }
+
+    return 1;
 }
 
 int getCoords(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double size = 75.0)
