@@ -600,7 +600,7 @@ void MainWindow::on_pushButton_clicked()
     }
 
     // 生成保存路径
-    QString dir = "/home/kooki/VisualRobot/Img";
+    QString dir = "/home/orangepi/Desktop/VisualRobot_local/Img/";
     QString fpath = QDir(dir).filePath(QString("capture.jpg"));
 
     QFile f(fpath);
@@ -652,7 +652,7 @@ void MainWindow::on_pushButton_clicked()
         }
     }
 
-    QString imagePath = "/home/kooki/VisualRobot/detectedImg.jpg";
+    QString imagePath = "../detectedImg.jpg";
 
     // 加载图片
     QPixmap pixmap(imagePath);
