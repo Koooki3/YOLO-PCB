@@ -28,6 +28,10 @@
 #include <QPainter>
 #include <QFont>
 #include <QFontMetrics>
+#include <opencv2/opencv.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
 
 #define ERROR 2
 #define WARNNING 1
@@ -600,7 +604,7 @@ void MainWindow::on_pushButton_clicked()
     }
 
     // 生成保存路径
-    QString dir = "/home/orangepi/Desktop/VisualRobot_local/Img/";
+    QString dir = "/home/orangepi/Desktop/VisualRobot_Local/Img/";
     QString fpath = QDir(dir).filePath(QString("capture.jpg"));
 
     QFile f(fpath);
@@ -617,10 +621,55 @@ void MainWindow::on_pushButton_clicked()
     appendLog(QString("保存成功，地址为：%1").arg(fpath), INFO);
 
     //执行检长算法
-    int ProcessedOK = Algorithm(fpath.toStdString(), Row, Col);
-    cout << "原始数据:" << endl;
-    cout << "Row = " << Row.ToString() << endl;
-    cout << "Col = " << Col.ToString() << endl;
+//    int ProcessedOK = Algorithm(fpath.toStdString(), Row, Col);
+//    cout << "原始数据:" << endl;
+//    cout << "Row = " << Row.ToString() << endl;
+//    cout << "Col = " << Col.ToString() << endl;
+//    if (ProcessedOK)
+//    {
+//        appendLog("角点检测算法执行失败，请调整曝光或者重选待测物体", ERROR);
+//        return;
+//    }
+//    else
+//    {
+//        appendLog("待检测图像读取成功，角点检测算法执行完毕", INFO);
+//    }
+
+//    if (Row.Length() != Col.Length())
+//    {
+//        appendLog("获取到的x,y参数数量不匹配", ERROR);
+//        return;
+//    }
+//    else if (Row.Length() == 0 || Col.Length() == 0)
+//    {
+//        appendLog("未能正确检测到角点", ERROR);
+//    }
+//    else
+//    {
+//        for (int i = 0; i < Row.Length(); ++i)
+//        {
+//            appendLog(QString("第%1个角点(x,y)像素坐标为：(%2, %3)")
+//                      .arg(i+1)
+//                      .arg(static_cast<double>(Col[i]))
+//                      .arg(static_cast<double>(Row[i])),
+//                      INFO);
+//        }
+//    }
+
+    //OpenCV版本
+    int ProcessedOK = Algorithm_opencv(fpath.toStdString(), Row, Col);
+    cout << "原始数据" << endl;
+    cout << "Row = [";
+    for (size_t i = 0; i < Row.size(); ++i)
+    {
+        cout << Row[i] << (i < Row.size()-1 ? "," : "");
+    }
+    cout << "]" << endl;
+    for (size_t i = 0; i < Col.size(); ++i)
+    {
+        cout << Col[i] << (i < Col.size()-1 ? "," : "");
+    }
+    cout << "]" << endl;
     if (ProcessedOK)
     {
         appendLog("角点检测算法执行失败，请调整曝光或者重选待测物体", ERROR);
@@ -631,23 +680,24 @@ void MainWindow::on_pushButton_clicked()
         appendLog("待检测图像读取成功，角点检测算法执行完毕", INFO);
     }
 
-    if (Row.Length() != Col.Length())
+    if (Row.size() != Col.size())
     {
         appendLog("获取到的x,y参数数量不匹配", ERROR);
         return;
     }
-    else if (Row.Length() == 0 || Col.Length() == 0)
+    else if (Row.empty() || Col.empty())
     {
         appendLog("未能正确检测到角点", ERROR);
+        return;
     }
     else
     {
-        for (int i = 0; i < Row.Length(); ++i)
+        for (size_t i = 0; i < Row.size(); ++i)
         {
-            appendLog(QString("第%1个角点(x,y)像素坐标为：(%2, %3)")
+            appendLog(QString("第%1个角点(x,y)像素坐标为:(%2, %3)")
                       .arg(i+1)
-                      .arg(static_cast<double>(Col[i]))
-                      .arg(static_cast<double>(Row[i])),
+                      .arg(Col[i])
+                      .arg(Row[i]),
                       INFO);
         }
     }
@@ -719,23 +769,57 @@ void MainWindow::appendLog(const QString &message, int logType, double value)
 void MainWindow::on_GetLength_clicked()
 {
     vector<QPointF> points;
-    points.reserve(Row.Length()); // 预分配空间
+//    points.reserve(Row.Length()); // 预分配空间
+//    Matrix3d transMatrix = readTransformationMatrix("../matrix.bin");
+//    appendLog("成功读取变换矩阵，详见终端显示", INFO);
+//    // 输出变换矩阵
+//    cout << "变换矩阵:" << endl;
+//    cout << fixed << setprecision(10); // 设置输出精度
+//    cout << transMatrix << endl;
+//    if (Row.Length() <=0 || Col.Length() <= 0 || (Row.Length() != Col.Length()))
+//    {
+//        appendLog("未能正确读取角点", ERROR);
+//        return;
+//    }
+
+//    for (int i = 0; i < Row.Length(); ++i)
+//    {
+//        double x = Col[i].D();  // 获取列坐标（转换为 double）
+//        double y = Row[i].D();  // 获取行坐标（转换为 double）
+//        // 创建齐次坐标向量 [x, y, 1]
+//        Vector3d s(x, y, 1.0);
+//        // 应用变换矩阵
+//        Vector3d d = transMatrix * s;
+//        // 创建变换后的 QPointF
+//        QPointF transformedPoint(d(0), d(1));
+//        // 添加到结果向量
+//        points.push_back(transformedPoint);
+//        // 输出转换信息
+//        cout << "点 " << i << ": 像素坐标 (" << x << ", " << y << ") -> ";
+//        cout << "世界坐标 (" << transformedPoint.x() << ", " << transformedPoint.y() << ")" << endl;
+//        appendLog(QString("第%1个角点(x,y)世界坐标为：(%2, %3)")
+//                  .arg(i+1)
+//                  .arg(static_cast<double>(transformedPoint.x()))
+//                  .arg(static_cast<double>(transformedPoint.y())),
+//                  INFO);
+//    }
+    points.reserve(Row.size()); // 预分配空间
     Matrix3d transMatrix = readTransformationMatrix("../matrix.bin");
     appendLog("成功读取变换矩阵，详见终端显示", INFO);
     // 输出变换矩阵
     cout << "变换矩阵:" << endl;
     cout << fixed << setprecision(10); // 设置输出精度
     cout << transMatrix << endl;
-    if (Row.Length() <=0 || Col.Length() <= 0 || (Row.Length() != Col.Length()))
+    if (Row.size() <=0 || Col.size() <= 0 || (Row.size() != Col.size()))
     {
         appendLog("未能正确读取角点", ERROR);
         return;
     }
 
-    for (int i = 0; i < Row.Length(); ++i)
+    for (size_t i = 0; i < Row.size(); ++i)
     {
-        double x = Col[i].D();  // 获取列坐标（转换为 double）
-        double y = Row[i].D();  // 获取行坐标（转换为 double）
+        double x = Col[i];  // 获取列坐标（转换为 double）
+        double y = Row[i];  // 获取行坐标（转换为 double）
         // 创建齐次坐标向量 [x, y, 1]
         Vector3d s(x, y, 1.0);
         // 应用变换矩阵
@@ -796,7 +880,8 @@ void MainWindow::on_GetLength_clicked()
 
 void MainWindow::on_genMatrix_clicked()
 {
-    int getCoordsOk = getCoords(WorldCoord, PixelCoord, 75.0);
+//    int getCoordsOk = getCoords(WorldCoord, PixelCoord, 75.0);
+    int getCoordsOk = getCoords_opencv(WorldCoord, PixelCoord, 75.0);
     if (getCoordsOk != 0)
     {
         appendLog("坐标获取错误", ERROR);

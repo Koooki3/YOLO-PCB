@@ -40,6 +40,15 @@ INCLUDEPATH += /home/orangepi/MVTec/HALCON-25.05-Progress/include
 
 INCLUDEPATH += /usr/include/eigen3/Eigen
 
+INCLUDEPATH += /usr/local/include \
+               /usr/local/include/opencv4 \
+               /usr/local/include/opencv4/opencv2
+
+LIBS += -L/usr/local/lib/ -lopencv_calib3d -lopencv_core -lopencv_dnn -lopencv_features2d \
+        -lopencv_flann -lopencv_gapi -lopencv_highgui -lopencv_imgcodecs -lopencv_imgproc \
+        -lopencv_ml -lopencv_objdetect -lopencv_photo -lopencv_stitching -lopencv_video \
+        -lopencv_videoio
+
 LIBS += -L/opt/MVS/lib/aarch64/ -lMvCameraControl -lMvCameraControlWrapper -lMVGigEVisionSDK -lMvUsb3vTL
 
 LIBS += -L/home/orangepi/MVTec/HALCON-25.05-Progress/lib/aarch64-linux/ \
