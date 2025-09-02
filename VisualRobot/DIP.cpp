@@ -329,7 +329,7 @@ int getCoords(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double
     }
 
     //读取图像
-    ReadImage(&ho_Image, "/home/kooki/VisualRobot/Img/capture.jpg");
+    ReadImage(&ho_Image, "/home/orangepi/Desktop/VisualRobot_local/Img/capture.jpg");
 
     //获取图像尺寸
     GetImageSize(ho_Image, &hv_Width, &hv_Height);
@@ -577,7 +577,7 @@ int getCoords(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double
     WaitSeconds(0.5);
 
     //将窗口内容保存为图像
-    DumpWindow(hv_WindowHandle, "jpg", "/home/kooki/VisualRobot/Img/circle_detected.jpg");
+    DumpWindow(hv_WindowHandle, "jpg", "/home/orangepi/Desktop/VisualRobot_local/Img/circle_detected.jpg");
 
     //关闭窗口
     if (HDevWindowStack::IsOpen())

@@ -36,16 +36,14 @@ FORMS += \
 
 INCLUDEPATH += /opt/MVS/include
 
-INCLUDEPATH += /home/kooki/MVTec/HALCON-25.05-Progress/include
+INCLUDEPATH += /home/orangepi/MVTec/HALCON-25.05-Progress/include
 
 INCLUDEPATH += /usr/include/eigen3/Eigen
 
-LIBS += -L/opt/MVS/bin/ -L/opt/MVS/lib/64/ -lMvCameraControl \
-        -lMVGigEVisionSDK -lMvUsb3vTL -lMediaProcess -lFormatConversion
+LIBS += -L/opt/MVS/lib/aarch64/ -lMvCameraControl -lMvCameraControlWrapper -lMVGigEVisionSDK -lMvUsb3vTL
 
-LIBS += -L/home/kooki/MVTec/HALCON-25.05-Progress/lib/x64-linux/ -lhAI2ibOpenVINO \
-        -lhAI2ibTensorRT -lhalcon -lhalconc -lhalconcpp -lhalconcppxl -lhalconcxl \
-        -lhalcondl -lhalcondlxl -lhalconxl -lhdevenginecpp -lhdevenginecppxl
+LIBS += -L/home/orangepi/MVTec/HALCON-25.05-Progress/lib/aarch64-linux/ \
+        -lhalcon -lhalconc -lhalconcpp -lhalcondl -lhdevenginecpp
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

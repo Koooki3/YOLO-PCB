@@ -32,5 +32,5 @@ int main(int argc, char *argv[])
     MainWindow w;
     w.setWindowFlags(w.windowFlags() &~ Qt::WindowMaximizeButtonHint); //ch:禁止最大化 | en:prohibit maximization
     w.show();
-    return a.exec();
+    return a.exec();    
 }
