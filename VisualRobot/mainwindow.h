@@ -11,6 +11,7 @@
 #include <halconcpp/HDevThread.h>
 #include <QPointF>
 #include <QVector>
+#include <vector>
 
 using namespace HalconCpp;
 
@@ -78,7 +79,8 @@ private:
     std::mutex                 m_frameMtx;       // 互斥锁保护
     bool                       m_hasFrame = false; // 是否已有可用帧
 
-    HTuple Row, Col;
+    std::vector<double> Row, Col;
+    //HTuple Row, Col;
 
     QVector<QPointF> WorldCoord;
     QVector<QPointF> PixelCoord;

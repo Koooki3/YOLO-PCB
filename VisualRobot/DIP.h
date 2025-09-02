@@ -35,6 +35,6 @@ int getCoords(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double
 
 // OpenCV版本的函数声明
 int Algorithm_opencv(const string& imgPath, vector<double>& Row, vector<double>& Col);
-int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double size = 75.0);
+int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double size);
 
 #endif // DIP_H
