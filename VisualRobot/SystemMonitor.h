@@ -18,7 +18,7 @@ public:
     void stopMonitoring();
 
 signals:
-    void systemStatsUpdated(float cpuUsage, float memUsage, float gpuUsage, float temperature);
+    void systemStatsUpdated(float cpuUsage, float memUsage, float temperature);
 
 private slots:
     void updateSystemStats();
@@ -28,7 +28,6 @@ private:
     
     float getCpuUsage();
     float getMemoryUsage();
-    float getGpuUsage();
     float getTemperature();
     
     // 用于CPU使用率计算的辅助变量

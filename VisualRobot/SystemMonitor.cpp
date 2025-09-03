@@ -146,39 +146,6 @@ float SystemMonitor::getMemoryUsage()
     return std::min(100.0f, std::max(0.0f, memUsage));
 }
 
-float SystemMonitor::getGpuUsage()
-{
-    // 尝试多个可能的GPU使用率文件路径
-    QStringList gpuPaths = {
-        "/sys/class/mali/utilization",           // Mali GPU
-        "/sys/kernel/debug/gpu/mali/utilization",// Mali GPU (调试接口)
-        "/sys/class/drm/card0/device/gpu_busy_percent", // 通用GPU
-        "/sys/class/misc/mali0/device/utilization" // 另一个Mali GPU路径
-    };
-
-    for (const QString& path : gpuPaths) {
-        QFile gpuFile(path);
-        if (gpuFile.exists() && gpuFile.open(QIODevice::ReadOnly)) {
-            QString gpuStr = gpuFile.readAll().trimmed();
-            gpuFile.close();
-            
-            bool ok;
-            float gpuUsage = gpuStr.toFloat(&ok);
-            if (ok) {
-                qDebug() << "GPU使用率:" << gpuUsage << "% (从" << path << "读取)";
-                return std::min(100.0f, std::max(0.0f, gpuUsage));
-            } else {
-                qDebug() << "GPU数据解析失败:" << gpuStr << "(从" << path << "读取)";
-            }
-        } else {
-            qDebug() << "无法访问GPU文件:" << path;
-        }
-    }
-
-    qDebug() << "无法获取GPU使用率";
-    return 0.0f;
-}
-
 float SystemMonitor::getTemperature()
 {
     // 尝试多个可能的温度传感器路径
@@ -233,8 +200,7 @@ void SystemMonitor::updateSystemStats()
 {
     float cpuUsage = getCpuUsage();
     float memUsage = getMemoryUsage();
-    float gpuUsage = getGpuUsage();
     float temperature = getTemperature();
     
-    emit systemStatsUpdated(cpuUsage, memUsage, gpuUsage, temperature);
+    emit systemStatsUpdated(cpuUsage, memUsage, temperature);
 }
