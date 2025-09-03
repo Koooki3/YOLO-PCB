@@ -91,11 +91,10 @@ private:
     SystemMonitor* m_sysMonitor;
     QLabel* m_cpuLabel;
     QLabel* m_memLabel;
-    QLabel* m_gpuLabel;
     QLabel* m_tempLabel;
 
 private slots:
-    void updateSystemStats(float cpuUsage, float memUsage, float gpuUsage, float temperature);
+    void updateSystemStats(float cpuUsage, float memUsage, float temperature);
 
 };
 
