@@ -1,12 +1,14 @@
 #include "SystemMonitor.h"
 #include <QDebug>
 #include <QProcess>
+#include <QFile>
 #include <cmath>
-
-#ifdef __arm__
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <cstdio>
+
+#ifdef __arm__
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/sysinfo.h>
