@@ -40,15 +40,29 @@ void SystemMonitor::stopMonitoring()
 
 float SystemMonitor::getCpuUsage()
 {
-#ifdef __arm__
+    // 直接尝试读取/proc/stat，不管是什么平台
     std::ifstream statFile("/proc/stat");
+    if (!statFile.is_open()) {
+        qDebug() << "无法打开 /proc/stat 文件";
+        return 0.0f;
+    }
+
     std::string line;
     if (std::getline(statFile, line)) {
         std::istringstream iss(line);
         std::string cpu;
-        unsigned long long totalUser, totalUserLow, totalSys, totalIdle;
+        unsigned long long totalUser, totalUserLow, totalSys, totalIdle, iowait, irq, softirq, steal;
         
-        iss >> cpu >> totalUser >> totalUserLow >> totalSys >> totalIdle;
+        // 尝试读取所有CPU时间值
+        if (!(iss >> cpu >> totalUser >> totalUserLow >> totalSys >> totalIdle 
+              >> iowait >> irq >> softirq >> steal)) {
+            qDebug() << "CPU数据读取失败: " << QString::fromStdString(line);
+            return 0.0f;
+        }
+        
+        // 计算总的CPU时间
+        unsigned long long totalTime = totalUser + totalUserLow + totalSys + totalIdle +
+                                     iowait + irq + softirq + steal;
         
         if (m_lastTotalUser == 0) {
             // 首次运行，初始化数值
@@ -56,15 +70,25 @@ float SystemMonitor::getCpuUsage()
             m_lastTotalUserLow = totalUserLow;
             m_lastTotalSys = totalSys;
             m_lastTotalIdle = totalIdle;
+            qDebug() << "CPU监控初始化完成";
             return 0.0f;
         }
         
-        unsigned long long totalDelta = (totalUser - m_lastTotalUser) +
-                                      (totalUserLow - m_lastTotalUserLow) +
-                                      (totalSys - m_lastTotalSys);
-        unsigned long long idleDelta = totalIdle - m_lastTotalIdle;
+        // 计算时间差
+        unsigned long long userTimeDelta = totalUser - m_lastTotalUser;
+        unsigned long long userLowDelta = totalUserLow - m_lastTotalUserLow;
+        unsigned long long sysTimeDelta = totalSys - m_lastTotalSys;
+        unsigned long long idleTimeDelta = totalIdle - m_lastTotalIdle;
         
-        float cpuUsage = static_cast<float>(totalDelta - idleDelta) / totalDelta * 100.0f;
+        // 计算总的时间差
+        unsigned long long totalDelta = userTimeDelta + userLowDelta + 
+                                      sysTimeDelta + idleTimeDelta;
+        
+        // 计算CPU使用率
+        float cpuUsage = 0.0f;
+        if (totalDelta > 0) {
+            cpuUsage = 100.0f * (totalDelta - idleTimeDelta) / totalDelta;
+        }
         
         // 更新上一次的值
         m_lastTotalUser = totalUser;
@@ -72,59 +96,134 @@ float SystemMonitor::getCpuUsage()
         m_lastTotalSys = totalSys;
         m_lastTotalIdle = totalIdle;
         
+        qDebug() << "CPU使用率:" << cpuUsage << "%";
         return std::min(100.0f, std::max(0.0f, cpuUsage));
     }
-#endif
+    
+    qDebug() << "读取CPU数据失败";
     return 0.0f;
 }
 
 float SystemMonitor::getMemoryUsage()
 {
-#ifdef __arm__
-    struct sysinfo si;
-    if (sysinfo(&si) == 0) {
-        unsigned long totalRam = si.totalram;
-        unsigned long freeRam = si.freeram;
-        float memUsage = (1.0f - static_cast<float>(freeRam) / totalRam) * 100.0f;
-        return std::min(100.0f, std::max(0.0f, memUsage));
+    // 尝试从/proc/meminfo读取内存信息
+    std::ifstream memFile("/proc/meminfo");
+    if (!memFile.is_open()) {
+        qDebug() << "无法打开 /proc/meminfo 文件";
+        return 0.0f;
     }
-#endif
-    return 0.0f;
+
+    unsigned long totalMem = 0, freeMem = 0, buffers = 0, cached = 0;
+    std::string line;
+    
+    while (std::getline(memFile, line)) {
+        if (line.find("MemTotal:") != std::string::npos) {
+            sscanf(line.c_str(), "MemTotal: %lu", &totalMem);
+        } else if (line.find("MemFree:") != std::string::npos) {
+            sscanf(line.c_str(), "MemFree: %lu", &freeMem);
+        } else if (line.find("Buffers:") != std::string::npos) {
+            sscanf(line.c_str(), "Buffers: %lu", &buffers);
+        } else if (line.find("Cached:") != std::string::npos) {
+            sscanf(line.c_str(), "Cached: %lu", &cached);
+            break;  // 已经找到所需的所有信息
+        }
+    }
+
+    if (totalMem == 0) {
+        qDebug() << "无法读取内存总量";
+        return 0.0f;
+    }
+
+    // 计算实际使用的内存（考虑缓存和缓冲区）
+    unsigned long usedMem = totalMem - freeMem - buffers - cached;
+    float memUsage = 100.0f * static_cast<float>(usedMem) / totalMem;
+    
+    qDebug() << "内存使用率:" << memUsage << "% (总内存:" << totalMem 
+             << "KB, 使用:" << usedMem << "KB)";
+    
+    return std::min(100.0f, std::max(0.0f, memUsage));
 }
 
 float SystemMonitor::getGpuUsage()
 {
-#ifdef __arm__
-    // RK3588 GPU使用率通过mali节点获取
-    QFile gpuFile("/sys/class/mali/utilization");
-    if (gpuFile.open(QIODevice::ReadOnly)) {
-        QString gpuStr = gpuFile.readAll().trimmed();
-        gpuFile.close();
-        bool ok;
-        float gpuUsage = gpuStr.toFloat(&ok);
-        if (ok) {
-            return std::min(100.0f, std::max(0.0f, gpuUsage));
+    // 尝试多个可能的GPU使用率文件路径
+    QStringList gpuPaths = {
+        "/sys/class/mali/utilization",           // Mali GPU
+        "/sys/kernel/debug/gpu/mali/utilization",// Mali GPU (调试接口)
+        "/sys/class/drm/card0/device/gpu_busy_percent", // 通用GPU
+        "/sys/class/misc/mali0/device/utilization" // 另一个Mali GPU路径
+    };
+
+    for (const QString& path : gpuPaths) {
+        QFile gpuFile(path);
+        if (gpuFile.exists() && gpuFile.open(QIODevice::ReadOnly)) {
+            QString gpuStr = gpuFile.readAll().trimmed();
+            gpuFile.close();
+            
+            bool ok;
+            float gpuUsage = gpuStr.toFloat(&ok);
+            if (ok) {
+                qDebug() << "GPU使用率:" << gpuUsage << "% (从" << path << "读取)";
+                return std::min(100.0f, std::max(0.0f, gpuUsage));
+            } else {
+                qDebug() << "GPU数据解析失败:" << gpuStr << "(从" << path << "读取)";
+            }
+        } else {
+            qDebug() << "无法访问GPU文件:" << path;
         }
     }
-#endif
+
+    qDebug() << "无法获取GPU使用率";
     return 0.0f;
 }
 
 float SystemMonitor::getTemperature()
 {
-#ifdef __arm__
-    // RK3588温度通过thermal_zone节点获取
-    QFile tempFile("/sys/class/thermal/thermal_zone0/temp");
-    if (tempFile.open(QIODevice::ReadOnly)) {
-        QString tempStr = tempFile.readAll().trimmed();
-        tempFile.close();
+    // 尝试多个可能的温度传感器路径
+    QStringList tempPaths = {
+        "/sys/class/thermal/thermal_zone0/temp",  // 标准路径
+        "/sys/devices/virtual/thermal/thermal_zone0/temp", // 虚拟设备路径
+        "/sys/class/hwmon/hwmon0/temp1_input"    // hwmon路径
+    };
+
+    for (const QString& path : tempPaths) {
+        QFile tempFile(path);
+        if (tempFile.exists() && tempFile.open(QIODevice::ReadOnly)) {
+            QString tempStr = tempFile.readAll().trimmed();
+            tempFile.close();
+            
+            bool ok;
+            float temp = tempStr.toFloat(&ok);
+            if (ok) {
+                // 根据读取值的范围来决定是否需要转换单位
+                if (temp > 1000) {
+                    temp /= 1000.0f; // 转换为摄氏度
+                }
+                qDebug() << "系统温度:" << temp << "°C (从" << path << "读取)";
+                return temp;
+            } else {
+                qDebug() << "温度数据解析失败:" << tempStr << "(从" << path << "读取)";
+            }
+        } else {
+            qDebug() << "无法访问温度文件:" << path;
+        }
+    }
+
+    // 如果以上方法都失败，尝试通过系统命令获取温度
+    QProcess process;
+    process.start("cat /sys/class/thermal/thermal_zone*/temp");
+    process.waitForFinished(1000);
+    if (process.exitCode() == 0) {
+        QString output = process.readAllStandardOutput().trimmed();
         bool ok;
-        float temp = tempStr.toFloat(&ok) / 1000.0f; // 转换为摄氏度
+        float temp = output.toFloat(&ok) / 1000.0f;
         if (ok) {
+            qDebug() << "系统温度(通过命令):" << temp << "°C";
             return temp;
         }
     }
-#endif
+
+    qDebug() << "无法获取系统温度";
     return 0.0f;
 }
 
