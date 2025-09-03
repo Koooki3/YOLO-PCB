@@ -51,10 +51,42 @@ MainWindow::MainWindow(QWidget *parent) :
     m_pcMyCamera = NULL;
     m_bGrabbing = false;
     m_hWnd = (void*)ui->widgetDisplay->winId();
+
+    // 初始化系统监控
+    m_sysMonitor = new SystemMonitor(this);
+    
+    // 创建系统信息标签
+    m_cpuLabel = new QLabel(this);
+    m_memLabel = new QLabel(this);
+    m_gpuLabel = new QLabel(this);
+    m_tempLabel = new QLabel(this);
+
+    // 设置标签样式
+    QString labelStyle = "QLabel { color: white; background-color: rgba(0, 0, 0, 150); padding: 5px; border-radius: 5px; }";
+    m_cpuLabel->setStyleSheet(labelStyle);
+    m_memLabel->setStyleSheet(labelStyle);
+    m_gpuLabel->setStyleSheet(labelStyle);
+    m_tempLabel->setStyleSheet(labelStyle);
+
+    // 添加标签到状态栏
+    statusBar()->addWidget(m_cpuLabel);
+    statusBar()->addWidget(m_memLabel);
+    statusBar()->addWidget(m_gpuLabel);
+    statusBar()->addWidget(m_tempLabel);
+
+    // 连接监控信号
+    connect(m_sysMonitor, &SystemMonitor::systemStatsUpdated,
+            this, &MainWindow::updateSystemStats);
+
+    // 启动监控
+    m_sysMonitor->startMonitoring(1000); // 每秒更新一次
 }
 
 MainWindow::~MainWindow()
 {
+    if (m_sysMonitor) {
+        m_sysMonitor->stopMonitoring();
+    }
     delete ui;
 }
 

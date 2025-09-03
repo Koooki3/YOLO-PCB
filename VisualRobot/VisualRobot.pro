@@ -22,13 +22,16 @@ SOURCES += \
     DIP.cpp \
     Format.cpp \
     MvCamera.cpp \
+    SystemMonitor.cpp \
     main.cpp \
-    mainwindow.cpp
+    mainwindow.cpp \
+    mainwindow_systemstats.cpp
 
 HEADERS += \
     DIP.h \
     Format.h \
     MvCamera.h \
+    SystemMonitor.h \
     mainwindow.h
 
 FORMS += \
