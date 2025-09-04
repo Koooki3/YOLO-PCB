@@ -15,7 +15,7 @@
 ```plaintext
 VisualRobot/
 ├── Doc/                          # 项目文档
-│   └── 调试信息手册.docx          # 系统调试和维护手册
+│   └── 调试信息手册.docx           # 系统调试和维护手册
 ├── Img/                          # 图像资源目录
 │   ├── capture.jpg               # 相机采集的原始图像
 │   └── circle_detected.jpg       # 圆形检测的结果图像
