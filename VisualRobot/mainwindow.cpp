@@ -587,6 +587,23 @@ void MainWindow::on_pushButton_clicked()
         return;
     }
 
+    // 创建选择对话框
+    QMessageBox msgBox;
+    msgBox.setWindowTitle("选择检测模式");
+    msgBox.setText("请选择检测模式：");
+    QPushButton *cornerButton = msgBox.addButton("角点检测", QMessageBox::ActionRole);
+    QPushButton *circleButton = msgBox.addButton("圆心检测", QMessageBox::ActionRole);
+    msgBox.addButton(QMessageBox::Cancel);
+    
+    msgBox.exec();
+
+    if (msgBox.clickedButton() == QMessageBox::Cancel) {
+        return;
+    }
+
+    bool needDetection = (msgBox.clickedButton() == cornerButton);
+    
+
     // 取出一份缓存快照
     vector<unsigned char> frame;
     MV_FRAME_OUT_INFO_EX info{};
@@ -685,49 +702,52 @@ void MainWindow::on_pushButton_clicked()
 //        }
 //    }
 
-    //OpenCV版本
-    int ProcessedOK = Algorithm_opencv(fpath.toStdString(), Row, Col);
-    cout << "原始数据" << endl;
-    cout << "Row = [";
-    for (size_t i = 0; i < Row.size(); ++i)
-    {
-        cout << Row[i] << (i < Row.size()-1 ? "," : "");
-    }
-    cout << "]" << endl;
-    for (size_t i = 0; i < Col.size(); ++i)
-    {
-        cout << Col[i] << (i < Col.size()-1 ? "," : "");
-    }
-    cout << "]" << endl;
-    if (ProcessedOK)
-    {
-        appendLog("角点检测算法执行失败，请调整曝光或者重选待测物体", ERROR);
-        return;
-    }
-    else
-    {
-        appendLog("待检测图像读取成功，角点检测算法执行完毕", INFO);
-    }
-
-    if (Row.size() != Col.size())
-    {
-        appendLog("获取到的x,y参数数量不匹配", ERROR);
-        return;
-    }
-    else if (Row.empty() || Col.empty())
-    {
-        appendLog("未能正确检测到角点", ERROR);
-        return;
-    }
-    else
-    {
+    // 如果选择了角点检测，才执行检测算法
+    if (needDetection) {
+        //OpenCV版本
+        int ProcessedOK = Algorithm_opencv(fpath.toStdString(), Row, Col);
+        cout << "原始数据" << endl;
+        cout << "Row = [";
         for (size_t i = 0; i < Row.size(); ++i)
         {
-            appendLog(QString("第%1个角点(x,y)像素坐标为:(%2, %3)")
-                      .arg(i+1)
-                      .arg(Col[i])
-                      .arg(Row[i]),
-                      INFO);
+            cout << Row[i] << (i < Row.size()-1 ? "," : "");
+        }
+        cout << "]" << endl;
+        for (size_t i = 0; i < Col.size(); ++i)
+        {
+            cout << Col[i] << (i < Col.size()-1 ? "," : "");
+        }
+        cout << "]" << endl;
+        if (ProcessedOK)
+        {
+            appendLog("角点检测算法执行失败，请调整曝光或者重选待测物体", ERROR);
+            return;
+        }
+        else
+        {
+            appendLog("待检测图像读取成功，角点检测算法执行完毕", INFO);
+        }
+
+        if (Row.size() != Col.size())
+        {
+            appendLog("获取到的x,y参数数量不匹配", ERROR);
+            return;
+        }
+        else if (Row.empty() || Col.empty())
+        {
+            appendLog("未能正确检测到角点", ERROR);
+            return;
+        }
+        else
+        {
+            for (size_t i = 0; i < Row.size(); ++i)
+            {
+                appendLog(QString("第%1个角点(x,y)像素坐标为:(%2, %3)")
+                          .arg(i+1)
+                          .arg(Col[i])
+                          .arg(Row[i]),
+                          INFO);
+            }
         }
     }
 
