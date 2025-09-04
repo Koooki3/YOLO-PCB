@@ -411,6 +411,10 @@ Matrix3d readTransformationMatrix(const string& filename)
 // OpenCV版本的矩形检测算法
 int Algorithm_opencv(const string& imgPath, vector<double>& Row, vector<double>& Col)
 {
+    // 清空输入向量，确保只存储本次检测的角点坐标
+    Row.clear();
+    Col.clear();
+
     // 读取图像
     cv::Mat image = cv::imread(imgPath);
     if (image.empty()) {
