@@ -593,15 +593,16 @@ void MainWindow::on_pushButton_clicked()
     msgBox.setText("请选择检测模式：");
     QPushButton *cornerButton = msgBox.addButton("角点检测", QMessageBox::ActionRole);
     QPushButton *circleButton = msgBox.addButton("圆心检测", QMessageBox::ActionRole);
-    msgBox.addButton(QMessageBox::Cancel);
+    QPushButton *cancelButton = msgBox.addButton(QMessageBox::Cancel);
     
     msgBox.exec();
 
-    if (msgBox.clickedButton() == QMessageBox::Cancel) {
+    QAbstractButton *clicked =msgBox.clickedButton();
+    if (clicked == cancelButton) {
         return;
     }
 
-    bool needDetection = (msgBox.clickedButton() == cornerButton);
+    bool needDetection = ((clicked == cornerButton) || (clicked != circleButton));
     
 
     // 取出一份缓存快照

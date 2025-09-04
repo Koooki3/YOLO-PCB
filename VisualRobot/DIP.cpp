@@ -275,7 +275,7 @@ int Algorithm(const string& imgPath, HTuple& Row, HTuple& Col)
 int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double size = 75.0)
 {
     // 读取图像
-    cv::Mat image = cv::imread("/home/orangepi/Desktop/VisualRobot_local/Img/capture.jpg");
+    cv::Mat image = cv::imread("/home/orangepi/Desktop/VisualRobot_Local/Img/capture.jpg");
     if(image.empty()) {
         qDebug() << "Error: Cannot read image file";
         return 1;
@@ -318,22 +318,22 @@ int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord,
     cv::Mat grayImage;
     cv::cvtColor(image, grayImage, cv::COLOR_BGR2GRAY);
 
-    // Canny边缘检测
-    cv::Mat edges;
-    cv::Canny(grayImage, edges, 15, 40);
+    // 二值化
+    cv::Mat binaryImage;
+    cv::threshold(grayImage, binaryImage, 200, 255, cv::THRESH_BINARY);
 
     // 在每个区域中检测圆
     vector<cv::Vec3f> detectedCircles;
     cv::Mat result = image.clone();
 
     for(size_t i = 0; i < searchAreas.size(); i++) {
-        cv::Mat roi = edges(searchAreas[i]);
+        cv::Mat roi = binaryImage(searchAreas[i]);
         vector<cv::Vec3f> circles;
-        
+
         // 使用Hough圆变换检测圆
         cv::HoughCircles(roi, circles, cv::HOUGH_GRADIENT, 1,
                         roi.rows/8,  // 最小圆心距离
-                        100, 30,     // Canny高阈值，累加器阈值
+                        40, 5,     // Canny阈值，累加器阈值
                         rmin, rmax); // 最小和最大半径
 
         // 找到最佳匹配的圆
@@ -344,7 +344,7 @@ int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord,
         for(const auto& circle : circles) {
             float radius = circle[2];
             float bias = std::abs(radius - r);
-            
+
             if(bias < bestFit) {
                 bestFit = bias;
                 bestCircle = circle;
@@ -363,15 +363,15 @@ int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord,
             PixelCoord.append(QPointF(bestCircle[0], bestCircle[1]));
 
             // 绘制结果
-            cv::circle(result, cv::Point(bestCircle[0], bestCircle[1]), 
+            cv::circle(result, cv::Point(bestCircle[0], bestCircle[1]),
                       bestCircle[2], cv::Scalar(0, 255, 0), 10);
-            cv::circle(result, cv::Point(bestCircle[0], bestCircle[1]), 
+            cv::circle(result, cv::Point(bestCircle[0], bestCircle[1]),
                       10, cv::Scalar(0, 0, 255), -1);
         }
     }
 
     // 保存结果图像
-    cv::imwrite("/home/orangepi/Desktop/VisualRobot_local/Img/circle_detected.jpg", result);
+    cv::imwrite("/home/orangepi/Desktop/VisualRobot_Local/Img/circle_detected.jpg", result);
 
     return detectedCircles.empty() ? 1 : 0;
 }
@@ -411,7 +411,7 @@ Matrix3d readTransformationMatrix(const string& filename)
 // OpenCV版本的矩形检测算法
 int Algorithm_opencv(const string& imgPath, vector<double>& Row, vector<double>& Col)
 {
-    // 清空输入向量，确保只存储本次检测的角点坐标
+    // 清空输入向量
     Row.clear();
     Col.clear();
 
@@ -426,11 +426,9 @@ int Algorithm_opencv(const string& imgPath, vector<double>& Row, vector<double>&
     cv::Mat grayImage;
     cv::cvtColor(image, grayImage, cv::COLOR_BGR2GRAY);
 
-    // 自适应二值化
+    // 二值化
     cv::Mat binaryImage;
-    cv::adaptiveThreshold(grayImage, binaryImage, 255,
-                         cv::ADAPTIVE_THRESH_GAUSSIAN_C,
-                         cv::THRESH_BINARY, 11, 2);
+    cv::threshold(grayImage, binaryImage, 128, 255, cv::THRESH_BINARY);
 
     // 高斯滤波平滑处理
     cv::Mat smoothedImage;
