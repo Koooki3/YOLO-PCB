@@ -28,6 +28,9 @@
 #include <QPainter>
 #include <QFont>
 #include <QFontMetrics>
+#include <QDesktopServices>
+#include <QUrl>
+#include <QCoreApplication>
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
@@ -1047,6 +1050,17 @@ void MainWindow::on_genMatrix_clicked()
         cout << "变换矩阵计算失败，错误码: " << result << endl;
         appendLog(QString("变换矩阵计算失败，错误码:%1").arg(result), ERROR);
     }
+}
+
+void MainWindow::on_btnOpenManual_clicked()
+{
+    // 构建PDF文件的路径
+    QString pdfPath = QDir(QCoreApplication::applicationDirPath()).filePath("../Doc/调试信息手册.pdf");
+    
+    // 尝试使用系统默认程序打开PDF
+    QDesktopServices::openUrl(QUrl::fromLocalFile(pdfPath));
+    
+    appendLog("已尝试打开调试信息手册", INFO);
 }
 
 void MainWindow::drawOverlayOnDisplay2(double length, double width, double diagonal)

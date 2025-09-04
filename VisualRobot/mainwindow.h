@@ -95,6 +95,7 @@ private:
 
 private slots:
     void updateSystemStats(float cpuUsage, float memUsage, float temperature);
+    void on_btnOpenManual_clicked();
 
 };
 
