@@ -23,6 +23,12 @@
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
+#include "ThreadPool.h"
+#include "ImageMemoryPool.h"
+#include "ImageCache.h"
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 #define ERROR 2
 #define WARNNING 1
@@ -274,11 +280,19 @@ int Algorithm(const string& imgPath, HTuple& Row, HTuple& Col)
 // OpenCV版本的圆形检测算法
 int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double size = 75.0)
 {
-    // 读取图像
-    cv::Mat image = cv::imread("/home/orangepi/Desktop/VisualRobot_Local/Img/capture.jpg");
-    if(image.empty()) {
-        qDebug() << "Error: Cannot read image file";
-        return 1;
+    // 检查缓存
+    cv::Mat image;
+    if(ImageCache::getInstance().get("capture", image)) {
+        qDebug() << "Using cached image";
+    } else {
+        // 读取图像
+        image = cv::imread("/home/orangepi/Desktop/VisualRobot_Local/Img/capture.jpg");
+        if(image.empty()) {
+            qDebug() << "Error: Cannot read image file";
+            return 1;
+        }
+        // 保存到缓存
+        ImageCache::getInstance().put("capture", image);
     }
 
     // 获取图像尺寸
@@ -314,23 +328,52 @@ int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord,
         }
     }
 
-    // 转换为灰度图
-    cv::Mat grayImage;
-    cv::cvtColor(image, grayImage, cv::COLOR_BGR2GRAY);
+    // 使用内存池获取Mat对象
+    auto& memPool = ImageMemoryPool::getInstance();
+    cv::Mat grayImage = memPool.acquire(image.rows, image.cols, CV_8UC1);
+    cv::Mat binaryImage = memPool.acquire(image.rows, image.cols, CV_8UC1);
 
-    // 二值化
-    cv::Mat binaryImage;
-    cv::threshold(grayImage, binaryImage, 200, 255, cv::THRESH_BINARY);
-
-    // 在每个区域中检测圆
-    vector<cv::Vec3f> detectedCircles;
+    // 创建线程池
+    ThreadPool threadPool(std::thread::hardware_concurrency());
+    
+    // 异步执行图像预处理
+    auto futureGray = threadPool.enqueue([&]() {
+        cv::cvtColor(image, grayImage, cv::COLOR_BGR2GRAY);
+        return true;
+    });
+    
+    // 等待灰度转换完成后执行二值化
+    futureGray.get();
+    auto futureBinary = threadPool.enqueue([&]() {
+        cv::threshold(grayImage, binaryImage, 200, 255, cv::THRESH_BINARY);
+        return true;
+    });
+    
+    // 在等待二值化的同时，准备结果图像
     cv::Mat result = image.clone();
+    vector<cv::Vec3f> detectedCircles;
 
+    futureBinary.get();  // 确保二值化完成
+
+    vector<std::future<vector<cv::Vec3f>>> futureCircles;
+    
+    // 配置OpenMP线程数为物理核心数的一半，避免资源竞争
+    #ifdef _OPENMP
+    omp_set_num_threads(std::max(1, omp_get_num_procs() / 2));
+    #endif
+
+    #pragma omp parallel for if(searchAreas.size() >= 4) schedule(dynamic, 1)
     for(size_t i = 0; i < searchAreas.size(); i++) {
         cv::Mat roi = binaryImage(searchAreas[i]);
         vector<cv::Vec3f> circles;
 
         // 使用Hough圆变换检测圆
+        #ifdef _OPENMP
+        if(omp_get_thread_num() == 0) {
+            qDebug() << "Using OpenMP with" << omp_get_num_threads() << "threads";
+        }
+        #endif
+        
         cv::HoughCircles(roi, circles, cv::HOUGH_GRADIENT, 1,
                         roi.rows/8,  // 最小圆心距离
                         40, 5,     // Canny阈值，累加器阈值
@@ -370,8 +413,13 @@ int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord,
         }
     }
 
-    // 保存结果图像
+    // 保存结果图像和缓存
+    ImageCache::getInstance().put("circle_detected", result);
     cv::imwrite("/home/orangepi/Desktop/VisualRobot_Local/Img/circle_detected.jpg", result);
+
+    // 释放内存池中的资源
+    memPool.release(grayImage);
+    memPool.release(binaryImage);
 
     return detectedCircles.empty() ? 1 : 0;
 }
