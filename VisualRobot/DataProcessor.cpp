@@ -28,8 +28,11 @@ cv::Mat DataProcessor::normalizeImage(const cv::Mat& input, double targetMean, d
 
 cv::Mat DataProcessor::standardizeImage(const cv::Mat& input)
 {
+    double maxVal = 0;
+    double minVal = 0;
+    cv::minMaxLoc(input, &minVal, &maxVal);
     cv::Mat standardized;
-    input.convertTo(standardized, CV_32F, 1.0/255.0);
+    input.convertTo(standardized, CV_8U, 255.0 / (maxVal - minVal), 0);
     return standardized;
 }
 

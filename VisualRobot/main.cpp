@@ -180,12 +180,6 @@ void testFeatureDetection(const QString& imagePath1, const QString& imagePath2)
     qDebug() << "Initial matches:" << knnMatches.size();
     qDebug() << "Good matches after filtering:" << goodMatches.size();
     qDebug() << "Inlier points:" << points1.size();
-
-    // 8. 显示结果图像
-    cv::namedWindow("Feature Matches", cv::WINDOW_NORMAL);
-    cv::imshow("Feature Matches", imgMatches);
-    cv::waitKey(0);
-    cv::destroyAllWindows();
 }
 
 int main(int argc, char *argv[])
@@ -208,8 +202,8 @@ int main(int argc, char *argv[])
 
     // 运行特征识别测试
     // 使用工作目录下的测试图像
-    QString testImage1 = QDir::currentPath() + "/Img/capture.jpg";
-    QString testImage2 = QDir::currentPath() + "/Img/circle_detected.jpg";
+    QString testImage1 = "/home/orangepi/Desktop/VisualRobot_Local/Img/test1.jpg";
+    QString testImage2 = "/home/orangepi/Desktop/VisualRobot_Local/Img/test2.jpg";
     
     if (QFile::exists(testImage1) && QFile::exists(testImage2)) {
         qDebug() << "Running feature detection test...";
