@@ -71,7 +71,6 @@ unix {
 
     # SIMD和向量化优化
     QMAKE_CXXFLAGS += -ftree-vectorize -ftree-slp-vectorize
-    QMAKE_CXXFLAGS += -mfpu=neon-fp-armv8 -mfloat-abi=hard
 
     # 链接时优化
     QMAKE_CXXFLAGS += -flto
