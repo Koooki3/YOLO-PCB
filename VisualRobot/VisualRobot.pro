@@ -66,11 +66,20 @@ unix {
     QMAKE_CXXFLAGS_RELEASE -= -O2
     QMAKE_CXXFLAGS_RELEASE += -O3
 
-    # 针对RK3588优化
-    QMAKE_CXXFLAGS += -mcpu=cortex-a76.cortex-a55
+    # 架构特定优化
+    QMAKE_CXXFLAGS += -march=armv8.2-a -mtune=cortex-a76.cortex-a55
 
-    # 默认启用NEON
+    # SIMD和向量化优化
     QMAKE_CXXFLAGS += -ftree-vectorize -ftree-slp-vectorize
+    QMAKE_CXXFLAGS += -mfpu=neon-fp-armv8 -mfloat-abi=hard
+
+    # 链接时优化
+    QMAKE_CXXFLAGS += -flto
+    QMAKE_LFLAGS += -flto
+
+    # 缓存和内存优化
+    QMAKE_CXXFLAGS += -fprefetch-loop-arrays
+    QMAKE_CXXFLAGS += -falign-functions=64
 }
 
 # Default rules for deployment.
