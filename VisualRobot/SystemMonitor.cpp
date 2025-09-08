@@ -62,10 +62,6 @@ float SystemMonitor::getCpuUsage()
             return 0.0f;
         }
         
-        // 计算总的CPU时间
-        unsigned long long totalTime = totalUser + totalUserLow + totalSys + totalIdle +
-                                     iowait + irq + softirq + steal;
-        
         if (m_lastTotalUser == 0) {
             // 首次运行，初始化数值
             m_lastTotalUser = totalUser;
@@ -180,7 +176,7 @@ float SystemMonitor::getTemperature()
 
     // 如果以上方法都失败，尝试通过系统命令获取温度
     QProcess process;
-    process.start("cat /sys/class/thermal/thermal_zone*/temp");
+    process.start("sh", QStringList() << "-c" << "cat /sys/class/thermal/thermal_zone*/temp");
     process.waitForFinished(1000);
     if (process.exitCode() == 0) {
         QString output = process.readAllStandardOutput().trimmed();

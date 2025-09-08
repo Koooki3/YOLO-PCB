@@ -57,7 +57,27 @@ LIBS += -L/opt/MVS/lib/aarch64/ -lMvCameraControl -lMvCameraControlWrapper -lMVG
 LIBS += -L/home/orangepi/MVTec/HALCON-25.05-Progress/lib/aarch64-linux/ \
         -lhalcon -lhalconc -lhalconcpp -lhalcondl -lhdevenginecpp
 
+# 编译优化选项
+unix {
+    # 启用所有警告
+    QMAKE_CXXFLAGS += -Wall -Wextra
+
+    # 优化选项
+    QMAKE_CXXFLAGS_RELEASE -= -O2
+    QMAKE_CXXFLAGS_RELEASE += -O3
+
+    # 针对RK3588优化
+    QMAKE_CXXFLAGS += -mcpu=cortex-a76.cortex-a55
+
+    # 默认启用NEON
+    QMAKE_CXXFLAGS += -ftree-vectorize -ftree-slp-vectorize
+}
+
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
+
+# 添加版本信息
+VERSION = 1.2.0
+DEFINES += APP_VERSION=\\\"$$VERSION\\\"
