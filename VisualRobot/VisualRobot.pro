@@ -4,11 +4,6 @@ greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 TRANSLATIONS = VisualRobot_zh_EN.ts
 CONFIG += c++11
 
-# 启用OpenMP支持
-QMAKE_CXXFLAGS += -fopenmp
-QMAKE_LFLAGS += -fopenmp
-LIBS += -lgomp
-
 CONFIG += precompile_header
 PRECOMPILE_HEADER = qglobal.h
 
@@ -37,10 +32,7 @@ HEADERS += \
     Format.h \
     MvCamera.h \
     SystemMonitor.h \
-    mainwindow.h \
-    ThreadPool.h \
-    ImageMemoryPool.h \
-    ImageCache.h
+    mainwindow.h
 
 FORMS += \
     mainwindow.ui
@@ -65,32 +57,7 @@ LIBS += -L/opt/MVS/lib/aarch64/ -lMvCameraControl -lMvCameraControlWrapper -lMVG
 LIBS += -L/home/orangepi/MVTec/HALCON-25.05-Progress/lib/aarch64-linux/ \
         -lhalcon -lhalconc -lhalconcpp -lhalcondl -lhdevenginecpp
 
-# 编译优化选项
-unix {
-    # 启用所有警告
-    QMAKE_CXXFLAGS += -Wall -Wextra
-
-    # 优化选项
-    QMAKE_CXXFLAGS_RELEASE -= -O2
-    QMAKE_CXXFLAGS_RELEASE += -O3
-    
-    # 针对RK3588的优化
-    QMAKE_CXXFLAGS += -mcpu=cortex-a76.cortex-a55
-    
-    # 启用NEON指令集
-    QMAKE_CXXFLAGS += -mfpu=neon-fp-armv8
-}
-
-# 资源限制
-QMAKE_CXXFLAGS += \
-    -DMAX_POOL_SIZE=536870912 \  # 512MB
-    -DMAX_CACHE_SIZE=1073741824  # 1GB
-
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
-
-# 添加版本信息
-VERSION = 1.2.0
-DEFINES += APP_VERSION=\\\"$$VERSION\\\"
