@@ -67,24 +67,21 @@ LIBS += -L/home/orangepi/MVTec/HALCON-25.05-Progress/lib/aarch64-linux/ \
 
 # 编译优化选项
 unix {
-    # 启用所有警告
-    QMAKE_CXXFLAGS += -Wall -Wextra
-
-    # 优化选项
-    QMAKE_CXXFLAGS_RELEASE -= -O2
-    QMAKE_CXXFLAGS_RELEASE += -O3
+    # 基本警告
+    QMAKE_CXXFLAGS += -Wall
     
-    # 针对RK3588的优化
-    QMAKE_CXXFLAGS += -mcpu=cortex-a76.cortex-a55
+    # 基本优化选项
+    QMAKE_CXXFLAGS_RELEASE += -O2
     
-    # 启用NEON指令集
-    QMAKE_CXXFLAGS += -mfpu=neon-fp-armv8
+    # ARM64基本优化
+    contains(QMAKE_HOST.arch, aarch64) {
+        QMAKE_CXXFLAGS += -march=armv8-a
+    }
 }
 
 # 资源限制
-QMAKE_CXXFLAGS += \
-    -DMAX_POOL_SIZE=536870912 \  # 512MB
-    -DMAX_CACHE_SIZE=1073741824  # 1GB
+DEFINES += MAX_POOL_SIZE=536870912
+DEFINES += MAX_CACHE_SIZE=1073741824
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
