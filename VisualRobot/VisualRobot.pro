@@ -20,6 +20,7 @@ DEFINES += QT_DEPRECATED_WARNINGS
 
 SOURCES += \
     DIP.cpp \
+    DLProcessor.cpp \
     Format.cpp \
     MvCamera.cpp \
     SystemMonitor.cpp \
@@ -29,6 +30,7 @@ SOURCES += \
 
 HEADERS += \
     DIP.h \
+    DLProcessor.h \
     Format.h \
     MvCamera.h \
     SystemMonitor.h \
