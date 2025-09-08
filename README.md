@@ -43,30 +43,28 @@ VisualRobot/
 #### 📂 核心源代码 (VisualRobot/)
 
 - **Core** - 核心功能实现
-
   - `MvCamera.*` - 工业相机控制，支持 GigE/USB3.0
   - `DIP.*` - 数字图像处理，包含图像增强和特征检测
   - `Format.*` - 数据格式转换，处理不同格式间的转换
   - `SystemMonitor.*` - 系统监控，追踪性能和资源使用
-- **UI** - 用户界面组件
 
+- **UI** - 用户界面组件
   - `mainwindow.*` - 主窗口实现，包含界面逻辑
   - `*.ui` - Qt Designer 界面描述文件
-- **Resources** - 项目资源
 
+- **Resources** - 项目资源
   - 多语言支持文件
   - 图标和样式表
 
 ### 关键文件说明
 
 - `VisualRobot.pro` - Qt 项目配置，包含:
-
   - 构建设置
   - 依赖配置
   - 资源管理
   - 编译选项
-- `main.cpp` - 程序入口点，负责:
 
+- `main.cpp` - 程序入口点，负责:
   - 初始化应用程序
   - 配置日志系统
   - 启动主界面
@@ -141,7 +139,6 @@ sudo apt-get install qtcreator
 # 安装必要的开发工具
 sudo apt-get install build-essential
 sudo apt-get install cmake
-sudo apt-get install libomp-dev
 ```
 
 ### 配置项目
@@ -163,29 +160,27 @@ cd VisualRobot
 ## ⚠️ 注意事项
 
 1. 首次运行前确认：
-
    - 所有依赖库已正确安装
    - 相机驱动已安装
    - 相机连接正常
-2. 运行时注意：
 
+2. 运行时注意：
    - 检查相机连接状态
    - 确保权限设置正确
    - 监控系统资源占用
-3. 调试参考：
 
+3. 调试参考：
    - 查看 `Doc/调试信息手册.docx`
    - 使用系统监控工具跟踪性能
 
 ## 📝 开发规范
 
 1. 代码风格
-
    - 使用统一的代码格式化工具
    - 遵循 Qt 编码规范
    - 保持注释的完整性
-2. 版本控制
 
+2. 版本控制
    - 使用语义化版本号
    - 提交信息要清晰明确
    - 保持分支管理的规范性
