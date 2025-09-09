@@ -26,8 +26,8 @@ int main(int argc, char *argv[])
 
     // 运行特征识别测试
     // 使用工作目录下的测试图像
-    QString testImage1 = "../Img/test1.jpg";
-    QString testImage2 = "../Img/test2.jpg";
+    QString testImage1 = "../Img/test3.jpg";
+    QString testImage2 = "../Img/test4.jpg";
     
     if (QFile::exists(testImage1) && QFile::exists(testImage2)) {
         qDebug() << "Running feature detection test...";
