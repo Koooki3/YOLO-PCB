@@ -51,6 +51,11 @@ private slots:
     void browseLabels();
     
     /**
+     * @brief 加载标签文件
+     */
+    void loadLabels();
+    
+    /**
      * @brief 加载深度学习模型
      */
     void loadModel();

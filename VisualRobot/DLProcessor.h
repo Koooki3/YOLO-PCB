@@ -51,7 +51,33 @@ public:
     bool isModelLoaded() const { return isModelLoaded_; }
     
     // 设置输入尺寸
-    void setInputSize(const cv::Size& size) { inputSize_ = size; }
+    void setInputSize(const cv::Size& size);
+
+    // 设置预处理参数
+    void setPreprocessParams(const cv::Scalar& mean, const cv::Scalar& std, 
+                           double scaleFactor, bool swapRB);
+    
+    // 获取模型参数
+    float getConfidenceThreshold() const;
+    float getNMSThreshold() const;
+    
+    // GPU支持
+    void enableGPU(bool enable);
+    
+    // 重置参数
+    void resetToDefaults();
+    
+    // 获取模型信息
+    std::string getModelInfo() const;
+    
+    // 保存类别标签
+    bool saveClassLabels(const std::string& labelPath) const;
+    
+    // 清除模型
+    void clearModel();
+    
+    // 模型预热
+    bool warmUp();
 
 signals:
     // 处理结果信号
@@ -70,6 +96,7 @@ private:
     // 二分类相关参数
     cv::Size inputSize_;                    // 输入图像尺寸
     cv::Scalar meanValues_;                 // 均值
+    cv::Scalar stdValues_;                  // 标准差
     float scaleFactor_;                     // 缩放因子
     std::vector<std::string> classLabels_;  // 类别标签
     bool swapRB_;                          // 是否交换R和B通道

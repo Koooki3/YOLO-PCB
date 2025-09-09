@@ -157,6 +157,32 @@ void DLExample::browseLabels()
     
     if (!fileName.isEmpty()) {
         labelPathEdit_->setText(fileName);
+        // 立即加载标签文件，无论模型是否已加载
+        loadLabels();
+    }
+}
+
+void DLExample::loadLabels()
+{
+    QString labelPath = labelPathEdit_->text().trimmed();
+    if (labelPath.isEmpty()) {
+        return;
+    }
+    
+    if (!QFile::exists(labelPath)) {
+        QMessageBox::warning(this, "警告", "标签文件不存在！");
+        return;
+    }
+    
+    // 加载标签文件
+    if (dlProcessor_->loadClassLabels(labelPath.toStdString())) {
+        statusLabel_->setText("标签文件加载成功");
+        statusLabel_->setStyleSheet("QLabel { color: green; }");
+        qDebug() << "Labels loaded successfully from:" << labelPath;
+    } else {
+        statusLabel_->setText("标签文件加载失败");
+        statusLabel_->setStyleSheet("QLabel { color: red; }");
+        qDebug() << "Failed to load labels from:" << labelPath;
     }
 }
 
@@ -372,7 +398,7 @@ void DLExample::onBatchProcessingComplete(const std::vector<ClassificationResult
     
     QString resultText = QString("批量分类完成，共处理 %1 张图像:\n\n").arg(results.size());
     
-    for (size_t i = 0; i < results.size() && i < batchFileNames_.size(); ++i) {
+    for (size_t i = 0; i < results.size() && i < static_cast<size_t>(batchFileNames_.size()); ++i) {
         QString fileName = QFileInfo(batchFileNames_[i]).fileName();
         const auto& result = results[i];
         

@@ -1,2 +1,2 @@
-Good
-Defect
+Cat
+Dog

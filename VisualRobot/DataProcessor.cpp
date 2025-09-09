@@ -88,7 +88,7 @@ cv::Mat DataProcessor::adjustContrast(const cv::Mat& input, double beta)
     return adjusted;
 }
 
-cv::Mat DataProcessor::addNoise(const cv::Mat& input, double mean, double stddev)
+cv::Mat DataProcessor::addNoise(const cv::Mat& input, double mean = 0, double stddev = 25)
 {
     cv::Mat noise = cv::Mat::zeros(input.size(), CV_32F);
     cv::randn(noise, mean, stddev);
@@ -104,7 +104,7 @@ cv::Mat DataProcessor::addNoise(const cv::Mat& input, double mean, double stddev
     return noisy;
 }
 
-cv::Mat DataProcessor::randomRotate(const cv::Mat& input, double maxAngle)
+cv::Mat DataProcessor::randomRotate(const cv::Mat& input, double maxAngle = 30)
 {
     double angle = randomDouble(-maxAngle, maxAngle);
     cv::Point2f center(input.cols/2.0f, input.rows/2.0f);
@@ -125,7 +125,7 @@ cv::Mat DataProcessor::randomFlip(const cv::Mat& input)
     return flipped;
 }
 
-cv::Mat DataProcessor::randomCrop(const cv::Mat& input, double scale)
+cv::Mat DataProcessor::randomCrop(const cv::Mat& input, double scale = 0.8)
 {
     int width = static_cast<int>(input.cols * scale);
     int height = static_cast<int>(input.rows * scale);
@@ -140,7 +140,7 @@ cv::Mat DataProcessor::randomCrop(const cv::Mat& input, double scale)
     return cropped;
 }
 
-std::vector<cv::Mat> DataProcessor::applyAugmentation(const cv::Mat& input, int numAugmentations)
+std::vector<cv::Mat> DataProcessor::applyAugmentation(const cv::Mat& input, int numAugmentations = 5)
 {
     std::vector<cv::Mat> augmented;
     augmented.reserve(numAugmentations);

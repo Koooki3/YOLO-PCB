@@ -28,7 +28,8 @@ SOURCES += \
     featureDetect.cpp \
     main.cpp \
     mainwindow.cpp \
-    mainwindow_systemstats.cpp
+    mainwindow_systemstats.cpp \
+    DLExample.cpp
 
 HEADERS += \
     DIP.h \
@@ -38,7 +39,8 @@ HEADERS += \
     MvCamera.h \
     SystemMonitor.h \
     featureDetect.h \
-    mainwindow.h
+    mainwindow.h \
+    DLExample.h
 
 FORMS += \
     mainwindow.ui
