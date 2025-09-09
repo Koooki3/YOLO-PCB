@@ -65,7 +65,7 @@ std::vector<cv::DMatch> FeatureDetector::filterMatches(
                 }
             }
 
-            if (ransacMatches.size() >= params.minInliers) {
+            if (ransacMatches.size() >= static_cast<size_t>(params.minInliers)) {
                 points1 = inlierPoints1;
                 points2 = inlierPoints2;
                 return ransacMatches;

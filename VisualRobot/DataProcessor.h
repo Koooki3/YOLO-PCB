@@ -13,7 +13,7 @@ public:
     explicit DataProcessor(QObject *parent = nullptr);
     
     // 预处理方法
-    cv::Mat normalizeImage(const cv::Mat& input, double targetMean = 0.0, double targetStd = 1.0);
+    cv::Mat normalizeImage(const cv::Mat& input, double targetMean, double targetStd);
     cv::Mat standardizeImage(const cv::Mat& input);
     cv::Mat resizeWithAspectRatio(const cv::Mat& input, int targetSize);
     
@@ -24,13 +24,13 @@ public:
     // 数据增强方法
     cv::Mat adjustBrightness(const cv::Mat& input, double alpha);
     cv::Mat adjustContrast(const cv::Mat& input, double beta);
-    cv::Mat addNoise(const cv::Mat& input, double mean = 0, double stddev = 25);
-    cv::Mat randomRotate(const cv::Mat& input, double maxAngle = 30);
+    cv::Mat addNoise(const cv::Mat& input, double mean, double stddev);
+    cv::Mat randomRotate(const cv::Mat& input, double maxAngle);
     cv::Mat randomFlip(const cv::Mat& input);
-    cv::Mat randomCrop(const cv::Mat& input, double scale = 0.8);
+    cv::Mat randomCrop(const cv::Mat& input, double scale);
     
     // 批量增强
-    std::vector<cv::Mat> applyAugmentation(const cv::Mat& input, int numAugmentations = 5);
+    std::vector<cv::Mat> applyAugmentation(const cv::Mat& input, int numAugmentations);
 
 private:
     std::mt19937 rng_;
