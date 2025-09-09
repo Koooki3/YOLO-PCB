@@ -25,6 +25,7 @@ SOURCES += \
     Format.cpp \
     MvCamera.cpp \
     SystemMonitor.cpp \
+    featureDetect.cpp \
     main.cpp \
     mainwindow.cpp \
     mainwindow_systemstats.cpp
@@ -36,6 +37,7 @@ HEADERS += \
     Format.h \
     MvCamera.h \
     SystemMonitor.h \
+    featureDetect.h \
     mainwindow.h
 
 FORMS += \
