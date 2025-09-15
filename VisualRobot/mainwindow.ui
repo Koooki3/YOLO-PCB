@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1630</width>
-    <height>725</height>
+    <height>766</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -269,6 +269,35 @@
       <width>571</width>
       <height>26</height>
      </rect>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="CallDLwindow">
+    <property name="geometry">
+     <rect>
+      <x>160</x>
+      <y>690</y>
+      <width>111</width>
+      <height>41</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>深度学习窗口</string>
+    </property>
+   </widget>
+   <widget class="QPlainTextEdit" name="plainTextEdit">
+    <property name="geometry">
+     <rect>
+      <x>30</x>
+      <y>690</y>
+      <width>91</width>
+      <height>41</height>
+     </rect>
+    </property>
+    <property name="layoutDirection">
+     <enum>Qt::LeftToRight</enum>
+    </property>
+    <property name="plainText">
+     <string>新功能测试</string>
     </property>
    </widget>
   </widget>

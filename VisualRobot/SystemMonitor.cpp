@@ -45,7 +45,7 @@ float SystemMonitor::getCpuUsage()
     // 直接尝试读取/proc/stat，不管是什么平台
     std::ifstream statFile("/proc/stat");
     if (!statFile.is_open()) {
-        qDebug() << "无法打开 /proc/stat 文件";
+        qDebug() << "Can't open /proc/stat file";
         return 0.0f;
     }
 
@@ -58,7 +58,7 @@ float SystemMonitor::getCpuUsage()
         // 尝试读取所有CPU时间值
         if (!(iss >> cpu >> totalUser >> totalUserLow >> totalSys >> totalIdle 
               >> iowait >> irq >> softirq >> steal)) {
-            qDebug() << "CPU数据读取失败: " << QString::fromStdString(line);
+            qDebug() << "Failed to read CPU data: " << QString::fromStdString(line);
             return 0.0f;
         }
         
@@ -68,7 +68,7 @@ float SystemMonitor::getCpuUsage()
             m_lastTotalUserLow = totalUserLow;
             m_lastTotalSys = totalSys;
             m_lastTotalIdle = totalIdle;
-            qDebug() << "CPU监控初始化完成";
+            qDebug() << "CPU monitor initialization completed";
             return 0.0f;
         }
         
@@ -94,11 +94,11 @@ float SystemMonitor::getCpuUsage()
         m_lastTotalSys = totalSys;
         m_lastTotalIdle = totalIdle;
         
-        qDebug() << "CPU使用率:" << cpuUsage << "%";
+        qDebug() << "CPU usage:" << cpuUsage << "%";
         return std::min(100.0f, std::max(0.0f, cpuUsage));
     }
     
-    qDebug() << "读取CPU数据失败";
+    qDebug() << "Failed to read CPU data";
     return 0.0f;
 }
 
@@ -107,7 +107,7 @@ float SystemMonitor::getMemoryUsage()
     // 尝试从/proc/meminfo读取内存信息
     std::ifstream memFile("/proc/meminfo");
     if (!memFile.is_open()) {
-        qDebug() << "无法打开 /proc/meminfo 文件";
+        qDebug() << "Can't open /proc/meminfo file";
         return 0.0f;
     }
 
@@ -128,7 +128,7 @@ float SystemMonitor::getMemoryUsage()
     }
 
     if (totalMem == 0) {
-        qDebug() << "无法读取内存总量";
+        qDebug() << "Unable to read the total memory capacity";
         return 0.0f;
     }
 
@@ -136,8 +136,8 @@ float SystemMonitor::getMemoryUsage()
     unsigned long usedMem = totalMem - freeMem - buffers - cached;
     float memUsage = 100.0f * static_cast<float>(usedMem) / totalMem;
     
-    qDebug() << "内存使用率:" << memUsage << "% (总内存:" << totalMem 
-             << "KB, 使用:" << usedMem << "KB)";
+    qDebug() << "Memory usage:" << memUsage << "% (Total memory capacity:" << totalMem
+             << "KB, used:" << usedMem << "KB)";
     
     return std::min(100.0f, std::max(0.0f, memUsage));
 }
@@ -164,13 +164,13 @@ float SystemMonitor::getTemperature()
                 if (temp > 1000) {
                     temp /= 1000.0f; // 转换为摄氏度
                 }
-                qDebug() << "系统温度:" << temp << "°C (从" << path << "读取)";
+                qDebug() << "System temperature:" << temp << "°C (Read from" << path << ")";
                 return temp;
             } else {
-                qDebug() << "温度数据解析失败:" << tempStr << "(从" << path << "读取)";
+                qDebug() << "Failed to analyze temperature data:" << tempStr << "(Read from" << path << ")";
             }
         } else {
-            qDebug() << "无法访问温度文件:" << path;
+            qDebug() << "Can't open temperature file:" << path;
         }
     }
 
@@ -183,12 +183,12 @@ float SystemMonitor::getTemperature()
         bool ok;
         float temp = output.toFloat(&ok) / 1000.0f;
         if (ok) {
-            qDebug() << "系统温度(通过命令):" << temp << "°C";
+            qDebug() << "System temperature (based on instruction):" << temp << "°C";
             return temp;
         }
     }
 
-    qDebug() << "无法获取系统温度";
+    qDebug() << "Can't get system temperature";
     return 0.0f;
 }
 

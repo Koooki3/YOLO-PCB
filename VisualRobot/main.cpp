@@ -42,18 +42,3 @@ int main(int argc, char *argv[])
     w.show();
     return a.exec();
 }
-
-//深度学习二分类示例
-
-//#include "DLExample.h"
-//#include <QApplication>
-
-//int main(int argc, char *argv[])
-//{
-//    QApplication app(argc, argv);
-
-//    DLExample window;
-//    window.show();
-
-//    return app.exec();
-//}
