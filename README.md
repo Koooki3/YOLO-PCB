@@ -1,104 +1,150 @@
 # VisualRobot
 
-基于 Qt 和 C++ 开发的工业视觉机器人控制系统，提供完整的相机控制和图像处理解决方案。
+基于 Qt 和 C++ 开发的工业视觉机器人控制系统，提供完整的相机控制、图像处理和深度学习解决方案。
 
 ## ✨ 主要特性
 
 - 🎥 支持 GigE 和 USB3.0 接口的工业相机控制
 - 🖼️ 强大的数字图像处理功能
+- 🤖 深度学习图像分类支持
 - 🌐 支持中英文双语界面
 - 📊 实时系统状态监控
 - 🛠️ 可配置的相机参数设置
+- 📈 特征检测和匹配功能
 
 ## 📁 项目结构
 
 ```plaintext
 VisualRobot/
-├── Doc/                          # 项目文档
-│   └── 调试信息手册.pdf            # 系统调试和维护手册
-├── Img/                          # 图像资源目录
-│   ├── capture.jpg               # 相机采集的原始图像
-│   └── circle_detected.jpg       # 圆形检测的结果图像
-├── VisualRobot/                  # 核心源代码目录
-│   ├── Core                      # 核心功能模块
-│   │   ├── MvCamera.*            # 工业相机控制实现
-│   │   ├── DIP.*                 # 数字图像处理算法
-│   │   ├── Format.*              # 数据格式转换工具
-│   │   └── SystemMonitor.*       # 系统状态监控模块
-│   ├── UI                        # 用户界面相关
-│   │   ├── mainwindow.*          # 主窗口实现
-│   │   └── *.ui                  # Qt Designer UI 文件
-│   ├── Resources                 # 资源文件
-│   │   ├── VisualRobot_zh_EN.ts  # 中英文翻译源文件
-│   │   └── VisualRobot_zh_EN.qm  # 编译后的翻译文件
-│   ├── main.cpp                  # 程序入口点
-│   └── VisualRobot.pro           # Qt 项目配置文件
-├── Data                          # 数据文件
-    ├── matrix.bin                # 系统配置矩阵
-    └── detectedImg.jpg           # 最新检测结果
+├── Data/                          # 数据文件目录
+│   ├── Datasets/                  # 训练数据集
+│   │   └── cats/                  # 猫类图像
+│   │   └── dogs/                  # 狗类图像
+│   ├── Labels/                    # 标签文件
+│   │   └── class_labels.txt       # 类别标签文件
+│   └── Models/                    # 模型文件
+│       ├── resnet34_cat_dog_classifier.onnx  # ONNX 格式的猫狗分类模型
+│       └── README_MODELS.md       # 模型说明文档
+├── Doc/                           # 项目文档
+│   ├── 调试信息手册.md             # 系统调试和维护手册 (Markdown)
+│   ├── 调试信息手册.pdf            # 系统调试和维护手册 (PDF)
+│   └── 深度学习二分类使用指南.md    # 深度学习使用指南
+├── Img/                           # 图像资源目录
+│   ├── capture.jpg                # 相机采集的原始图像
+│   ├── cat.jpg                    # 猫示例图像
+│   ├── circle_detected.jpg        # 圆形检测的结果图像
+│   ├── dog.jpg                    # 狗示例图像
+│   ├── test1.jpg                  # 测试图像1
+│   ├── test2.jpg                  # 测试图像2
+│   ├── test3.jpg                  # 测试图像3
+│   ├── test4.jpg                  # 测试图像4
+│   └── feature_matches.jpg        # 特征匹配结果图像
+├── VisualRobot/                   # 核心源代码目录
+│   ├── DataProcessor.cpp          # 数据处理实现
+│   ├── DataProcessor.h            # 数据处理头文件
+│   ├── DIP.cpp                    # 数字图像处理算法实现
+│   ├── DIP.h                      # 数字图像处理头文件
+│   ├── DLExample.cpp              # 深度学习示例实现
+│   ├── DLExample.h                # 深度学习示例头文件
+│   ├── DLProcessor.cpp            # 深度学习处理实现
+│   ├── DLProcessor.h              # 深度学习处理头文件
+│   ├── featureDetect.cpp          # 特征检测实现
+│   ├── featureDetect.h            # 特征检测头文件
+│   ├── Format.cpp                 # 数据格式转换实现
+│   ├── Format.h                   # 数据格式转换头文件
+│   ├── main.cpp                   # 程序入口点
+│   ├── mainwindow.cpp             # 主窗口实现
+│   ├── mainwindow.h               # 主窗口头文件
+│   ├── mainwindow.ui              # 主窗口界面文件
+│   ├── mainwindow_systemstats.cpp # 系统统计界面实现
+│   ├── MvCamera.cpp               # 工业相机控制实现
+│   ├── MvCamera.h                 # 工业相机控制头文件
+│   ├── SystemMonitor.cpp          # 系统监控实现
+│   ├── SystemMonitor.h            # 系统监控头文件
+│   ├── VisualRobot_zh_EN.qm       # 编译后的翻译文件
+│   ├── VisualRobot_zh_EN.ts       # 中英文翻译源文件
+│   ├── VisualRobot.pro            # Qt 项目配置文件
+│   └── VisualRobot.pro.user       # Qt 项目用户配置
+├── detectedImg.jpg                # 最新检测结果图像
+├── feature_matches.jpg            # 特征匹配结果图像
+├── matrix.bin                     # 系统配置矩阵文件
+└── README.md                      # 项目说明文档
 ```
 
 ### 目录说明
 
 #### 📂 核心源代码 (VisualRobot/)
 
-- **Core** - 核心功能实现
-  - `MvCamera.*` - 工业相机控制，支持 GigE/USB3.0
-  - `DIP.*` - 数字图像处理，包含图像增强和特征检测
-  - `Format.*` - 数据格式转换，处理不同格式间的转换
-  - `SystemMonitor.*` - 系统监控，追踪性能和资源使用
+- **相机控制** - `MvCamera.*` 工业相机控制，支持 GigE/USB3.0
+- **图像处理** - `DIP.*` 数字图像处理，包含图像增强和特征检测
+- **深度学习** - `DLProcessor.*`, `DLExample.*` 深度学习图像分类处理
+- **特征检测** - `featureDetect.*` 图像特征检测和匹配
+- **数据格式** - `Format.*` 数据格式转换，处理不同格式间的转换
+- **系统监控** - `SystemMonitor.*` 系统监控，追踪性能和资源使用
+- **数据处理** - `DataProcessor.*` 通用数据处理功能
+- **用户界面** - `mainwindow.*` 主窗口实现，包含界面逻辑
 
-- **UI** - 用户界面组件
-  - `mainwindow.*` - 主窗口实现，包含界面逻辑
-  - `*.ui` - Qt Designer 界面描述文件
+#### 📂 数据文件 (Data/)
 
-- **Resources** - 项目资源
-  - 多语言支持文件
-  - 图标和样式表
+- **Datasets** - 训练数据集，包含猫狗分类样本
+- **Labels** - 标签文件，定义类别名称
+- **Models** - 预训练模型文件，包含 ResNet34 猫狗分类器
+
+#### 📂 文档 (Doc/)
+
+- 系统调试和维护手册
+- 深度学习使用指南
+- 相关技术文档
+
+#### 📂 图像资源 (Img/)
+
+- 测试图像文件
+- 示例图像
+- 处理结果图像
 
 ### 关键文件说明
 
-- `VisualRobot.pro` - Qt 项目配置，包含:
-  - 构建设置
-  - 依赖配置
-  - 资源管理
-  - 编译选项
-
-- `main.cpp` - 程序入口点，负责:
-  - 初始化应用程序
-  - 配置日志系统
-  - 启动主界面
+- `VisualRobot.pro` - Qt 项目配置，包含构建设置、依赖配置、资源管理和编译选项
+- `main.cpp` - 程序入口点，负责初始化应用程序、配置日志系统和启动主界面
+- `matrix.bin` - 系统配置矩阵文件，存储相机和算法参数
+- `resnet34_cat_dog_classifier.onnx` - 预训练的深度学习模型，用于猫狗图像分类
 
 ## 💡 核心模块
 
 ### 相机控制模块 (MvCamera)
-
 - 工业相机初始化与配置
 - 实时图像采集
 - 相机参数动态调节
 
 ### 图像处理模块 (DIP)
-
 - 图像预处理与增强
 - 特征检测与提取
 - 目标识别与定位
 
-### 系统监控模块 (SystemMonitor)
+### 深度学习模块 (DLProcessor)
+- ONNX 模型加载和推理
+- 图像分类处理
+- 结果后处理和分析
 
+### 特征检测模块 (featureDetect)
+- 关键点检测
+- 特征描述符提取
+- 图像匹配和比对
+
+### 系统监控模块 (SystemMonitor)
 - 实时性能监控
 - 系统资源管理
 - 运行状态追踪
 
 ### 界面模块 (MainWindow)
-
 - 直观的用户交互界面
 - 相机实时预览
 - 多语言支持
+- 处理结果显示
 
 ## 🔧 环境要求
 
 ### 开发环境
-
 - Qt 5.x 或更高版本
 - C++ 编译器 (支持 C++11 标准)
 - CMake 3.x 或更高版本
@@ -106,29 +152,30 @@ VisualRobot/
 ### 依赖库
 
 1. MVS (Machine Vision Software) SDK
-
 ```cpp
 INCLUDEPATH += /opt/MVS/include
 LIBS += -L/opt/MVS/bin/ -L/opt/MVS/lib/64/
 ```
 
 2. HALCON 图像处理库
-
 ```cpp
 INCLUDEPATH += /home/orangepi/MVTec/HALCON-25.05-Progress/include
 LIBS += -L/home/orangepi/MVTec/HALCON-25.05-Progress/lib/aarch64-linux/
 ```
 
 3. Eigen3 数学库
-
 ```cpp
 INCLUDEPATH += /usr/include/eigen3/Eigen
+```
+
+4. ONNX Runtime (深度学习推理)
+```cpp
+# 需要安装 ONNX Runtime 库用于模型推理
 ```
 
 ## 📦 安装与配置
 
 ### 1. 安装依赖
-
 ```bash
 # 安装 Qt 开发环境
 # Windows: 使用 Qt 在线安装器
@@ -139,21 +186,22 @@ sudo apt-get install qtcreator
 # 安装必要的开发工具
 sudo apt-get install build-essential
 sudo apt-get install cmake
+
+# 安装 ONNX Runtime (根据平台选择)
+# 参考: https://onnxruntime.ai/
 ```
 
-### 配置项目
-
-1. 克隆项目：
-
+### 2. 配置项目
 ```bash
-git clone [项目地址]
+# 克隆项目
+git clone https://jihulab.com/visualteam/VisualRobot.git
 cd VisualRobot
 ```
 
 ## 🚀 编译与运行
 
-1. 使用 Qt Creator 打开 `VisualRobot.pro`
-2. 配置编译选项
+1. 使用 Qt Creator 打开 `VisualRobot/VisualRobot.pro`
+2. 配置编译选项和依赖库路径
 3. 编译项目
 4. 运行程序
 
@@ -163,15 +211,18 @@ cd VisualRobot
    - 所有依赖库已正确安装
    - 相机驱动已安装
    - 相机连接正常
+   - ONNX Runtime 库已配置
 
 2. 运行时注意：
    - 检查相机连接状态
    - 确保权限设置正确
    - 监控系统资源占用
+   - 确认模型文件路径正确
 
 3. 调试参考：
-   - 查看 `Doc/调试信息手册.docx`
+   - 查看 `Doc/调试信息手册.md` 或 `Doc/调试信息手册.pdf`
    - 使用系统监控工具跟踪性能
+   - 参考 `Doc/深度学习二分类使用指南.md`
 
 ## 📝 开发规范
 
@@ -199,4 +250,4 @@ cd VisualRobot
 
 ---
 
-最后更新日期：2025年9月3日
+最后更新日期：2025年9月15日
