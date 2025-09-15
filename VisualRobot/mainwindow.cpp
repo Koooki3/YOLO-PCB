@@ -1111,7 +1111,7 @@ void MainWindow::drawOverlayOnDisplay2(double length, double width, double diago
 
 void MainWindow::on_CallDLwindow_clicked()
 {
-    DLExample* dlExample = new DLExample(this);
+    DLExample* dlExample = new DLExample(nullptr);
     dlExample->setAttribute(Qt::WA_DeleteOnClose);
     dlExample->show();
     appendLog("深度学习二分类示例窗口已打开", INFO);
