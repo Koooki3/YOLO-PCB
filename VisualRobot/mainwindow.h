@@ -14,6 +14,7 @@
 #include <vector>
 #include "SystemMonitor.h"
 #include <QLabel>
+#include "DLExample.h"
 
 using namespace HalconCpp;
 
@@ -66,6 +67,8 @@ private slots:
     void on_GetLength_clicked();
 
     void on_genMatrix_clicked();
+
+    void on_CallDLwindow_clicked();
 
 private:
     Ui::MainWindow *ui;
