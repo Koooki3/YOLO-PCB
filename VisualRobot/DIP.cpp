@@ -65,60 +65,61 @@ int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& Pixe
 
     try
     {
-        // 创建齐次坐标矩阵
-        MatrixXd A(2 * pointCount, 6);
-        VectorXd b(2 * pointCount);
-
-        // 填充矩阵A和向量b
-        for (int i = 0; i < pointCount; ++i)
+        // 转换像素坐标到Eigen矩阵（n×3齐次坐标）
+        Eigen::MatrixXd PixelCoord1(pointCount, 3);
+        for(int i = 0; i < pointCount; ++i)
         {
-            double u = PixelCoord[i].x();
-            double v = PixelCoord[i].y();
-            double x = WorldCoord[i].x();
-            double y = WorldCoord[i].y();
-
-            // 前pointCount行对应x坐标方程
-            A(2*i, 0) = u;
-            A(2*i, 1) = v;
-            A(2*i, 2) = 1;
-            A(2*i, 3) = 0;
-            A(2*i, 4) = 0;
-            A(2*i, 5) = 0;
-            b(2*i) = x;
-
-            // 后pointCount行对应y坐标方程
-            A(2*i+1, 0) = 0;
-            A(2*i+1, 1) = 0;
-            A(2*i+1, 2) = 0;
-            A(2*i+1, 3) = u;
-            A(2*i+1, 4) = v;
-            A(2*i+1, 5) = 1;
-            b(2*i+1) = y;
+            PixelCoord1(i, 0) = PixelCoord[i].x();
+            PixelCoord1(i, 1) = PixelCoord[i].y();
+            PixelCoord1(i, 2) = 1.0;
         }
 
-        // 使用最小二乘法求解 Ax = b
-        VectorXd x = A.bdcSvd(ComputeThinU | ComputeThinV).solve(b);
+        // 转换世界坐标到Eigen矩阵（n×3齐次坐标）
+        Eigen::MatrixXd WorldCoord1(pointCount, 3);
+        for(int i = 0; i < pointCount; ++i)
+        {
+            WorldCoord1(i, 0) = WorldCoord[i].x();       // X坐标
+            WorldCoord1(i, 1) = WorldCoord[i].y();       // Y坐标
+            WorldCoord1(i, 2) = 1.0;
+        }
 
-        // 构建变换矩阵
-        matrix << x(0), x(1), x(2),
-                  x(3), x(4), x(5),
-                  0,    0,    1;
+        // 最小二乘解方程：A^T*A*X = A^T*B
+        Eigen::MatrixXd ATA = PixelCoord1.transpose() * PixelCoord1;
+        Eigen::MatrixXd ATB = PixelCoord1.transpose() * WorldCoord1;
 
-        // 输出矩阵信息
+        // LDLT分解求解（更高效且数值稳定）
+        if(ATA.determinant() < 1e-10) {
+            cerr << "错误: 矩阵奇异，无法求解" << endl;
+            return 3; // 错误码3: 矩阵奇异
+        }
+        
+        // 求解变换矩阵
+        Eigen::MatrixXd resultMatrix = ATA.ldlt().solve(ATB);
+        
+        // 构建3x3变换矩阵
+        matrix << resultMatrix(0, 0), resultMatrix(0, 1), resultMatrix(0, 2),
+                  resultMatrix(1, 0), resultMatrix(1, 1), resultMatrix(1, 2),
+                  resultMatrix(2, 0), resultMatrix(2, 1), resultMatrix(2, 2);
+
+        // 输出矩阵信息（高精度格式）
         cout << "变换矩阵:" << endl;
         cout << fixed << setprecision(10);
         cout << matrix << endl;
 
-        // 验证变换矩阵
+        // 验证变换结果
         cout << "验证变换结果:" << endl;
         for (int i = 0; i < pointCount; ++i)
         {
             Vector3d pixel(PixelCoord[i].x(), PixelCoord[i].y(), 1.0);
             Vector3d world = matrix * pixel;
 
+            double error_x = std::abs(world[0] - WorldCoord[i].x());
+            double error_y = std::abs(world[1] - WorldCoord[i].y());
+            
             cout << "像素坐标: (" << pixel[0] << ", " << pixel[1] << ") -> ";
             cout << "计算的世界坐标: (" << world[0] << ", " << world[1] << ") ";
-            cout << "实际的世界坐标: (" << WorldCoord[i].x() << ", " << WorldCoord[i].y() << ")" << endl;
+            cout << "实际的世界坐标: (" << WorldCoord[i].x() << ", " << WorldCoord[i].y() << ")";
+            cout << " 误差: (" << error_x << ", " << error_y << ")" << endl;
         }
 
         // 如果提供了文件名，保存矩阵到文件
