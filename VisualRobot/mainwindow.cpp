@@ -670,42 +670,6 @@ void MainWindow::on_pushButton_clicked()
     QMessageBox::information(this, "保存图片", QString("保存成功：%1").arg(fpath));
     appendLog(QString("保存成功，地址为：%1").arg(fpath), INFO);
 
-    //执行检长算法
-//    int ProcessedOK = Algorithm(fpath.toStdString(), Row, Col);
-//    cout << "原始数据:" << endl;
-//    cout << "Row = " << Row.ToString() << endl;
-//    cout << "Col = " << Col.ToString() << endl;
-//    if (ProcessedOK)
-//    {
-//        appendLog("角点检测算法执行失败，请调整曝光或者重选待测物体", ERROR);
-//        return;
-//    }
-//    else
-//    {
-//        appendLog("待检测图像读取成功，角点检测算法执行完毕", INFO);
-//    }
-
-//    if (Row.Length() != Col.Length())
-//    {
-//        appendLog("获取到的x,y参数数量不匹配", ERROR);
-//        return;
-//    }
-//    else if (Row.Length() == 0 || Col.Length() == 0)
-//    {
-//        appendLog("未能正确检测到角点", ERROR);
-//    }
-//    else
-//    {
-//        for (int i = 0; i < Row.Length(); ++i)
-//        {
-//            appendLog(QString("第%1个角点(x,y)像素坐标为：(%2, %3)")
-//                      .arg(i+1)
-//                      .arg(static_cast<double>(Col[i]))
-//                      .arg(static_cast<double>(Row[i])),
-//                      INFO);
-//        }
-//    }
-
     // 如果选择了角点检测，才执行检测算法
     if (needDetection) {
         //OpenCV版本
@@ -914,6 +878,8 @@ void MainWindow::on_GetLength_clicked()
 void MainWindow::on_genMatrix_clicked()
 {
 //    int getCoordsOk = getCoords(WorldCoord, PixelCoord, 100.0);
+    WorldCoord.clear();
+    PixelCoord.clear();
     int getCoordsOk = getCoords_opencv(WorldCoord, PixelCoord, 100.0);
     if (getCoordsOk != 0)
     {
