@@ -822,40 +822,6 @@ void MainWindow::appendLog(const QString &message, int logType, double value)
 void MainWindow::on_GetLength_clicked()
 {
     vector<QPointF> points;
-//    points.reserve(Row.Length()); // 预分配空间
-//    Matrix3d transMatrix = readTransformationMatrix("../matrix.bin");
-//    appendLog("成功读取变换矩阵，详见终端显示", INFO);
-//    // 输出变换矩阵
-//    cout << "变换矩阵:" << endl;
-//    cout << fixed << setprecision(10); // 设置输出精度
-//    cout << transMatrix << endl;
-//    if (Row.Length() <=0 || Col.Length() <= 0 || (Row.Length() != Col.Length()))
-//    {
-//        appendLog("未能正确读取角点", ERROR);
-//        return;
-//    }
-
-//    for (int i = 0; i < Row.Length(); ++i)
-//    {
-//        double x = Col[i].D();  // 获取列坐标（转换为 double）
-//        double y = Row[i].D();  // 获取行坐标（转换为 double）
-//        // 创建齐次坐标向量 [x, y, 1]
-//        Vector3d s(x, y, 1.0);
-//        // 应用变换矩阵
-//        Vector3d d = transMatrix * s;
-//        // 创建变换后的 QPointF
-//        QPointF transformedPoint(d(0), d(1));
-//        // 添加到结果向量
-//        points.push_back(transformedPoint);
-//        // 输出转换信息
-//        cout << "点 " << i << ": 像素坐标 (" << x << ", " << y << ") -> ";
-//        cout << "世界坐标 (" << transformedPoint.x() << ", " << transformedPoint.y() << ")" << endl;
-//        appendLog(QString("第%1个角点(x,y)世界坐标为：(%2, %3)")
-//                  .arg(i+1)
-//                  .arg(static_cast<double>(transformedPoint.x()))
-//                  .arg(static_cast<double>(transformedPoint.y())),
-//                  INFO);
-//    }
     points.reserve(Row.size()); // 预分配空间
     Matrix3d transMatrix = readTransformationMatrix("../matrix.bin");
     appendLog("成功读取变换矩阵，详见终端显示", INFO);
@@ -863,6 +829,20 @@ void MainWindow::on_GetLength_clicked()
     cout << "变换矩阵:" << endl;
     cout << fixed << setprecision(10); // 设置输出精度
     cout << transMatrix << endl;
+
+//    // Test
+//    Col.clear();
+//    Col.push_back(2862.84);
+//    Col.push_back(1347.74);
+//    Col.push_back(1246.92);
+//    Col.push_back(2764.09);
+
+//    Row.clear();
+//    Row.push_back(2077.07);
+//    Row.push_back(2281.61);
+//    Row.push_back(1523.68);
+//    Row.push_back(1318.45);
+
     if (Row.size() <=0 || Col.size() <= 0 || (Row.size() != Col.size()))
     {
         appendLog("未能正确读取角点", ERROR);
