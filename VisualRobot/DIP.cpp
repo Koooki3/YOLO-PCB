@@ -381,7 +381,7 @@ int Algorithm(const string& imgPath, HTuple& Row, HTuple& Col)
 }
 
 // OpenCV版本的圆形检测算法
-int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double size = 75.0)
+int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double size = 100.0)
 {
     // 读取图像
     cv::Mat image = cv::imread("/home/orangepi/Desktop/VisualRobot_Local/Img/capture.jpg");

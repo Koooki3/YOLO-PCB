@@ -913,8 +913,8 @@ void MainWindow::on_GetLength_clicked()
 
 void MainWindow::on_genMatrix_clicked()
 {
-//    int getCoordsOk = getCoords(WorldCoord, PixelCoord, 75.0);
-    int getCoordsOk = getCoords_opencv(WorldCoord, PixelCoord, 75.0);
+//    int getCoordsOk = getCoords(WorldCoord, PixelCoord, 100.0);
+    int getCoordsOk = getCoords_opencv(WorldCoord, PixelCoord, 100.0);
     if (getCoordsOk != 0)
     {
         appendLog("坐标获取错误", ERROR);
