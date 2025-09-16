@@ -303,7 +303,7 @@ int Algorithm(const string& imgPath, HTuple& Row, HTuple& Col)
         DispObj(ho_Image, HDevWindowStack::GetActive());
     }
 
-    //显示矩形轮廓
+    //显示矩形轮廓 - 首先绘制绿色的10像素宽矩形轮廓
     if (HDevWindowStack::IsOpen())
     {
         SetColor(HDevWindowStack::GetActive(),"green");
@@ -317,17 +317,54 @@ int Algorithm(const string& imgPath, HTuple& Row, HTuple& Col)
         DispObj(ho_Rectangle, HDevWindowStack::GetActive());
     }
 
-    //绘制角点
+    //然后绘制红色的1像素精确矩形轮廓
     if (HDevWindowStack::IsOpen())
     {
         SetColor(HDevWindowStack::GetActive(),"red");
     }
-    for (hv_i=0; hv_i<=10; hv_i+=1)
+    if (HDevWindowStack::IsOpen())
     {
-        GenCrossContourXld(&ho_Cross, HTuple(hv_Row2[hv_i]), HTuple(hv_Col2[hv_i]), 200,0);
+        SetLineWidth(HDevWindowStack::GetActive(),1);
+    }
+    if (HDevWindowStack::IsOpen())
+    {
+        DispObj(ho_Rectangle, HDevWindowStack::GetActive());
+    }
+
+    //绘制角点 - 首先在精确的角点位置绘制红色的8像素为半径的角点圆
+    HObject ho_CircleRed, ho_CircleGreen;
+    if (HDevWindowStack::IsOpen())
+    {
+        SetColor(HDevWindowStack::GetActive(),"red");
+    }
+    if (HDevWindowStack::IsOpen())
+    {
+        SetDraw(HDevWindowStack::GetActive(),"fill");
+    }
+    for (hv_i=0; hv_i<4; hv_i+=1)
+    {
+        GenCircle(&ho_CircleRed, HTuple(hv_Row2[hv_i]), HTuple(hv_Col2[hv_i]), 8);
         if (HDevWindowStack::IsOpen())
         {
-            DispObj(ho_Cross, HDevWindowStack::GetActive());
+            DispObj(ho_CircleRed, HDevWindowStack::GetActive());
+        }
+    }
+
+    //然后绘制绿色的1像素为半径的角点圆
+    if (HDevWindowStack::IsOpen())
+    {
+        SetColor(HDevWindowStack::GetActive(),"green");
+    }
+    if (HDevWindowStack::IsOpen())
+    {
+        SetDraw(HDevWindowStack::GetActive(),"fill");
+    }
+    for (hv_i=0; hv_i<4; hv_i+=1)
+    {
+        GenCircle(&ho_CircleGreen, HTuple(hv_Row2[hv_i]), HTuple(hv_Col2[hv_i]), 1);
+        if (HDevWindowStack::IsOpen())
+        {
+            DispObj(ho_CircleGreen, HDevWindowStack::GetActive());
         }
     }
 
@@ -567,16 +604,54 @@ int Algorithm_opencv(const string& imgPath, vector<double>& Row, vector<double>&
             Col.push_back(pt.x);
         }
 
+        // 亚像素精度优化
+        if (!rectContour.empty()) {
+            // 将角点转换为Point2f格式用于亚像素优化
+            vector<cv::Point2f> corners;
+            for (int i = 0; i < 4; i++) {
+                corners.push_back(cv::Point2f(Col[i], Row[i]));
+            }
+            
+            // 配置亚像素优化参数
+            cv::Size winSize = cv::Size(5, 5);
+            cv::Size zeroZone = cv::Size(-1, -1);
+            cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::EPS + cv::TermCriteria::MAX_ITER, 40, 0.001);
+            
+            // 执行亚像素角点优化
+            cv::cornerSubPix(grayImage, corners, winSize, zeroZone, criteria);
+            
+            // 更新优化后的角点坐标
+            for (int i = 0; i < 4; i++) {
+                Row[i] = corners[i].y;
+                Col[i] = corners[i].x;
+            }
+        }
+
         // 可视化结果
         cv::Mat result = image.clone();
         
-        // 绘制矩形
+        // 绘制矩形 - 首先绘制绿色的10像素宽矩形轮廓
         for(int i = 0; i < 4; i++) {
             cv::line(result, rectContour[i], rectContour[(i+1)%4], 
                     cv::Scalar(0, 255, 0), 10);
-            // 绘制角点
-            cv::drawMarker(result, cv::Point(Col[i], Row[i]),
-                          cv::Scalar(0, 0, 255), cv::MARKER_CROSS, 200, 10);
+        }
+
+        // 然后绘制红色的1像素精确矩形轮廓
+        for(int i = 0; i < 4; i++) {
+            cv::line(result, rectContour[i], rectContour[(i+1)%4], 
+                    cv::Scalar(0, 0, 255), 1);
+        }
+
+        // 绘制角点 - 首先在精确的角点位置绘制红色的8像素为半径的角点圆
+        for(int i = 0; i < 4; i++) {
+            cv::circle(result, cv::Point(Col[i], Row[i]),
+                      8, cv::Scalar(0, 0, 255), -1); // 填充红色圆，半径为8像素
+        }
+
+        // 然后绘制绿色的1像素为半径的角点圆
+        for(int i = 0; i < 4; i++) {
+            cv::circle(result, cv::Point(Col[i], Row[i]),
+                      1, cv::Scalar(0, 255, 0), -1); // 填充绿色圆，半径为1像素
         }
 
         // 保存结果图像
