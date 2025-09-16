@@ -434,6 +434,9 @@ int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord,
     // 在每个区域中检测圆
     vector<cv::Vec3f> detectedCircles;
     cv::Mat result = image.clone();
+    vector<cv::Point2f> detectedCenters; // 存储检测到的圆心
+    vector<float> detectedRadii; // 存储检测到的半径
+    vector<cv::Point2f> detectedWorldCoords; // 存储对应的世界坐标
 
     for(size_t i = 0; i < searchAreas.size(); i++) {
         cv::Mat roi = binaryImage(searchAreas[i]);
@@ -466,23 +469,54 @@ int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord,
             bestCircle[0] += searchAreas[i].x;
             bestCircle[1] += searchAreas[i].y;
             detectedCircles.push_back(bestCircle);
-
-            // 存储结果
-            WorldCoord.append(QPointF(worldCoords[i].x, worldCoords[i].y));
-            PixelCoord.append(QPointF(bestCircle[0], bestCircle[1]));
-
-            // 绘制结果
-            cv::circle(result, cv::Point(bestCircle[0], bestCircle[1]),
-                      bestCircle[2], cv::Scalar(0, 255, 0), 10);
-            cv::circle(result, cv::Point(bestCircle[0], bestCircle[1]),
-                      10, cv::Scalar(0, 0, 255), -1);
+            detectedCenters.push_back(cv::Point2f(bestCircle[0], bestCircle[1]));
+            detectedRadii.push_back(bestCircle[2]);
+            detectedWorldCoords.push_back(worldCoords[i]);
         }
+    }
+
+    // 亚像素精度优化圆心坐标 - 使用图像矩计算质心
+    for (size_t i = 0; i < detectedCenters.size(); i++) {
+        // 根据圆的半径动态定义ROI区域（以检测到的圆心为中心，2r*2r像素区域）
+        int radius = static_cast<int>(detectedRadii[i]);
+        int roi_size = 2 * radius; // ROI大小为2r*2r
+        int x = std::max(0, static_cast<int>(detectedCenters[i].x - radius));
+        int y = std::max(0, static_cast<int>(detectedCenters[i].y - radius));
+        int width = std::min(roi_size, grayImage.cols - x);
+        int height = std::min(roi_size, grayImage.rows - y);
+        
+        if (width > 0 && height > 0) {
+            cv::Mat roi = grayImage(cv::Rect(x, y, width, height));
+            
+            // 计算图像矩
+            cv::Moments m = cv::moments(roi, true);
+            
+            if (m.m00 != 0) {
+                // 计算质心（相对于ROI的坐标）
+                double cx = m.m10 / m.m00;
+                double cy = m.m01 / m.m00;
+                
+                // 更新圆心坐标（转换回原图坐标系）
+                detectedCenters[i].x = x + cx;
+                detectedCenters[i].y = y + cy;
+            }
+        }
+    }
+
+    // 存储优化后的结果并绘制
+    for (size_t i = 0; i < detectedCenters.size(); i++) {
+        WorldCoord.append(QPointF(detectedWorldCoords[i].x, detectedWorldCoords[i].y));
+        PixelCoord.append(QPointF(detectedCenters[i].x, detectedCenters[i].y));
+
+        // 绘制结果
+        cv::circle(result, detectedCenters[i], detectedRadii[i], cv::Scalar(0, 255, 0), 10);
+        cv::circle(result, detectedCenters[i], 10, cv::Scalar(0, 0, 255), -1);
     }
 
     // 保存结果图像
     cv::imwrite("/home/orangepi/Desktop/VisualRobot_Local/Img/circle_detected.jpg", result);
 
-    return detectedCircles.empty() ? 1 : 0;
+    return detectedCenters.empty() ? 1 : 0;
 }
 
 Matrix3d readTransformationMatrix(const string& filename)
