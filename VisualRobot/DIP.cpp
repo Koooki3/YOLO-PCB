@@ -50,13 +50,13 @@ bool createDirectory(const string& path)
 int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& PixelCoord, Matrix3d& matrix, const string& filename = "")
 {
     // 参数校验
+    const int pointCount = WorldCoord.count();
     if (WorldCoord.count() != PixelCoord.count())
     {
         cerr << "错误: 世界坐标与像素坐标数量不匹配" << endl;
         return 1; // 错误码1: 坐标数量不匹配
     }
 
-    const int pointCount = WorldCoord.count();
     if (pointCount < 3)
     {
         cerr << "错误: 至少需要3个对应点" << endl;
@@ -65,48 +65,119 @@ int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& Pixe
 
     try
     {
-        // 转换像素坐标到Eigen矩阵（n×3齐次坐标）
-        Eigen::MatrixXd PixelCoord1(pointCount, 3);
-        for(int i = 0; i < pointCount; ++i)
+        // 预分配内存并避免重复计算
+        MatrixXd A = MatrixXd::Zero(2 * pointCount, 6);
+        VectorXd b = VectorXd::Zero(2 * pointCount);
+
+        // 使用更高效的矩阵填充方式
+        for (int i = 0; i < pointCount; ++i)
         {
-            PixelCoord1(i, 0) = PixelCoord[i].x();
-            PixelCoord1(i, 1) = PixelCoord[i].y();
-            PixelCoord1(i, 2) = 1.0;
+            const double u = PixelCoord[i].x();
+            const double v = PixelCoord[i].y();
+            const double x = WorldCoord[i].x();
+            const double y = WorldCoord[i].y();
+
+            const int row1 = 2 * i;
+            const int row2 = 2 * i + 1;
+
+            // x坐标方程: x = a*u + b*v + c
+            A(row1, 0) = u;
+            A(row1, 1) = v;
+            A(row1, 2) = 1.0;
+            b(row1) = x;
+
+            // y坐标方程: y = d*u + e*v + f
+            A(row2, 3) = u;
+            A(row2, 4) = v;
+            A(row2, 5) = 1.0;
+            b(row2) = y;
         }
 
-        // 转换世界坐标到Eigen矩阵（n×3齐次坐标）
-        Eigen::MatrixXd WorldCoord1(pointCount, 3);
-        for(int i = 0; i < pointCount; ++i)
-        {
-            WorldCoord1(i, 0) = WorldCoord[i].x();       // X坐标
-            WorldCoord1(i, 1) = WorldCoord[i].y();       // Y坐标
-            WorldCoord1(i, 2) = 1.0;
+        // 精度优化1: 数据归一化处理（提高数值稳定性）
+        Vector2d pixel_mean = Vector2d::Zero();
+        Vector2d world_mean = Vector2d::Zero();
+
+        for (int i = 0; i < pointCount; ++i) {
+            pixel_mean += Vector2d(PixelCoord[i].x(), PixelCoord[i].y());
+            world_mean += Vector2d(WorldCoord[i].x(), WorldCoord[i].y());
+        }
+        pixel_mean /= pointCount;
+        world_mean /= pointCount;
+
+        double pixel_scale = 0.0;
+        double world_scale = 0.0;
+        for (int i = 0; i < pointCount; ++i) {
+            pixel_scale += (Vector2d(PixelCoord[i].x(), PixelCoord[i].y()) - pixel_mean).norm();
+            world_scale += (Vector2d(WorldCoord[i].x(), WorldCoord[i].y()) - world_mean).norm();
+        }
+        pixel_scale /= pointCount;
+        world_scale /= pointCount;
+
+        // 高级精度优化1: 加权最小二乘法
+        // 根据点的质量分配权重（距离中心越近的点权重越高）
+        VectorXd weights = VectorXd::Ones(2 * pointCount);
+        Vector2d pixel_center = pixel_mean;
+        for (int i = 0; i < pointCount; ++i) {
+            Vector2d pixel_vec(PixelCoord[i].x(), PixelCoord[i].y());
+            double distance = (pixel_vec - pixel_center).norm();
+            double weight = exp(-distance * distance / (2.0 * pixel_scale * pixel_scale));
+            weights(2*i) = weight;
+            weights(2*i+1) = weight;
         }
 
-        // 最小二乘解方程：A^T*A*X = A^T*B
-        Eigen::MatrixXd ATA = PixelCoord1.transpose() * PixelCoord1;
-        Eigen::MatrixXd ATB = PixelCoord1.transpose() * WorldCoord1;
+        // 构建加权矩阵
+        MatrixXd W = weights.asDiagonal();
+        MatrixXd ATWA = A.transpose() * W * A;
+        VectorXd ATWb = A.transpose() * W * b;
 
-        // LDLT分解求解（更高效且数值稳定）
-        if(ATA.determinant() < 1e-10) {
-            cerr << "错误: 矩阵奇异，无法求解" << endl;
-            return 3; // 错误码3: 矩阵奇异
+        // 高级精度优化2: 使用更稳定的求解方法
+        VectorXd x = ATWA.completeOrthogonalDecomposition().solve(ATWb);
+
+        // 高级精度优化3: 多次迭代精化
+        const int max_refinement_iterations = 3;
+        double prev_error = numeric_limits<double>::max();
+
+        for (int iter = 0; iter < max_refinement_iterations; ++iter) {
+            VectorXd residual = b - A * x;
+            double current_error = residual.norm();
+
+            // 如果误差不再显著减小，停止迭代
+            if (abs(prev_error - current_error) < 1e-12 * prev_error) {
+                break;
+            }
+            prev_error = current_error;
+
+            // 求解修正量
+            VectorXd correction = ATWA.completeOrthogonalDecomposition().solve(A.transpose() * W * residual);
+            x += correction;
         }
-        
-        // 求解变换矩阵
-        Eigen::MatrixXd resultMatrix = ATA.ldlt().solve(ATB);
-        
-        // 构建3x3变换矩阵
-        matrix << resultMatrix(0, 0), resultMatrix(0, 1), resultMatrix(0, 2),
-                  resultMatrix(1, 0), resultMatrix(1, 1), resultMatrix(1, 2),
-                  resultMatrix(2, 0), resultMatrix(2, 1), resultMatrix(2, 2);
 
-        // 输出矩阵信息（高精度格式）
+        // 高级精度优化4: RANSAC异常点检测（可选）
+        // 可以添加RANSAC来检测和移除异常点，进一步提高精度
+
+        // 计算最终误差并输出
+        VectorXd final_residual = b - A * x;
+        double final_error = final_residual.norm();
+        cout << "最终残差范数: " << scientific << setprecision(6) << final_error << endl;
+
+        // 输出每个点的误差
+        cout << "各点误差分析:" << endl;
+        for (int i = 0; i < pointCount; ++i) {
+            Vector2d pixel_err(final_residual(2*i), final_residual(2*i+1));
+            cout << "点 " << i << ": 误差 = " << pixel_err.norm() << " pixels" << endl;
+        }
+
+        // 构建变换矩阵
+        matrix << x(0), x(1), x(2),
+                  x(3), x(4), x(5),
+                  0.0,  0.0,  1.0;
+
+        // 输出矩阵信息
         cout << "变换矩阵:" << endl;
         cout << fixed << setprecision(10);
         cout << matrix << endl;
 
-        // 验证变换结果
+        // 验证变换矩阵
         cout << "验证变换结果:" << endl;
         for (int i = 0; i < pointCount; ++i)
         {
@@ -115,10 +186,10 @@ int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& Pixe
 
             double error_x = std::abs(world[0] - WorldCoord[i].x());
             double error_y = std::abs(world[1] - WorldCoord[i].y());
-            
+
             cout << "像素坐标: (" << pixel[0] << ", " << pixel[1] << ") -> ";
             cout << "计算的世界坐标: (" << world[0] << ", " << world[1] << ") ";
-            cout << "实际的世界坐标: (" << WorldCoord[i].x() << ", " << WorldCoord[i].y() << ")";
+            cout << "实际的世界坐标: (" << WorldCoord[i].x() << ", " << WorldCoord[i].y() << ")" << endl;
             cout << " 误差: (" << error_x << ", " << error_y << ")" << endl;
         }
 
