@@ -23,6 +23,8 @@
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
+#include <vector>
+#include <algorithm>
 
 #define ERROR 2
 #define WARNNING 1
@@ -663,17 +665,11 @@ int Algorithm_opencv(const string& imgPath, vector<double>& Row, vector<double>&
 
         // 可视化结果
         cv::Mat result = image.clone();
-        
-        // 绘制矩形 - 首先绘制绿色的10像素宽矩形轮廓
-        for(int i = 0; i < 4; i++) {
-            cv::line(result, rectContour[i], rectContour[(i+1)%4], 
-                    cv::Scalar(0, 255, 0), 10);
-        }
 
         // 然后绘制红色的1像素精确矩形轮廓
         for(int i = 0; i < 4; i++) {
             cv::line(result, rectContour[i], rectContour[(i+1)%4], 
-                    cv::Scalar(0, 0, 255), 1);
+                    cv::Scalar(0, 255, 0), 1);
         }
 
         // 绘制角点 - 首先在精确的角点位置绘制红色的8像素为半径的角点圆
@@ -998,4 +994,111 @@ int getCoords(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double
     }
 
     return 0;
+}
+
+// 处理图像并计算尺寸的函数
+Result calculateLength(const cv::Mat& input, const Params& params, double bias) {
+    Result result;
+
+    if (input.empty()) {
+        cerr << "图像读取失败" << endl;
+        return result;
+    }
+
+    cv::Mat source;
+
+    // 检查通道数，如果需要则转换为灰度图
+    if (input.channels() > 1) {
+        cv::cvtColor(input, source, cv::COLOR_BGR2GRAY);
+    } else {
+        source = input;
+    }
+
+    // 多阶段滤波
+    if (params.blurK >= 3) {
+        int k = (params.blurK % 2 == 0) ? params.blurK - 1 : params.blurK;
+        if (k >= 3) {
+            cv::Mat dst;
+            cv::bilateralFilter(source, dst, 5, 30, 2);  // 双边滤波
+            cv::GaussianBlur(dst, source, cv::Size(k, k), 2.0, 2.0); // 高斯模糊
+        }
+    }
+
+    // 预计算核
+    static cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
+
+    // 阈值处理
+    cv::Mat binary;
+    binary = source > params.thresh;
+    binary = 255 - binary;
+
+    // 形态学操作
+    cv::morphologyEx(binary, binary, cv::MORPH_DILATE, kernel);  // 仅膨胀操作
+
+    // 查找轮廓
+    vector<vector<cv::Point>> contours;
+    vector<cv::Vec4i> hierarchy;
+    vector<vector<cv::Point>> preservedContours;
+    vector<vector<cv::Point>> filteredContours;
+
+    cv::findContours(binary, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+    // 按面积过滤轮廓
+    for (const auto& contour : contours) {
+        if (cv::contourArea(contour) < params.areaMin) {
+            filteredContours.push_back(contour);
+        } else {
+            preservedContours.push_back(contour);
+        }
+    }
+
+    // 查找最大面积的轮廓
+    auto max_it = max_element(preservedContours.begin(), preservedContours.end(),
+                             [](const vector<cv::Point>& a, const vector<cv::Point>& b) {
+                                 return cv::contourArea(a) < cv::contourArea(b);
+                             });
+
+    // 基于图像宽度计算线宽
+    const int thickness = round(source.cols * 0.002);
+
+    // 转换为BGR用于彩色绘图
+    cv::Mat colorImage;
+    cv::cvtColor(source, colorImage, cv::COLOR_GRAY2BGR);
+
+    if (max_it != preservedContours.end()) {
+        // 获取旋转矩形
+        cv::RotatedRect rotatedRect = cv::minAreaRect(*max_it);
+        cv::Size2f rotatedSize = rotatedRect.size;
+
+        float spring_length = max(rotatedSize.width, rotatedSize.height);
+        float spring_width = min(rotatedSize.width, rotatedSize.height);
+        result.widths.push_back(spring_width*bias);
+        result.heights.push_back(spring_length*bias);
+
+        // 用绿色绘制边界框
+        cv::Point2f vertices[4];
+        rotatedRect.points(vertices);
+        const int thickBorder = static_cast<int>(thickness * 1);
+
+        for (int i = 0; i < 4; i++) {
+            cv::line(colorImage,
+                 vertices[i],
+                 vertices[(i+1)%4],
+                 cv::Scalar(0, 255, 0),  // 绿色
+                 thickBorder);
+        }
+
+        cout << "物件长度: " << spring_length*bias << ", 物件宽度: " << spring_width*bias << endl;
+        float angle = rotatedRect.angle;
+        cout << "检测角度: " << angle << "°" << endl;
+        result.angles.push_back(angle);
+    } else {
+        result.widths.push_back(0);
+        result.heights.push_back(0);
+        result.angles.push_back(0);
+        cerr << "未找到有效轮廓" << endl;
+    }
+
+    result.image = colorImage;
+    return result;
 }

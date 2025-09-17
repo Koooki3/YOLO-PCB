@@ -23,6 +23,22 @@ using namespace HalconCpp;
 using namespace Eigen;
 using namespace std;
 
+// 参数结构体，类似于原始Params
+struct Params {
+    int thresh = 127;
+    int maxval = 255;
+    int blurK = 5;
+    double areaMin = 100.0;
+};
+
+// 结果结构体，用于存储输出
+struct Result {
+    vector<float> widths;
+    vector<float> heights;
+    vector<float> angles;
+    cv::Mat image;
+};
+
 bool createDirectory(const string& path);
 
 int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& PixelCoord, Matrix3d& matrix, const string& filename);
@@ -36,5 +52,7 @@ int getCoords(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double
 // OpenCV版本的函数声明
 int Algorithm_opencv(const string& imgPath, vector<double>& Row, vector<double>& Col);
 int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double size);
+
+Result calculateLength(const cv::Mat& input, const Params& params, double bias);
 
 #endif // DIP_H
