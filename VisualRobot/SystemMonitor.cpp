@@ -68,7 +68,6 @@ float SystemMonitor::getCpuUsage()
             m_lastTotalUserLow = totalUserLow;
             m_lastTotalSys = totalSys;
             m_lastTotalIdle = totalIdle;
-            qDebug() << "CPU monitor initialization completed";
             return 0.0f;
         }
         
@@ -94,7 +93,6 @@ float SystemMonitor::getCpuUsage()
         m_lastTotalSys = totalSys;
         m_lastTotalIdle = totalIdle;
         
-        qDebug() << "CPU usage:" << cpuUsage << "%";
         return std::min(100.0f, std::max(0.0f, cpuUsage));
     }
     
@@ -136,9 +134,6 @@ float SystemMonitor::getMemoryUsage()
     unsigned long usedMem = totalMem - freeMem - buffers - cached;
     float memUsage = 100.0f * static_cast<float>(usedMem) / totalMem;
     
-    qDebug() << "Memory usage:" << memUsage << "% (Total memory capacity:" << totalMem
-             << "KB, used:" << usedMem << "KB)";
-    
     return std::min(100.0f, std::max(0.0f, memUsage));
 }
 
@@ -164,7 +159,6 @@ float SystemMonitor::getTemperature()
                 if (temp > 1000) {
                     temp /= 1000.0f; // 转换为摄氏度
                 }
-                qDebug() << "System temperature:" << temp << "°C (Read from" << path << ")";
                 return temp;
             } else {
                 qDebug() << "Failed to analyze temperature data:" << tempStr << "(Read from" << path << ")";
@@ -183,7 +177,6 @@ float SystemMonitor::getTemperature()
         bool ok;
         float temp = output.toFloat(&ok) / 1000.0f;
         if (ok) {
-            qDebug() << "System temperature (based on instruction):" << temp << "°C";
             return temp;
         }
     }

@@ -35,6 +35,7 @@
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
+#include <string.h>
 
 #define ERROR 2
 #define WARNNING 1
@@ -43,6 +44,7 @@
 using namespace HalconCpp;
 using namespace Eigen;
 using namespace std;
+using namespace cv;
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -594,8 +596,8 @@ void MainWindow::on_pushButton_clicked()
     QMessageBox msgBox;
     msgBox.setWindowTitle("选择检测模式");
     msgBox.setText("请选择检测模式：");
-    QPushButton *cornerButton = msgBox.addButton("角点检测", QMessageBox::ActionRole);
-    QPushButton *circleButton = msgBox.addButton("圆心检测", QMessageBox::ActionRole);
+    QPushButton *cornerButton = msgBox.addButton("角点检测模式", QMessageBox::ActionRole);
+    QPushButton *circleButton = msgBox.addButton("最小外接矩形检测模式", QMessageBox::ActionRole);
     QPushButton *cancelButton = msgBox.addButton(QMessageBox::Cancel);
     
     msgBox.exec();
@@ -717,25 +719,25 @@ void MainWindow::on_pushButton_clicked()
                           INFO);
             }
         }
+
+        QString imagePath = "../detectedImg.jpg";
+
+        // 加载图片
+        QPixmap pixmap(imagePath);
+        if (pixmap.isNull()) {
+            QMessageBox::warning(this, "加载图片失败", "无法加载保存的图片！");
+            return;
+        }
+
+        // 缩放图片以适应QLabel大小，保持宽高比
+        QPixmap scaledPixmap = pixmap.scaled(ui->widgetDisplay_2->size(),
+                                             Qt::KeepAspectRatio,
+                                             Qt::SmoothTransformation);
+        ui->widgetDisplay_2->setPixmap(scaledPixmap);
+        ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
+
+        appendLog("图片显示成功", INFO);
     }
-
-    QString imagePath = "../detectedImg.jpg";
-
-    // 加载图片
-    QPixmap pixmap(imagePath);
-    if (pixmap.isNull()) {
-        QMessageBox::warning(this, "加载图片失败", "无法加载保存的图片！");
-        return;
-    }
-
-    // 缩放图片以适应QLabel大小，保持宽高比
-    QPixmap scaledPixmap = pixmap.scaled(ui->widgetDisplay_2->size(),
-                                         Qt::KeepAspectRatio,
-                                         Qt::SmoothTransformation);
-    ui->widgetDisplay_2->setPixmap(scaledPixmap);
-    ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
-
-    appendLog("图片显示成功", INFO);
 }
 
 // 调试信息打印函数（输入：调试信息（QString）+宏定义调试信息等级）
@@ -785,94 +787,142 @@ void MainWindow::appendLog(const QString &message, int logType, double value)
 
 void MainWindow::on_GetLength_clicked()
 {
-    vector<QPointF> points;
-    points.reserve(Row.size()); // 预分配空间
-    Matrix3d transMatrix = readTransformationMatrix("../matrix.bin");
-    appendLog("成功读取变换矩阵，详见终端显示", INFO);
-    // 输出变换矩阵
-    cout << "变换矩阵:" << endl;
-    cout << fixed << setprecision(10); // 设置输出精度
-    cout << transMatrix << endl;
 
-//    // Test
-//    Col.clear();
-//    Col.push_back(2862.84);
-//    Col.push_back(1347.74);
-//    Col.push_back(1246.92);
-//    Col.push_back(2764.09);
+//    vector<QPointF> points;
+//    points.reserve(Row.size()); // 预分配空间
+////    Matrix3d transMatrix = readTransformationMatrix("../matrix.bin");
+////    appendLog("成功读取变换矩阵，详见终端显示", INFO);
+////    // 输出变换矩阵
+////    cout << "变换矩阵:" << endl;
+////    cout << fixed << setprecision(10); // 设置输出精度
+////    cout << transMatrix << endl;
 
-//    Row.clear();
-//    Row.push_back(2077.07);
-//    Row.push_back(2281.61);
-//    Row.push_back(1523.68);
-//    Row.push_back(1318.45);
+//    if (Row.size() <=0 || Col.size() <= 0 || (Row.size() != Col.size()))
+//    {
+//        appendLog("未能正确读取角点", ERROR);
+//        return;
+//    }
 
-    if (Row.size() <=0 || Col.size() <= 0 || (Row.size() != Col.size()))
-    {
-        appendLog("未能正确读取角点", ERROR);
+//    for (size_t i = 0; i < Row.size(); ++i)
+//    {
+//        double x = Col[i];  // 获取列坐标（转换为 double）
+//        double y = Row[i];  // 获取行坐标（转换为 double）
+
+////        // 创建齐次坐标向量 [x, y, 1]
+////        Vector3d s(x, y, 1.0);
+////        // 应用变换矩阵
+////        Vector3d d = transMatrix * s;
+////        // 创建变换后的 QPointF
+////        QPointF transformedPoint(d(0), d(1));
+//        QPointF p(x, y);
+
+//        // 添加到结果向量
+//        points.push_back(p);
+//        // 输出转换信息
+//        cout << "点 " << i << ": 像素坐标 (" << x << ", " << y << ") -> ";
+////        cout << "世界坐标 (" << transformedPoint.x() << ", " << transformedPoint.y() << ")" << endl;
+////        appendLog(QString("第%1个角点(x,y)世界坐标为：(%2, %3)")
+////                  .arg(i+1)
+////                  .arg(static_cast<double>(transformedPoint.x()))
+////                  .arg(static_cast<double>(transformedPoint.y())),
+////                  INFO);
+//    }
+////    appendLog("坐标矩阵变换成功", INFO);
+
+//    // 计算点之间的欧几里得距离
+//    auto euclideanDistance = [](const QPointF& a, const QPointF& b)
+//    {
+//        // 采用非圆心标定版的检长策略
+//        double dx = (a.x() - b.x()) * 0.03294; // 100.0 / 3032.0
+//        double dy = (a.y() - b.y()) * 0.03306;
+//        return sqrt(dx * dx + dy * dy);
+//    };
+
+//    vector<double> distances;
+//    distances.reserve(6); // 预分配空间
+
+//    distances.push_back(euclideanDistance(points[0], points[1]));
+//    distances.push_back(euclideanDistance(points[0], points[2]));
+//    distances.push_back(euclideanDistance(points[0], points[3]));
+//    distances.push_back(euclideanDistance(points[1], points[2]));
+//    distances.push_back(euclideanDistance(points[1], points[3]));
+//    distances.push_back(euclideanDistance(points[2], points[3]));
+
+//    // 从大到小排序
+//    sort(distances.rbegin(), distances.rend());
+
+//    double diagonal = ((double)distances[0] + (double)distances[1]) / 2;
+//    appendLog(QString("物件对角线（mm）：%1").arg(diagonal), INFO);
+//    double length = ((double)distances[2] + (double)distances[3]) / 2;
+//    appendLog(QString("物件长度（mm）：%1").arg(length), INFO);
+//    double width = ((double)distances[4] + (double)distances[5]) / 2;
+//    appendLog(QString("物件宽度（mm）：%1").arg(width), INFO);
+
+//    // 输出结果
+//    cout << "各点欧式距离（降序）:" << endl;
+//    for (const auto& dist : distances)
+//    {
+//        cout << dist << endl;
+//    }
+
+    string inputPath = "/home/orangepi/Desktop/VisualRobot_Local/Img/capture.jpg";
+    string outputPath = "../detectedImg.jpg";
+    QString output = "../detectedImg.jpg";
+
+    // 读取输入图像
+    Mat inputImage = imread(inputPath);
+    if (inputImage.empty()) {
+        cerr << "无法读取输入图像: " << inputPath << endl;
+        appendLog("无法读取输入图像", ERROR);
         return;
     }
 
-    for (size_t i = 0; i < Row.size(); ++i)
-    {
-        double x = Col[i];  // 获取列坐标（转换为 double）
-        double y = Row[i];  // 获取行坐标（转换为 double）
-        // 创建齐次坐标向量 [x, y, 1]
-        Vector3d s(x, y, 1.0);
-        // 应用变换矩阵
-        Vector3d d = transMatrix * s;
-        // 创建变换后的 QPointF
-        QPointF transformedPoint(d(0), d(1));
-        // 添加到结果向量
-        points.push_back(transformedPoint);
-        // 输出转换信息
-        cout << "点 " << i << ": 像素坐标 (" << x << ", " << y << ") -> ";
-        cout << "世界坐标 (" << transformedPoint.x() << ", " << transformedPoint.y() << ")" << endl;
-        appendLog(QString("第%1个角点(x,y)世界坐标为：(%2, %3)")
-                  .arg(i+1)
-                  .arg(static_cast<double>(transformedPoint.x()))
-                  .arg(static_cast<double>(transformedPoint.y())),
-                  INFO);
-    }
-    appendLog("坐标矩阵变换成功", INFO);
+    // 设置参数（可根据需要修改）
+    Params params;
+    params.thresh = 127;
+    params.maxval = 255;
+    params.blurK = 5;
+    params.areaMin = 100.0;
 
-    // 计算点之间的欧几里得距离
-    auto euclideanDistance = [](const QPointF& a, const QPointF& b)
-    {
-        double dx = a.x() - b.x();
-        double dy = a.y() - b.y();
-        return sqrt(dx * dx + dy * dy);
-    };
+    // 处理图像
+    double bias = 30.0/911.5248;
+    Result result = calculateLength(inputImage, params, bias);
 
-    vector<double> distances;
-    distances.reserve(6); // 预分配空间
-
-    distances.push_back(euclideanDistance(points[0], points[1]));
-    distances.push_back(euclideanDistance(points[0], points[2]));
-    distances.push_back(euclideanDistance(points[0], points[3]));
-    distances.push_back(euclideanDistance(points[1], points[2]));
-    distances.push_back(euclideanDistance(points[1], points[3]));
-    distances.push_back(euclideanDistance(points[2], points[3]));
-
-    // 从大到小排序
-    sort(distances.rbegin(), distances.rend());
-
-    double diagonal = ((double)distances[0] + (double)distances[1]) / 2;
-    appendLog(QString("物件对角线（mm）：%1").arg(diagonal), INFO);
-    double length = ((double)distances[2] + (double)distances[3]) / 2;
-    appendLog(QString("物件长度（mm）：%1").arg(length), INFO);
-    double width = ((double)distances[4] + (double)distances[5]) / 2;
-    appendLog(QString("物件宽度（mm）：%1").arg(width), INFO);
-
-    // 输出结果
-    cout << "各点欧式距离（降序）:" << endl;
-    for (const auto& dist : distances)
-    {
-        cout << dist << endl;
+    // 保存输出图像
+    if (!result.image.empty()) {
+        bool success = imwrite(outputPath, result.image);
+        if (success) {
+            cout << "输出图像已保存到: " << outputPath << endl;
+        } else {
+            cerr << "保存输出图像失败: " << outputPath << endl;
+            return;
+        }
+    } else {
+        cerr << "处理后的图像为空，无法保存" << endl;
+        return;
     }
 
+    // 加载图片
+    QPixmap pixmap(output);
+    if (pixmap.isNull()) {
+        QMessageBox::warning(this, "加载图片失败", "无法加载保存的图片！");
+        return;
+    }
+
+    // 缩放图片以适应QLabel大小，保持宽高比
+    QPixmap scaledPixmap = pixmap.scaled(ui->widgetDisplay_2->size(),
+                                         Qt::KeepAspectRatio,
+                                         Qt::SmoothTransformation);
+    ui->widgetDisplay_2->setPixmap(scaledPixmap);
+    ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
+
+    appendLog("图片显示成功", INFO);
     appendLog("检长算法执行完成", INFO);
-    drawOverlayOnDisplay2(length, width, diagonal);
+    appendLog(QString("物件长度（mm）：%1").arg((double)result.heights[0]), INFO);
+    appendLog(QString("物件宽度（mm）：%1").arg((double)result.widths[0]), INFO);
+    appendLog(QString("物件倾角（°）：%1").arg((double)result.angles[0]), INFO);
+
+    drawOverlayOnDisplay2((double)result.heights[0], (double)result.widths[0], (double)result.angles[0]);
 }
 
 void MainWindow::on_genMatrix_clicked()
@@ -1009,7 +1059,7 @@ void MainWindow::on_btnOpenManual_clicked()
     appendLog("已尝试打开调试信息手册", INFO);
 }
 
-void MainWindow::drawOverlayOnDisplay2(double length, double width, double diagonal)
+void MainWindow::drawOverlayOnDisplay2(double length, double width, double angle)
 {
     // 使用value方式获取pixmap
     QPixmap src = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue);
@@ -1023,10 +1073,10 @@ void MainWindow::drawOverlayOnDisplay2(double length, double width, double diago
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setRenderHint(QPainter::TextAntialiasing, true);
 
-    QString text = QString("长: %1 mm\n宽: %2 mm\n对角: %3 mm")
+    QString text = QString("长: %1 mm\n宽: %2 mm\n角度: %3 °")
                        .arg(length,   0, 'f', 3)
                        .arg(width,    0, 'f', 3)
-                       .arg(diagonal, 0, 'f', 3);
+                       .arg(angle, 0, 'f', 3);
 
     QFont font; font.setPointSize(12); font.setBold(true);
     p.setFont(font);
