@@ -24,18 +24,6 @@ int main(int argc, char *argv[])
         a.installTranslator(&translator);
     }
 
-//    // 运行特征识别测试
-//    // 使用工作目录下的测试图像
-//    QString testImage1 = "../Img/test3.jpg";
-//    QString testImage2 = "../Img/test4.jpg";
-    
-//    if (QFile::exists(testImage1) && QFile::exists(testImage2)) {
-//        qDebug() << "Running feature detection test...";
-//        FeatureDetector::testFeatureDetection(testImage1, testImage2);
-//    } else {
-//        qDebug() << "Test images not found at:" << testImage1 << "and" << testImage2;
-//    }
-
     // 启动主窗口
     MainWindow w;
     w.setWindowFlags(w.windowFlags() &~ Qt::WindowMaximizeButtonHint); //ch:禁止最大化 | en:prohibit maximization
