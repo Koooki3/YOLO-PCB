@@ -6,9 +6,6 @@
 #include <QFileDialog>
 #include <vector>
 #include <mutex>
-#include <halconcpp/HalconCpp.h>
-#include <Halcon.h>
-#include <halconcpp/HDevThread.h>
 #include <QPointF>
 #include <QVector>
 #include <vector>
@@ -16,7 +13,6 @@
 #include <QLabel>
 #include "DLExample.h"
 
-using namespace HalconCpp;
 using namespace std;
 
 namespace Ui {

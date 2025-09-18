@@ -14,9 +14,6 @@
 #include <QFile>
 #include <QScrollBar>
 #include <memory>
-#include <halconcpp/HalconCpp.h>
-#include <Halcon.h>
-#include <halconcpp/HDevThread.h>
 #include "DIP.h"
 #include <QPointF>
 #include <vector>
@@ -41,7 +38,6 @@
 #define WARNNING 1
 #define INFO 0
 
-using namespace HalconCpp;
 using namespace Eigen;
 using namespace std;
 using namespace cv;

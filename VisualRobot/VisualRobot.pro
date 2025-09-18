@@ -22,7 +22,6 @@ SOURCES += \
     DIP.cpp \
     DLProcessor.cpp \
     DataProcessor.cpp \
-    Format.cpp \
     MvCamera.cpp \
     SystemMonitor.cpp \
     featureDetect.cpp \
@@ -35,7 +34,6 @@ HEADERS += \
     DIP.h \
     DLProcessor.h \
     DataProcessor.h \
-    Format.h \
     MvCamera.h \
     SystemMonitor.h \
     featureDetect.h \
@@ -46,8 +44,6 @@ FORMS += \
     mainwindow.ui
 
 INCLUDEPATH += /opt/MVS/include
-
-INCLUDEPATH += /home/orangepi/MVTec/HALCON-25.05-Progress/include
 
 INCLUDEPATH += /usr/include/eigen3/Eigen
 
@@ -61,9 +57,6 @@ LIBS += -L/usr/local/lib/ -lopencv_calib3d -lopencv_core -lopencv_dnn -lopencv_f
         -lopencv_videoio
 
 LIBS += -L/opt/MVS/lib/aarch64/ -lMvCameraControl -lMvCameraControlWrapper -lMVGigEVisionSDK -lMvUsb3vTL
-
-LIBS += -L/home/orangepi/MVTec/HALCON-25.05-Progress/lib/aarch64-linux/ \
-        -lhalcon -lhalconc -lhalconcpp -lhalcondl -lhdevenginecpp
 
 # 编译优化选项
 unix {
