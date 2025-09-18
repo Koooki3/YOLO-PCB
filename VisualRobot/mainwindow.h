@@ -17,6 +17,7 @@
 #include "DLExample.h"
 
 using namespace HalconCpp;
+using namespace std;
 
 namespace Ui {
 class MainWindow;
@@ -79,12 +80,12 @@ private:
     CMvCamera*              m_pcMyCamera;  // ch:相机类设备实例 | en:The instance of CMvCamera
     bool                    m_bGrabbing;   // ch:是否开始抓图 | en:The flag of Grabbing
 
-    std::vector<unsigned char> m_lastFrame;      // 缓存的原始帧数据
+    vector<unsigned char> m_lastFrame;      // 缓存的原始帧数据
     MV_FRAME_OUT_INFO_EX       m_lastInfo{};     // 帧信息
-    std::mutex                 m_frameMtx;       // 互斥锁保护
+    mutex                 m_frameMtx;       // 互斥锁保护
     bool                       m_hasFrame = false; // 是否已有可用帧
 
-    std::vector<double> Row, Col;
+    vector<double> Row, Col;
     //HTuple Row, Col;
 
     QVector<QPointF> WorldCoord;

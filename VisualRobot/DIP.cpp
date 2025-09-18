@@ -33,6 +33,7 @@
 using namespace HalconCpp;
 using namespace Eigen;
 using namespace std;
+using namespace cv;
 
 // 创建目录的辅助函数
 bool createDirectory(const string& path)
@@ -99,7 +100,8 @@ int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& Pixe
         Vector2d pixel_mean = Vector2d::Zero();
         Vector2d world_mean = Vector2d::Zero();
 
-        for (int i = 0; i < pointCount; ++i) {
+        for (int i = 0; i < pointCount; ++i) 
+        {
             pixel_mean += Vector2d(PixelCoord[i].x(), PixelCoord[i].y());
             world_mean += Vector2d(WorldCoord[i].x(), WorldCoord[i].y());
         }
@@ -108,7 +110,8 @@ int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& Pixe
 
         double pixel_scale = 0.0;
         double world_scale = 0.0;
-        for (int i = 0; i < pointCount; ++i) {
+        for (int i = 0; i < pointCount; ++i) 
+        {
             pixel_scale += (Vector2d(PixelCoord[i].x(), PixelCoord[i].y()) - pixel_mean).norm();
             world_scale += (Vector2d(WorldCoord[i].x(), WorldCoord[i].y()) - world_mean).norm();
         }
@@ -119,7 +122,8 @@ int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& Pixe
         // 根据点的质量分配权重（距离中心越近的点权重越高）
         VectorXd weights = VectorXd::Ones(2 * pointCount);
         Vector2d pixel_center = pixel_mean;
-        for (int i = 0; i < pointCount; ++i) {
+        for (int i = 0; i < pointCount; ++i) 
+        {
             Vector2d pixel_vec(PixelCoord[i].x(), PixelCoord[i].y());
             double distance = (pixel_vec - pixel_center).norm();
             double weight = exp(-distance * distance / (2.0 * pixel_scale * pixel_scale));
@@ -139,12 +143,14 @@ int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& Pixe
         const int max_refinement_iterations = 3;
         double prev_error = numeric_limits<double>::max();
 
-        for (int iter = 0; iter < max_refinement_iterations; ++iter) {
+        for (int iter = 0; iter < max_refinement_iterations; ++iter) 
+        {
             VectorXd residual = b - A * x;
             double current_error = residual.norm();
 
             // 如果误差不再显著减小，停止迭代
-            if (abs(prev_error - current_error) < 1e-12 * prev_error) {
+            if (abs(prev_error - current_error) < 1e-12 * prev_error) 
+            {
                 break;
             }
             prev_error = current_error;
@@ -164,7 +170,8 @@ int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& Pixe
 
         // 输出每个点的误差
         cout << "各点误差分析:" << endl;
-        for (int i = 0; i < pointCount; ++i) {
+        for (int i = 0; i < pointCount; ++i) 
+        {
             Vector2d pixel_err(final_residual(2*i), final_residual(2*i+1));
             cout << "点 " << i << ": 误差 = " << pixel_err.norm() << " pixels" << endl;
         }
@@ -186,8 +193,8 @@ int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& Pixe
             Vector3d pixel(PixelCoord[i].x(), PixelCoord[i].y(), 1.0);
             Vector3d world = matrix * pixel;
 
-            double error_x = std::abs(world[0] - WorldCoord[i].x());
-            double error_y = std::abs(world[1] - WorldCoord[i].y());
+            double error_x = abs(world[0] - WorldCoord[i].x());
+            double error_y = abs(world[1] - WorldCoord[i].y());
 
             cout << "像素坐标: (" << pixel[0] << ", " << pixel[1] << ") -> ";
             cout << "计算的世界坐标: (" << world[0] << ", " << world[1] << ") ";
@@ -386,8 +393,9 @@ int Algorithm(const string& imgPath, HTuple& Row, HTuple& Col)
 int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double size = 100.0)
 {
     // 读取图像
-    cv::Mat image = cv::imread("/home/orangepi/Desktop/VisualRobot_Local/Img/capture.jpg");
-    if(image.empty()) {
+    Mat image = imread("/home/orangepi/Desktop/VisualRobot_Local/Img/capture.jpg");
+    if(image.empty()) 
+    {
         qDebug() << "Error: Cannot read image file";
         return 1;
     }
@@ -404,96 +412,105 @@ int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord,
     double rmax = r + 10;
 
     // 定义9个搜索区域
-    vector<cv::Rect> searchAreas;
-    vector<cv::Point2f> worldCoords;
+    vector<Rect> searchAreas;
+    vector<Point2f> worldCoords;
     
     // 计算世界坐标
     double world_dis_col = 1049.0 * size / 2734.0;
     double world_dis_row = 774.0 * size / 2734.0;
 
     // 定义9个区域的世界坐标
-    for(int row = 0; row < 3; row++) {
-        for(int col = 0; col < 3; col++) {
+    for(int row = 0; row < 3; row++) 
+    {
+        for(int col = 0; col < 3; col++) 
+        {
             // 计算搜索区域
             int x1 = (col == 0) ? 0 : static_cast<int>(r + (col - 0.5) * dis_col);
             int x2 = (col == 2) ? width : static_cast<int>(r + (col + 0.5) * dis_col);
             int y1 = (row == 0) ? 0 : static_cast<int>(r + (row - 0.5) * dis_row);
             int y2 = (row == 2) ? height : static_cast<int>(r + (row + 0.5) * dis_row);
             
-            searchAreas.push_back(cv::Rect(x1, y1, x2-x1, y2-y1));
-            worldCoords.push_back(cv::Point2f(col * world_dis_col, row * world_dis_row));
+            searchAreas.push_back(Rect(x1, y1, x2-x1, y2-y1));
+            worldCoords.push_back(Point2f(col * world_dis_col, row * world_dis_row));
         }
     }
 
     // 转换为灰度图
-    cv::Mat grayImage;
-    cv::cvtColor(image, grayImage, cv::COLOR_BGR2GRAY);
+    Mat grayImage;
+    cvtColor(image, grayImage, COLOR_BGR2GRAY);
 
     // 二值化
-    cv::Mat binaryImage;
-    cv::threshold(grayImage, binaryImage, 200, 255, cv::THRESH_BINARY);
+    Mat binaryImage;
+    threshold(grayImage, binaryImage, 200, 255, THRESH_BINARY);
 
     // 在每个区域中检测圆
-    vector<cv::Vec3f> detectedCircles;
-    cv::Mat result = image.clone();
-    vector<cv::Point2f> detectedCenters; // 存储检测到的圆心
+    vector<Vec3f> detectedCircles;
+    Mat result = image.clone();
+    vector<Point2f> detectedCenters; // 存储检测到的圆心
     vector<float> detectedRadii; // 存储检测到的半径
-    vector<cv::Point2f> detectedWorldCoords; // 存储对应的世界坐标
+    vector<Point2f> detectedWorldCoords; // 存储对应的世界坐标
 
-    for(size_t i = 0; i < searchAreas.size(); i++) {
-        cv::Mat roi = binaryImage(searchAreas[i]);
-        vector<cv::Vec3f> circles;
+    for(size_t i = 0; i < searchAreas.size(); i++) 
+    {
+        Mat roi = binaryImage(searchAreas[i]);
+        vector<Vec3f> circles;
 
         // 使用Hough圆变换检测圆
-        cv::HoughCircles(roi, circles, cv::HOUGH_GRADIENT, 1,
+        HoughCircles(roi, circles, HOUGH_GRADIENT, 1,
                         roi.rows/8,  // 最小圆心距离
                         40, 5,     // Canny阈值，累加器阈值
                         rmin, rmax); // 最小和最大半径
 
         // 找到最佳匹配的圆
-        double bestFit = std::numeric_limits<double>::max();
-        cv::Vec3f bestCircle;
+        double bestFit = numeric_limits<double>::max();
+        Vec3f bestCircle;
         bool found = false;
 
-        for(const auto& circle : circles) {
+        for(const auto& circle : circles) 
+        {
             float radius = circle[2];
-            float bias = std::abs(radius - r);
+            float bias = abs(radius - r);
 
-            if(bias < bestFit) {
+            if(bias < bestFit) 
+            {
                 bestFit = bias;
                 bestCircle = circle;
                 found = true;
             }
         }
 
-        if(found) {
+        if(found) 
+        {
             // 调整圆心坐标到原图坐标系
             bestCircle[0] += searchAreas[i].x;
             bestCircle[1] += searchAreas[i].y;
             detectedCircles.push_back(bestCircle);
-            detectedCenters.push_back(cv::Point2f(bestCircle[0], bestCircle[1]));
+            detectedCenters.push_back(Point2f(bestCircle[0], bestCircle[1]));
             detectedRadii.push_back(bestCircle[2]);
             detectedWorldCoords.push_back(worldCoords[i]);
         }
     }
 
     // 亚像素精度优化圆心坐标 - 使用图像矩计算质心
-    for (size_t i = 0; i < detectedCenters.size(); i++) {
+    for (size_t i = 0; i < detectedCenters.size(); i++) 
+    {
         // 根据圆的半径动态定义ROI区域（以检测到的圆心为中心，2r*2r像素区域）
         int radius = static_cast<int>(detectedRadii[i]);
         int roi_size = 2 * radius; // ROI大小为2r*2r
-        int x = std::max(0, static_cast<int>(detectedCenters[i].x - radius));
-        int y = std::max(0, static_cast<int>(detectedCenters[i].y - radius));
-        int width = std::min(roi_size, grayImage.cols - x);
-        int height = std::min(roi_size, grayImage.rows - y);
+        int x = max(0, static_cast<int>(detectedCenters[i].x - radius));
+        int y = max(0, static_cast<int>(detectedCenters[i].y - radius));
+        int width = min(roi_size, grayImage.cols - x);
+        int height = min(roi_size, grayImage.rows - y);
         
-        if (width > 0 && height > 0) {
-            cv::Mat roi = grayImage(cv::Rect(x, y, width, height));
+        if (width > 0 && height > 0) 
+        {
+            Mat roi = grayImage(Rect(x, y, width, height));
             
             // 计算图像矩
-            cv::Moments m = cv::moments(roi, true);
+            Moments m = moments(roi, true);
             
-            if (m.m00 != 0) {
+            if (m.m00 != 0) 
+            {
                 // 计算质心（相对于ROI的坐标）
                 double cx = m.m10 / m.m00;
                 double cy = m.m01 / m.m00;
@@ -506,17 +523,18 @@ int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord,
     }
 
     // 存储优化后的结果并绘制
-    for (size_t i = 0; i < detectedCenters.size(); i++) {
+    for (size_t i = 0; i < detectedCenters.size(); i++) 
+    {
         WorldCoord.append(QPointF(detectedWorldCoords[i].x, detectedWorldCoords[i].y));
         PixelCoord.append(QPointF(detectedCenters[i].x, detectedCenters[i].y));
 
         // 绘制结果
-        cv::circle(result, detectedCenters[i], detectedRadii[i], cv::Scalar(0, 255, 0), 10);
-        cv::circle(result, detectedCenters[i], 10, cv::Scalar(0, 0, 255), -1);
+        circle(result, detectedCenters[i], detectedRadii[i], Scalar(0, 255, 0), 10);
+        circle(result, detectedCenters[i], 10, Scalar(0, 0, 255), -1);
     }
 
     // 保存结果图像
-    cv::imwrite("/home/orangepi/Desktop/VisualRobot_Local/Img/circle_detected.jpg", result);
+    imwrite("/home/orangepi/Desktop/VisualRobot_Local/Img/circle_detected.jpg", result);
 
     return detectedCenters.empty() ? 1 : 0;
 }
@@ -561,56 +579,61 @@ int Algorithm_opencv(const string& imgPath, vector<double>& Row, vector<double>&
     Col.clear();
 
     // 读取图像
-    cv::Mat image = cv::imread(imgPath);
-    if (image.empty()) {
+    Mat image = imread(imgPath);
+    if (image.empty()) 
+    {
         qDebug() << "Error: Cannot read image file";
         return 1;
     }
 
     // 转换为灰度图
-    cv::Mat grayImage;
-    cv::cvtColor(image, grayImage, cv::COLOR_BGR2GRAY);
+    Mat grayImage;
+    cvtColor(image, grayImage, COLOR_BGR2GRAY);
 
     // 二值化
-    cv::Mat binaryImage;
-    cv::threshold(grayImage, binaryImage, 128, 255, cv::THRESH_BINARY);
+    Mat binaryImage;
+    threshold(grayImage, binaryImage, 128, 255, THRESH_BINARY);
 
     // 高斯滤波平滑处理
-    cv::Mat smoothedImage;
-    cv::GaussianBlur(binaryImage, smoothedImage, cv::Size(3, 3), 0);
+    Mat smoothedImage;
+    GaussianBlur(binaryImage, smoothedImage, Size(3, 3), 0);
 
     // Canny边缘检测
-    cv::Mat edges;
-    cv::Canny(smoothedImage, edges, 20, 40);
+    Mat edges;
+    Canny(smoothedImage, edges, 20, 40);
 
     // 查找轮廓
-    vector<vector<cv::Point>> contours;
-    vector<cv::Vec4i> hierarchy;
-    cv::findContours(edges, contours, hierarchy, 
-                     cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+    vector<vector<Point>> contours;
+    vector<Vec4i> hierarchy;
+    findContours(edges, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
 
     // 过滤短轮廓
-    vector<vector<cv::Point>> longContours;
-    for(const auto& contour : contours) {
-        if(cv::arcLength(contour, true) > 50) {
+    vector<vector<Point>> longContours;
+    for(const auto& contour : contours) 
+    {
+        if(arcLength(contour, true) > 50) 
+        {
             longContours.push_back(contour);
         }
     }
 
     // 寻找最大的矩形轮廓
-    vector<cv::Point> rectContour;
+    vector<Point> rectContour;
     double maxArea = 0;
-    for(const auto& contour : longContours) {
-        double area = cv::contourArea(contour);
-        if(area > maxArea) {
-            cv::RotatedRect rect = cv::minAreaRect(contour);
-            vector<cv::Point2f> boxPoints(4);
+    for(const auto& contour : longContours) 
+    {
+        double area = contourArea(contour);
+        if(area > maxArea) 
+        {
+            RotatedRect rect = minAreaRect(contour);
+            vector<Point2f> boxPoints(4);
             rect.points(boxPoints.data());
             
             // 转换为整数点
-            vector<cv::Point> intPoints;
-            for(const auto& pt : boxPoints) {
-                intPoints.push_back(cv::Point(static_cast<int>(pt.x), static_cast<int>(pt.y)));
+            vector<Point> intPoints;
+            for(const auto& pt : boxPoints) 
+            {
+                intPoints.push_back(Point(static_cast<int>(pt.x), static_cast<int>(pt.y)));
             }
             
             maxArea = area;
@@ -619,73 +642,82 @@ int Algorithm_opencv(const string& imgPath, vector<double>& Row, vector<double>&
     }
 
     // 如果找到矩形
-    if(!rectContour.empty()) {
+    if(!rectContour.empty()) 
+    {
         // 按照顺时针顺序排序角点
-        vector<cv::Point> orderedPoints = rectContour;
+        vector<Point> orderedPoints = rectContour;
         // 按y坐标排序（从上到下）
         sort(orderedPoints.begin(), orderedPoints.end(), 
-             [](const cv::Point& a, const cv::Point& b) { return a.y < b.y; });
+             [](const Point& a, const Point& b) { return a.y < b.y; });
         
         // 上面的两个点按x坐标排序（从左到右）
         if(orderedPoints[0].x > orderedPoints[1].x) 
+        {
             swap(orderedPoints[0], orderedPoints[1]);
+        }
         
         // 下面的两个点按x坐标排序（从左到右）
         if(orderedPoints[2].x > orderedPoints[3].x) 
+        {
             swap(orderedPoints[2], orderedPoints[3]);
+        }
 
         // 存储角点坐标
-        for(const auto& pt : orderedPoints) {
+        for(const auto& pt : orderedPoints) 
+        {
             Row.push_back(pt.y);
             Col.push_back(pt.x);
         }
 
         // 亚像素精度优化
-        if (!rectContour.empty()) {
+        if (!rectContour.empty()) 
+        {
             // 将角点转换为Point2f格式用于亚像素优化
-            vector<cv::Point2f> corners;
-            for (int i = 0; i < 4; i++) {
-                corners.push_back(cv::Point2f(Col[i], Row[i]));
+            vector<Point2f> corners;
+            for (int i = 0; i < 4; i++) 
+            {
+                corners.push_back(Point2f(Col[i], Row[i]));
             }
             
             // 配置亚像素优化参数
-            cv::Size winSize = cv::Size(5, 5);
-            cv::Size zeroZone = cv::Size(-1, -1);
-            cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::EPS + cv::TermCriteria::MAX_ITER, 40, 0.001);
+            Size winSize = Size(5, 5);
+            Size zeroZone = Size(-1, -1);
+            TermCriteria criteria = TermCriteria(TermCriteria::EPS + TermCriteria::MAX_ITER, 40, 0.001);
             
             // 执行亚像素角点优化
-            cv::cornerSubPix(grayImage, corners, winSize, zeroZone, criteria);
+            cornerSubPix(grayImage, corners, winSize, zeroZone, criteria);
             
             // 更新优化后的角点坐标
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < 4; i++) 
+            {
                 Row[i] = corners[i].y;
                 Col[i] = corners[i].x;
             }
         }
 
         // 可视化结果
-        cv::Mat result = image.clone();
+        Mat result = image.clone();
 
         // 然后绘制红色的1像素精确矩形轮廓
-        for(int i = 0; i < 4; i++) {
-            cv::line(result, rectContour[i], rectContour[(i+1)%4], 
-                    cv::Scalar(0, 255, 0), 1);
+        for(int i = 0; i < 4; i++) 
+        {
+            line(result, rectContour[i], rectContour[(i+1)%4], Scalar(0, 255, 0), 1);
         }
 
         // 绘制角点 - 首先在精确的角点位置绘制红色的8像素为半径的角点圆
-        for(int i = 0; i < 4; i++) {
-            cv::circle(result, cv::Point(Col[i], Row[i]),
-                      8, cv::Scalar(0, 0, 255), -1); // 填充红色圆，半径为8像素
+        for(int i = 0; i < 4; i++) 
+        {
+            circle(result, Point(Col[i], Row[i]), 8, Scalar(0, 0, 255), -1); // 填充红色圆，半径为8像素
         }
 
         // 然后绘制绿色的1像素为半径的角点圆
-        for(int i = 0; i < 4; i++) {
-            cv::circle(result, cv::Point(Col[i], Row[i]),
-                      1, cv::Scalar(0, 255, 0), -1); // 填充绿色圆，半径为1像素
+        for(int i = 0; i < 4; i++) 
+        {
+            circle(result, Point(Col[i], Row[i]), 1, Scalar(0, 255, 0), -1); // 填充绿色圆，半径为1像素
         }
 
         // 保存结果图像
-        cv::imwrite("../detectedImg.jpg", result);
+        imwrite("../detectedImg.jpg", result);
         
         return 0;
     }
@@ -926,25 +958,31 @@ int getCoords(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double
     OpenWindow(0,0,hv_Width,hv_Height,0,"visible","",&hv_WindowHandle);
     HDevWindowStack::Push(hv_WindowHandle);
     if (HDevWindowStack::IsOpen())
+    {
       DispObj(ho_ColorImage, HDevWindowStack::GetActive());
+    }
 
     //绘制所有检测到的圆轮廓（绿色）
     CountObj(ho_MatchedContours, &hv_NumMatched);
     if (0 != (int(hv_NumMatched>0)))
     {
       if (HDevWindowStack::IsOpen())
-        SetColor(HDevWindowStack::GetActive(),"green");
-      if (HDevWindowStack::IsOpen())
-        SetLineWidth(HDevWindowStack::GetActive(),10);
       {
+        SetColor(HDevWindowStack::GetActive(),"green");
+      }
+      if (HDevWindowStack::IsOpen())
+      {
+        SetLineWidth(HDevWindowStack::GetActive(),10);
+      }
       HTuple end_val126 = hv_NumMatched;
       HTuple step_val126 = 1;
       for (hv_i=1; hv_i.Continue(end_val126, step_val126); hv_i += step_val126)
       {
         SelectObj(ho_MatchedContours, &ho_Contour, hv_i);
         if (HDevWindowStack::IsOpen())
+        {
           DispObj(ho_Contour, HDevWindowStack::GetActive());
-      }
+        }
       }
     }
 
@@ -952,18 +990,22 @@ int getCoords(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double
     if (0 != (int((hv_pixel_coords_x.TupleLength())>0)))
     {
       if (HDevWindowStack::IsOpen())
-        SetColor(HDevWindowStack::GetActive(),"red");
-      if (HDevWindowStack::IsOpen())
-        SetDraw(HDevWindowStack::GetActive(),"fill");
       {
+        SetColor(HDevWindowStack::GetActive(),"red");
+      }
+      if (HDevWindowStack::IsOpen())
+      {
+        SetDraw(HDevWindowStack::GetActive(),"fill");
+      }
       HTuple end_val136 = (hv_pixel_coords_x.TupleLength())-1;
       HTuple step_val136 = 1;
       for (hv_i=0; hv_i.Continue(end_val136, step_val136); hv_i += step_val136)
       {
         GenCircle(&ho_Circle, HTuple(hv_pixel_coords_x[hv_i]), HTuple(hv_pixel_coords_y[hv_i]), 10);
         if (HDevWindowStack::IsOpen())
+        {
           DispObj(ho_Circle, HDevWindowStack::GetActive());
-      }
+        }
       }
     }
 
@@ -975,7 +1017,9 @@ int getCoords(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double
 
     //关闭窗口
     if (HDevWindowStack::IsOpen())
+    {
       CloseWindow(HDevWindowStack::Pop());
+    }
 
     // 将结果存入输出向量
     for (int i = 0; i < hv_valid_world_coords_x.TupleLength(); i++)
@@ -997,78 +1041,89 @@ int getCoords(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double
 }
 
 // 处理图像并计算尺寸的函数
-Result calculateLength(const cv::Mat& input, const Params& params, double bias) {
+Result calculateLength(const Mat& input, const Params& params, double bias) {
     Result result;
 
-    if (input.empty()) {
+    if (input.empty()) 
+    {
         cerr << "图像读取失败" << endl;
         return result;
     }
 
-    cv::Mat source;
+    Mat source;
 
     // 检查通道数，如果需要则转换为灰度图
-    if (input.channels() > 1) {
-        cv::cvtColor(input, source, cv::COLOR_BGR2GRAY);
-    } else {
+    if (input.channels() > 1) 
+    {
+        cvtColor(input, source, COLOR_BGR2GRAY);
+    } 
+    else 
+    {
         source = input;
     }
 
     // 多阶段滤波
-    if (params.blurK >= 3) {
+    if (params.blurK >= 3) 
+    {
         int k = (params.blurK % 2 == 0) ? params.blurK - 1 : params.blurK;
-        if (k >= 3) {
-            cv::Mat dst;
-            cv::bilateralFilter(source, dst, 5, 30, 2);  // 双边滤波
-            cv::GaussianBlur(dst, source, cv::Size(k, k), 2.0, 2.0); // 高斯模糊
+        if (k >= 3) 
+        {
+            Mat dst;
+            bilateralFilter(source, dst, 5, 30, 2);  // 双边滤波
+            GaussianBlur(dst, source, Size(k, k), 2.0, 2.0); // 高斯模糊
         }
     }
 
     // 预计算核
-    static cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
+    static Mat kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
 
     // 阈值处理
-    cv::Mat binary;
+    Mat binary;
     binary = source > params.thresh;
     binary = 255 - binary;
 
     // 形态学操作
-    cv::morphologyEx(binary, binary, cv::MORPH_DILATE, kernel);  // 仅膨胀操作
+    morphologyEx(binary, binary, MORPH_DILATE, kernel);  // 仅膨胀操作
 
     // 查找轮廓
-    vector<vector<cv::Point>> contours;
-    vector<cv::Vec4i> hierarchy;
-    vector<vector<cv::Point>> preservedContours;
-    vector<vector<cv::Point>> filteredContours;
+    vector<vector<Point>> contours;
+    vector<Vec4i> hierarchy;
+    vector<vector<Point>> preservedContours;
+    vector<vector<Point>> filteredContours;
 
-    cv::findContours(binary, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+    findContours(binary, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
 
     // 按面积过滤轮廓
-    for (const auto& contour : contours) {
-        if (cv::contourArea(contour) < params.areaMin) {
+    for (const auto& contour : contours) 
+    {
+        if (contourArea(contour) < params.areaMin) 
+        {
             filteredContours.push_back(contour);
-        } else {
+        } 
+        else 
+        {
             preservedContours.push_back(contour);
         }
     }
 
     // 查找最大面积的轮廓
     auto max_it = max_element(preservedContours.begin(), preservedContours.end(),
-                             [](const vector<cv::Point>& a, const vector<cv::Point>& b) {
-                                 return cv::contourArea(a) < cv::contourArea(b);
+                             [](const vector<Point>& a, const vector<Point>& b) {
+                                 return contourArea(a) < contourArea(b);
                              });
 
     // 基于图像宽度计算线宽
     const int thickness = round(source.cols * 0.002);
 
     // 转换为BGR用于彩色绘图
-    cv::Mat colorImage;
-    cv::cvtColor(source, colorImage, cv::COLOR_GRAY2BGR);
+    Mat colorImage;
+    cvtColor(source, colorImage, COLOR_GRAY2BGR);
 
-    if (max_it != preservedContours.end()) {
+    if (max_it != preservedContours.end()) 
+    {
         // 获取旋转矩形
-        cv::RotatedRect rotatedRect = cv::minAreaRect(*max_it);
-        cv::Size2f rotatedSize = rotatedRect.size;
+        RotatedRect rotatedRect = minAreaRect(*max_it);
+        Size2f rotatedSize = rotatedRect.size;
 
         float spring_length = max(rotatedSize.width, rotatedSize.height);
         float spring_width = min(rotatedSize.width, rotatedSize.height);
@@ -1076,15 +1131,16 @@ Result calculateLength(const cv::Mat& input, const Params& params, double bias) 
         result.heights.push_back(spring_length*bias);
 
         // 用绿色绘制边界框
-        cv::Point2f vertices[4];
+        Point2f vertices[4];
         rotatedRect.points(vertices);
         const int thickBorder = static_cast<int>(thickness * 1);
 
-        for (int i = 0; i < 4; i++) {
-            cv::line(colorImage,
+        for (int i = 0; i < 4; i++) 
+        {
+            line(colorImage,
                  vertices[i],
                  vertices[(i+1)%4],
-                 cv::Scalar(0, 255, 0),  // 绿色
+                 Scalar(0, 255, 0),  // 绿色
                  thickBorder);
         }
 
@@ -1092,7 +1148,9 @@ Result calculateLength(const cv::Mat& input, const Params& params, double bias) 
         float angle = rotatedRect.angle;
         cout << "检测角度: " << angle << "°" << endl;
         result.angles.push_back(angle);
-    } else {
+    } 
+    else 
+    {
         result.widths.push_back(0);
         result.heights.push_back(0);
         result.angles.push_back(0);

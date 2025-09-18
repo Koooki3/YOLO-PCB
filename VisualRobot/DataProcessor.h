@@ -5,6 +5,9 @@
 #include <QObject>
 #include <random>
 
+using namespace cv;
+using namespace std;
+
 class DataProcessor : public QObject
 {
     Q_OBJECT
@@ -13,28 +16,28 @@ public:
     explicit DataProcessor(QObject *parent = nullptr);
     
     // 预处理方法
-    cv::Mat normalizeImage(const cv::Mat& input, double targetMean, double targetStd);
-    cv::Mat standardizeImage(const cv::Mat& input);
-    cv::Mat resizeWithAspectRatio(const cv::Mat& input, int targetSize);
+    Mat normalizeImage(const Mat& input, double targetMean, double targetStd);
+    Mat standardizeImage(const Mat& input);
+    Mat resizeWithAspectRatio(const Mat& input, int targetSize);
     
     // 特征提取方法
-    cv::Mat extractHOGFeatures(const cv::Mat& input);
-    std::vector<cv::KeyPoint> detectKeypoints(const cv::Mat& input, cv::Mat& descriptors);
+    Mat extractHOGFeatures(const Mat& input);
+    vector<KeyPoint> detectKeypoints(const Mat& input, Mat& descriptors);
     
     // 数据增强方法
-    cv::Mat adjustBrightness(const cv::Mat& input, double alpha);
-    cv::Mat adjustContrast(const cv::Mat& input, double beta);
-    cv::Mat addNoise(const cv::Mat& input, double mean, double stddev);
-    cv::Mat randomRotate(const cv::Mat& input, double maxAngle);
-    cv::Mat randomFlip(const cv::Mat& input);
-    cv::Mat randomCrop(const cv::Mat& input, double scale);
+    Mat adjustBrightness(const Mat& input, double alpha);
+    Mat adjustContrast(const Mat& input, double beta);
+    Mat addNoise(const Mat& input, double mean, double stddev);
+    Mat randomRotate(const Mat& input, double maxAngle);
+    Mat randomFlip(const Mat& input);
+    Mat randomCrop(const Mat& input, double scale);
     
     // 批量增强
-    std::vector<cv::Mat> applyAugmentation(const cv::Mat& input, int numAugmentations);
+    vector<Mat> applyAugmentation(const Mat& input, int numAugmentations);
 
 private:
-    std::mt19937 rng_;
-    cv::Ptr<cv::SIFT> siftDetector_;
+    mt19937 rng_;
+    Ptr<SIFT> siftDetector_;
     
     // 辅助函数
     double randomDouble(double min, double max);

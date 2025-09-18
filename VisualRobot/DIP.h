@@ -22,9 +22,11 @@
 using namespace HalconCpp;
 using namespace Eigen;
 using namespace std;
+using namespace cv;
 
 // 参数结构体，类似于原始Params
-struct Params {
+struct Params 
+{
     int thresh = 127;
     int maxval = 255;
     int blurK = 5;
@@ -32,11 +34,12 @@ struct Params {
 };
 
 // 结果结构体，用于存储输出
-struct Result {
+struct Result 
+{
     vector<float> widths;
     vector<float> heights;
     vector<float> angles;
-    cv::Mat image;
+    Mat image;
 };
 
 bool createDirectory(const string& path);
@@ -53,6 +56,6 @@ int getCoords(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double
 int Algorithm_opencv(const string& imgPath, vector<double>& Row, vector<double>& Col);
 int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double size);
 
-Result calculateLength(const cv::Mat& input, const Params& params, double bias);
+Result calculateLength(const Mat& input, const Params& params, double bias);
 
 #endif // DIP_H
