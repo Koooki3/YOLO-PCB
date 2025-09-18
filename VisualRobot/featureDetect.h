@@ -8,11 +8,8 @@
 #include <QString>
 #include <QDebug>
 
-using namespace cv;
-using namespace std;
-
 // 特征识别参数结构体
-struct FeatureParams 
+struct FeatureParams
 {
     float ratioThresh = 0.7f;        // SIFT匹配比率阈值
     float responseThresh = 0.0f;      // 特征点响应值阈值
@@ -21,19 +18,19 @@ struct FeatureParams
     bool useRansac = true;           // 是否使用RANSAC验证
 };
 
-class FeatureDetector 
+class FeatureDetector
 {
 public:
     FeatureDetector();
     ~FeatureDetector();
 
     // 特征匹配和几何验证函数
-    static vector<DMatch> filterMatches(
-        const vector<KeyPoint>& keypoints1,
-        const vector<KeyPoint>& keypoints2,
-        const vector<vector<DMatch>>& knnMatches,
-        vector<Point2f>& points1,
-        vector<Point2f>& points2,
+    static std::vector<cv::DMatch> filterMatches(
+        const std::vector<cv::KeyPoint>& keypoints1,
+        const std::vector<cv::KeyPoint>& keypoints2,
+        const std::vector<std::vector<cv::DMatch>>& knnMatches,
+        std::vector<cv::Point2f>& points1,
+        std::vector<cv::Point2f>& points2,
         const FeatureParams& params);
 
     // 特征识别测试函数
