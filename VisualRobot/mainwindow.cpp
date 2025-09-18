@@ -77,8 +77,7 @@ MainWindow::MainWindow(QWidget *parent) :
     statusBar()->addWidget(m_tempLabel);
 
     // 连接监控信号
-    connect(m_sysMonitor, &SystemMonitor::systemStatsUpdated,
-            this, &MainWindow::updateSystemStats);
+    connect(m_sysMonitor, &SystemMonitor::systemStatsUpdated, this, &MainWindow::updateSystemStats);
 
     // 启动监控
     m_sysMonitor->startMonitoring(1000); // 每秒更新一次
@@ -86,7 +85,8 @@ MainWindow::MainWindow(QWidget *parent) :
 
 MainWindow::~MainWindow()
 {
-    if (m_sysMonitor) {
+    if (m_sysMonitor) 
+    {
         m_sysMonitor->stopMonitoring();
     }
     delete ui;
@@ -146,7 +146,10 @@ void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INF
         disp.nWidth      = pFrameInfo->nWidth;
         disp.nHeight     = pFrameInfo->nHeight;
         disp.enPixelType = pFrameInfo->enPixelType;
-        if (pMainWindow->m_pcMyCamera) pMainWindow->m_pcMyCamera->DisplayOneFrame(&disp);
+        if (pMainWindow->m_pcMyCamera)
+        { 
+            pMainWindow->m_pcMyCamera->DisplayOneFrame(&disp);
+        }
     }
 
     // 2) 缓存：深拷贝最新一帧到成员变量
@@ -603,7 +606,8 @@ void MainWindow::on_pushButton_clicked()
     msgBox.exec();
 
     QAbstractButton *clicked =msgBox.clickedButton();
-    if (clicked == cancelButton) {
+    if (clicked == cancelButton) 
+    {
         return;
     }
 
@@ -673,7 +677,8 @@ void MainWindow::on_pushButton_clicked()
     appendLog(QString("保存成功，地址为：%1").arg(fpath), INFO);
 
     // 如果选择了角点检测，才执行检测算法
-    if (needDetection) {
+    if (needDetection) 
+    {
         //OpenCV版本
         int ProcessedOK = Algorithm_opencv(fpath.toStdString(), Row, Col);
         cout << "原始数据" << endl;
@@ -724,7 +729,8 @@ void MainWindow::on_pushButton_clicked()
 
         // 加载图片
         QPixmap pixmap(imagePath);
-        if (pixmap.isNull()) {
+        if (pixmap.isNull()) 
+        {
             QMessageBox::warning(this, "加载图片失败", "无法加载保存的图片！");
             return;
         }
@@ -750,7 +756,8 @@ void MainWindow::appendLog(const QString &message, int logType, double value)
     // 检查value是否为有效值（非零或非默认值），您可以根据需要调整条件
     // 这里使用了一个简单的检查：如果value不是0.0，则追加它
     // 注意：这可能不适用于所有情况，您可能需要更精确的检查（例如与NaN比较）
-    if (value != 0.0) {
+    if (value != 0.0) 
+    {
         fullMessage += " " + QString::number(value);
     }
 
@@ -780,7 +787,8 @@ void MainWindow::appendLog(const QString &message, int logType, double value)
 
     // 滚动条设置
     QScrollBar *scrollbar = ui->displayLogMsg->verticalScrollBar();
-    if (scrollbar) {
+    if (scrollbar) 
+    {
         scrollbar->setValue(scrollbar->maximum());
     }
 }
@@ -871,7 +879,8 @@ void MainWindow::on_GetLength_clicked()
 
     // 读取输入图像
     Mat inputImage = imread(inputPath);
-    if (inputImage.empty()) {
+    if (inputImage.empty()) 
+    {
         cerr << "无法读取输入图像: " << inputPath << endl;
         appendLog("无法读取输入图像", ERROR);
         return;
@@ -885,26 +894,33 @@ void MainWindow::on_GetLength_clicked()
     params.areaMin = 100.0;
 
     // 处理图像
-    double bias = 30.0/911.5248;
+    double bias = 30.0 / 911.5248;
     Result result = calculateLength(inputImage, params, bias);
 
     // 保存输出图像
-    if (!result.image.empty()) {
+    if (!result.image.empty()) 
+    {
         bool success = imwrite(outputPath, result.image);
-        if (success) {
+        if (success) 
+        {
             cout << "输出图像已保存到: " << outputPath << endl;
-        } else {
+        } 
+        else 
+        {
             cerr << "保存输出图像失败: " << outputPath << endl;
             return;
         }
-    } else {
+    } 
+    else 
+    {
         cerr << "处理后的图像为空，无法保存" << endl;
         return;
     }
 
     // 加载图片
     QPixmap pixmap(output);
-    if (pixmap.isNull()) {
+    if (pixmap.isNull()) 
+    {
         QMessageBox::warning(this, "加载图片失败", "无法加载保存的图片！");
         return;
     }
@@ -927,7 +943,6 @@ void MainWindow::on_GetLength_clicked()
 
 void MainWindow::on_genMatrix_clicked()
 {
-//    int getCoordsOk = getCoords(WorldCoord, PixelCoord, 100.0);
     WorldCoord.clear();
     PixelCoord.clear();
     int getCoordsOk = getCoords_opencv(WorldCoord, PixelCoord, 100.0);
@@ -1003,9 +1018,11 @@ void MainWindow::on_genMatrix_clicked()
 
         // 首先显示变换矩阵
         QString matrixStr = "变换矩阵:\n";
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 3; i++) 
+        {
             matrixStr += "| ";
-            for (int j = 0; j < 3; j++) {
+            for (int j = 0; j < 3; j++) 
+            {
                 matrixStr += QString::number(transformationMatrix(i, j), 'g', 15) + " ";
             }
             matrixStr += "|\n";
@@ -1013,7 +1030,8 @@ void MainWindow::on_genMatrix_clicked()
         appendLog(matrixStr, INFO);
 
         // 然后显示误差结果
-        for (int i = 0; i < PixelCoord.size(); i++) {
+        for (int i = 0; i < PixelCoord.size(); i++) 
+        {
             // 将像素坐标转换为齐次坐标 (x, y, 1)
             Vector3d pixelHomogeneous(PixelCoord[i].x(), PixelCoord[i].y(), 1.0);
 
@@ -1063,7 +1081,8 @@ void MainWindow::drawOverlayOnDisplay2(double length, double width, double angle
 {
     // 使用value方式获取pixmap
     QPixmap src = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue);
-    if (src.isNull()) {
+    if (src.isNull()) 
+    {
         appendLog("没有可叠加的图像（widgetDisplay_2 为空）", WARNNING);
         return;
     }
@@ -1098,8 +1117,7 @@ void MainWindow::drawOverlayOnDisplay2(double length, double width, double angle
 
     // 红色文字
     p.setPen(QColor(255, 0, 0));
-    p.drawText(boxRect.adjusted(pad, pad, -pad, -pad),
-               Qt::AlignRight | Qt::AlignTop, text);
+    p.drawText(boxRect.adjusted(pad, pad, -pad, -pad), Qt::AlignRight | Qt::AlignTop, text);
 
     p.end();
     ui->widgetDisplay_2->setPixmap(annotated);

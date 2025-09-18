@@ -8,6 +8,8 @@
 #include <QStringList>
 #include "DLProcessor.h"
 
+using namespace std;
+
 QT_BEGIN_NAMESPACE
 class QPushButton;
 class QVBoxLayout;
@@ -90,7 +92,7 @@ private slots:
      * @brief 处理批量分类完成信号
      * @param results 批量分类结果
      */
-    void onBatchProcessingComplete(const std::vector<ClassificationResult>& results);
+    void onBatchProcessingComplete(const vector<ClassificationResult>& results);
     
     /**
      * @brief 处理深度学习错误信号

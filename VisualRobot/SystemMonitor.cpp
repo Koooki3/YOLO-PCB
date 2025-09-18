@@ -14,6 +14,8 @@
 #include <sys/sysinfo.h>
 #endif
 
+using namespace std;
+
 SystemMonitor::SystemMonitor(QObject *parent)
     : QObject(parent)
     , m_updateTimer(new QTimer(this))
@@ -43,26 +45,30 @@ void SystemMonitor::stopMonitoring()
 float SystemMonitor::getCpuUsage()
 {
     // 直接尝试读取/proc/stat，不管是什么平台
-    std::ifstream statFile("/proc/stat");
-    if (!statFile.is_open()) {
+    ifstream statFile("/proc/stat");
+    if (!statFile.is_open()) 
+    {
         qDebug() << "Can't open /proc/stat file";
         return 0.0f;
     }
 
-    std::string line;
-    if (std::getline(statFile, line)) {
-        std::istringstream iss(line);
-        std::string cpu;
+    string line;
+    if (getline(statFile, line)) 
+    {
+        istringstream iss(line);
+        string cpu;
         unsigned long long totalUser, totalUserLow, totalSys, totalIdle, iowait, irq, softirq, steal;
         
         // 尝试读取所有CPU时间值
         if (!(iss >> cpu >> totalUser >> totalUserLow >> totalSys >> totalIdle 
-              >> iowait >> irq >> softirq >> steal)) {
+              >> iowait >> irq >> softirq >> steal)) 
+        {
             qDebug() << "Failed to read CPU data: " << QString::fromStdString(line);
             return 0.0f;
         }
         
-        if (m_lastTotalUser == 0) {
+        if (m_lastTotalUser == 0) 
+        {
             // 首次运行，初始化数值
             m_lastTotalUser = totalUser;
             m_lastTotalUserLow = totalUserLow;
@@ -83,7 +89,8 @@ float SystemMonitor::getCpuUsage()
         
         // 计算CPU使用率
         float cpuUsage = 0.0f;
-        if (totalDelta > 0) {
+        if (totalDelta > 0) 
+        {
             cpuUsage = 100.0f * (totalDelta - idleTimeDelta) / totalDelta;
         }
         
@@ -93,7 +100,7 @@ float SystemMonitor::getCpuUsage()
         m_lastTotalSys = totalSys;
         m_lastTotalIdle = totalIdle;
         
-        return std::min(100.0f, std::max(0.0f, cpuUsage));
+        return min(100.0f, max(0.0f, cpuUsage));
     }
     
     qDebug() << "Failed to read CPU data";
@@ -103,29 +110,39 @@ float SystemMonitor::getCpuUsage()
 float SystemMonitor::getMemoryUsage()
 {
     // 尝试从/proc/meminfo读取内存信息
-    std::ifstream memFile("/proc/meminfo");
-    if (!memFile.is_open()) {
+    ifstream memFile("/proc/meminfo");
+    if (!memFile.is_open()) 
+    {
         qDebug() << "Can't open /proc/meminfo file";
         return 0.0f;
     }
 
     unsigned long totalMem = 0, freeMem = 0, buffers = 0, cached = 0;
-    std::string line;
+    string line;
     
-    while (std::getline(memFile, line)) {
-        if (line.find("MemTotal:") != std::string::npos) {
+    while (getline(memFile, line)) 
+    {
+        if (line.find("MemTotal:") != string::npos) 
+        {
             sscanf(line.c_str(), "MemTotal: %lu", &totalMem);
-        } else if (line.find("MemFree:") != std::string::npos) {
+        } 
+        else if (line.find("MemFree:") != string::npos) 
+        {
             sscanf(line.c_str(), "MemFree: %lu", &freeMem);
-        } else if (line.find("Buffers:") != std::string::npos) {
+        } 
+        else if (line.find("Buffers:") != string::npos) 
+        {
             sscanf(line.c_str(), "Buffers: %lu", &buffers);
-        } else if (line.find("Cached:") != std::string::npos) {
+        } 
+        else if (line.find("Cached:") != string::npos) 
+        {
             sscanf(line.c_str(), "Cached: %lu", &cached);
             break;  // 已经找到所需的所有信息
         }
     }
 
-    if (totalMem == 0) {
+    if (totalMem == 0) 
+    {
         qDebug() << "Unable to read the total memory capacity";
         return 0.0f;
     }
@@ -134,7 +151,7 @@ float SystemMonitor::getMemoryUsage()
     unsigned long usedMem = totalMem - freeMem - buffers - cached;
     float memUsage = 100.0f * static_cast<float>(usedMem) / totalMem;
     
-    return std::min(100.0f, std::max(0.0f, memUsage));
+    return min(100.0f, max(0.0f, memUsage));
 }
 
 float SystemMonitor::getTemperature()
@@ -146,24 +163,32 @@ float SystemMonitor::getTemperature()
         "/sys/class/hwmon/hwmon0/temp1_input"    // hwmon路径
     };
 
-    for (const QString& path : tempPaths) {
+    for (const QString& path : tempPaths) 
+    {
         QFile tempFile(path);
-        if (tempFile.exists() && tempFile.open(QIODevice::ReadOnly)) {
+        if (tempFile.exists() && tempFile.open(QIODevice::ReadOnly)) 
+        {
             QString tempStr = tempFile.readAll().trimmed();
             tempFile.close();
             
             bool ok;
             float temp = tempStr.toFloat(&ok);
-            if (ok) {
+            if (ok) 
+            {
                 // 根据读取值的范围来决定是否需要转换单位
-                if (temp > 1000) {
+                if (temp > 1000) 
+                {
                     temp /= 1000.0f; // 转换为摄氏度
                 }
                 return temp;
-            } else {
+            } 
+            else 
+            {
                 qDebug() << "Failed to analyze temperature data:" << tempStr << "(Read from" << path << ")";
             }
-        } else {
+        } 
+        else 
+        {
             qDebug() << "Can't open temperature file:" << path;
         }
     }
@@ -172,11 +197,13 @@ float SystemMonitor::getTemperature()
     QProcess process;
     process.start("sh", QStringList() << "-c" << "cat /sys/class/thermal/thermal_zone*/temp");
     process.waitForFinished(1000);
-    if (process.exitCode() == 0) {
+    if (process.exitCode() == 0) 
+    {
         QString output = process.readAllStandardOutput().trimmed();
         bool ok;
         float temp = output.toFloat(&ok) / 1000.0f;
-        if (ok) {
+        if (ok) 
+        {
             return temp;
         }
     }

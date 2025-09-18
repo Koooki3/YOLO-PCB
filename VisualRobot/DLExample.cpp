@@ -10,6 +10,9 @@
 #include <QProgressBar>
 #include <opencv2/opencv.hpp>
 
+using namespace cv;
+using namespace std;
+
 DLExample::DLExample(QWidget *parent)
     : QWidget(parent)
     , dlProcessor_(new DLProcessor(this))
@@ -21,6 +24,7 @@ DLExample::DLExample(QWidget *parent)
 
 DLExample::~DLExample()
 {
+
 }
 
 void DLExample::setupUI()
@@ -143,7 +147,8 @@ void DLExample::browseModel()
         "",
         "模型文件 (*.onnx *.pb *.caffemodel *.weights);;所有文件 (*.*)");
     
-    if (!fileName.isEmpty()) {
+    if (!fileName.isEmpty()) 
+    {
         modelPathEdit_->setText(fileName);
     }
 }
@@ -155,7 +160,8 @@ void DLExample::browseLabels()
         "",
         "文本文件 (*.txt);;所有文件 (*.*)");
     
-    if (!fileName.isEmpty()) {
+    if (!fileName.isEmpty()) 
+    {
         labelPathEdit_->setText(fileName);
         // 立即加载标签文件，无论模型是否已加载
         loadLabels();
@@ -165,21 +171,26 @@ void DLExample::browseLabels()
 void DLExample::loadLabels()
 {
     QString labelPath = labelPathEdit_->text().trimmed();
-    if (labelPath.isEmpty()) {
+    if (labelPath.isEmpty()) 
+    {
         return;
     }
     
-    if (!QFile::exists(labelPath)) {
+    if (!QFile::exists(labelPath)) 
+    {
         QMessageBox::warning(this, "警告", "标签文件不存在！");
         return;
     }
     
     // 加载标签文件
-    if (dlProcessor_->loadClassLabels(labelPath.toStdString())) {
+    if (dlProcessor_->loadClassLabels(labelPath.toStdString())) 
+    {
         statusLabel_->setText("标签文件加载成功");
         statusLabel_->setStyleSheet("QLabel { color: green; }");
         qDebug() << "Labels loaded successfully from:" << labelPath;
-    } else {
+    } 
+    else 
+    {
         statusLabel_->setText("标签文件加载失败");
         statusLabel_->setStyleSheet("QLabel { color: red; }");
         qDebug() << "Failed to load labels from:" << labelPath;
@@ -189,7 +200,8 @@ void DLExample::loadLabels()
 void DLExample::loadModel()
 {
     QString modelPath = modelPathEdit_->text().trimmed();
-    if (modelPath.isEmpty()) {
+    if (modelPath.isEmpty()) 
+    {
         QMessageBox::warning(this, "警告", "请先选择模型文件！");
         return;
     }
@@ -199,37 +211,45 @@ void DLExample::loadModel()
     
     // 检查是否需要配置文件
     QString configPath = "";
-    if (modelPath.endsWith(".caffemodel")) {
+    if (modelPath.endsWith(".caffemodel")) 
+    {
         QString prototxt = modelPath;
         prototxt.replace(".caffemodel", ".prototxt");
-        if (QFile::exists(prototxt)) {
+        if (QFile::exists(prototxt)) 
+        {
             configPath = prototxt;
         }
-    } else if (modelPath.endsWith(".weights")) {
+    } 
+    else if (modelPath.endsWith(".weights")) 
+    {
         QString cfg = modelPath;
         cfg.replace(".weights", ".cfg");
-        if (QFile::exists(cfg)) {
+        if (QFile::exists(cfg)) 
+        {
             configPath = cfg;
         }
     }
     
     // 加载模型
-    bool success = dlProcessor_->initModel(modelPath.toStdString(), 
-                                          configPath.toStdString());
+    bool success = dlProcessor_->initModel(modelPath.toStdString(), configPath.toStdString());
     
-    if (success) {
+    if (success) 
+    {
         isModelLoaded_ = true;
         statusLabel_->setText("模型加载成功");
         statusLabel_->setStyleSheet("QLabel { color: green; }");
         
         // 加载标签文件
         QString labelPath = labelPathEdit_->text().trimmed();
-        if (!labelPath.isEmpty() && QFile::exists(labelPath)) {
+        if (!labelPath.isEmpty() && QFile::exists(labelPath)) 
+        {
             dlProcessor_->loadClassLabels(labelPath.toStdString());
         }
         
         resultLabel_->setText("模型已加载，可以开始分类");
-    } else {
+    } 
+    else 
+    {
         isModelLoaded_ = false;
         statusLabel_->setText("模型加载失败");
         statusLabel_->setStyleSheet("QLabel { color: red; }");
@@ -238,29 +258,33 @@ void DLExample::loadModel()
 
 void DLExample::setParameters()
 {
-    if (!isModelLoaded_) {
+    if (!isModelLoaded_) 
+    {
         QMessageBox::warning(this, "警告", "请先加载模型！");
         return;
     }
     
     bool ok;
     float confidence = confidenceEdit_->text().toFloat(&ok);
-    if (!ok || confidence < 0.0f || confidence > 1.0f) {
+    if (!ok || confidence < 0.0f || confidence > 1.0f) 
+    {
         QMessageBox::warning(this, "警告", "置信度阈值必须在0.0-1.0之间！");
         return;
     }
     
     int inputSize = inputSizeEdit_->text().toInt(&ok);
-    if (!ok || inputSize < 32 || inputSize > 1024) {
+    if (!ok || inputSize < 32 || inputSize > 1024) 
+    {
         QMessageBox::warning(this, "警告", "输入尺寸必须在32-1024之间！");
         return;
     }
     
     dlProcessor_->setModelParams(confidence, 0.4f);
-    dlProcessor_->setInputSize(cv::Size(inputSize, inputSize));
+    dlProcessor_->setInputSize(Size(inputSize, inputSize));
     
     statusLabel_->setText(QString("参数已更新: 置信度=%1, 输入尺寸=%2x%2")
-                         .arg(confidence).arg(inputSize));
+                         .arg(confidence)
+                         .arg(inputSize));
     statusLabel_->setStyleSheet("QLabel { color: blue; }");
 }
 
@@ -271,12 +295,14 @@ void DLExample::selectImage()
         "",
         "图像文件 (*.jpg *.jpeg *.png *.bmp *.tiff);;所有文件 (*.*)");
     
-    if (!fileName.isEmpty()) {
+    if (!fileName.isEmpty()) 
+    {
         currentImagePath_ = fileName;
         
         // 显示图像
         QPixmap pixmap(fileName);
-        if (!pixmap.isNull()) {
+        if (!pixmap.isNull()) 
+        {
             QPixmap scaledPixmap = pixmap.scaled(imageLabel_->size(), 
                                                Qt::KeepAspectRatio, 
                                                Qt::SmoothTransformation);
@@ -290,19 +316,22 @@ void DLExample::selectImage()
 
 void DLExample::classifyImage()
 {
-    if (!isModelLoaded_) {
+    if (!isModelLoaded_) 
+    {
         QMessageBox::warning(this, "警告", "请先加载模型！");
         return;
     }
     
-    if (currentImagePath_.isEmpty()) {
+    if (currentImagePath_.isEmpty()) 
+    {
         QMessageBox::warning(this, "警告", "请先选择图像！");
         return;
     }
     
     // 加载图像
-    cv::Mat image = cv::imread(currentImagePath_.toStdString());
-    if (image.empty()) {
+    Mat image = imread(currentImagePath_.toStdString());
+    if (image.empty()) 
+    {
         QMessageBox::warning(this, "错误", "无法加载图像文件！");
         return;
     }
@@ -312,9 +341,12 @@ void DLExample::classifyImage()
     
     // 执行分类
     ClassificationResult result;
-    if (dlProcessor_->classifyImage(image, result)) {
+    if (dlProcessor_->classifyImage(image, result)) 
+    {
         // 结果会通过信号槽处理
-    } else {
+    }
+     else 
+    {
         statusLabel_->setText("分类失败");
         statusLabel_->setStyleSheet("QLabel { color: red; }");
     }
@@ -322,7 +354,8 @@ void DLExample::classifyImage()
 
 void DLExample::batchClassify()
 {
-    if (!isModelLoaded_) {
+    if (!isModelLoaded_) 
+    {
         QMessageBox::warning(this, "警告", "请先加载模型！");
         return;
     }
@@ -332,23 +365,27 @@ void DLExample::batchClassify()
         "",
         "图像文件 (*.jpg *.jpeg *.png *.bmp *.tiff)");
     
-    if (fileNames.isEmpty()) {
+    if (fileNames.isEmpty()) 
+    {
         return;
     }
     
     // 加载所有图像
-    std::vector<cv::Mat> images;
+    vector<Mat> images;
     QStringList validFiles;
     
-    for (const QString& fileName : fileNames) {
-        cv::Mat image = cv::imread(fileName.toStdString());
-        if (!image.empty()) {
+    for (const QString& fileName : fileNames) 
+    {
+        Mat image = imread(fileName.toStdString());
+        if (!image.empty()) 
+        {
             images.push_back(image);
             validFiles.append(fileName);
         }
     }
     
-    if (images.empty()) {
+    if (images.empty()) 
+    {
         QMessageBox::warning(this, "错误", "没有有效的图像文件！");
         return;
     }
@@ -365,7 +402,7 @@ void DLExample::batchClassify()
     batchFileNames_ = validFiles;
     
     // 执行批量分类
-    std::vector<ClassificationResult> results;
+    vector<ClassificationResult> results;
     dlProcessor_->classifyBatch(images, results);
 }
 
@@ -383,22 +420,26 @@ void DLExample::onClassificationComplete(const ClassificationResult& result)
     resultLabel_->setText(resultText);
     
     // 根据结果设置状态颜色
-    if (result.isValid) {
+    if (result.isValid) 
+    {
         statusLabel_->setText("分类完成");
         statusLabel_->setStyleSheet("QLabel { color: green; }");
-    } else {
+    } 
+    else 
+    {
         statusLabel_->setText("分类结果置信度过低");
         statusLabel_->setStyleSheet("QLabel { color: orange; }");
     }
 }
 
-void DLExample::onBatchProcessingComplete(const std::vector<ClassificationResult>& results)
+void DLExample::onBatchProcessingComplete(const vector<ClassificationResult>& results)
 {
     progressBar_->setVisible(false);
     
     QString resultText = QString("批量分类完成，共处理 %1 张图像:\n\n").arg(results.size());
     
-    for (size_t i = 0; i < results.size() && i < static_cast<size_t>(batchFileNames_.size()); ++i) {
+    for (size_t i = 0; i < results.size() && i < static_cast<size_t>(batchFileNames_.size()); ++i) 
+    {
         QString fileName = QFileInfo(batchFileNames_[i]).fileName();
         const auto& result = results[i];
         

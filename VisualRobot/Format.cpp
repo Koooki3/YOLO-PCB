@@ -105,8 +105,6 @@ QImage HImageToQImage(const HImage &hImage)
 
     // 计算每行字节数并处理对齐问题
     const int unpaddedBytesPerLine = w * bpp;
-    // const int padding = (4 - (unpaddedBytesPerLine % 4)) % 4; // 计算所需填充
-    // const int bytesPerLine = unpaddedBytesPerLine + padding;
 
     // 创建目标图像缓冲区（初始化为0自动处理填充）
     QImage result(w, h, qtFormat);
