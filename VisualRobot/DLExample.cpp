@@ -198,7 +198,7 @@ void DLExample::LoadLabels()
     }
     
     // 加载标签文件
-    if (dlProcessor_->loadClassLabels(labelPath.toStdString())) 
+    if (dlProcessor_->LoadClassLabels(labelPath.toStdString()))
     {
         statusLabel_->setText("标签文件加载成功");
         statusLabel_->setStyleSheet("QLabel { color: green; }");
@@ -252,7 +252,7 @@ void DLExample::LoadModel()
     }
     
     // 加载模型
-    success = dlProcessor_->initModel(modelPath.toStdString(), configPath.toStdString());
+    success = dlProcessor_->InitModel(modelPath.toStdString(), configPath.toStdString());
     
     if (success) 
     {
@@ -264,7 +264,7 @@ void DLExample::LoadModel()
         QString labelPath = labelPathEdit_->text().trimmed();
         if (!labelPath.isEmpty() && QFile::exists(labelPath)) 
         {
-            dlProcessor_->loadClassLabels(labelPath.toStdString());
+            dlProcessor_->LoadClassLabels(labelPath.toStdString());
         }
         
         resultLabel_->setText("模型已加载，可以开始分类");
@@ -308,8 +308,8 @@ void DLExample::SetParameters()
     }
     
     // 设置模型参数
-    dlProcessor_->setModelParams(confidence, 0.4f);
-    dlProcessor_->setInputSize(Size(inputSize, inputSize));
+    dlProcessor_->SetModelParams(confidence, 0.4f);
+    dlProcessor_->SetInputSize(Size(inputSize, inputSize));
     
     // 更新状态显示
     statusLabel_->setText(QString("参数已更新: 置信度=%1, 输入尺寸=%2x%2")
@@ -382,7 +382,7 @@ void DLExample::ClassifyImage()
     statusLabel_->setStyleSheet("QLabel { color: orange; }");
     
     // 执行分类
-    if (dlProcessor_->classifyImage(image, result)) 
+    if (dlProcessor_->ClassifyImage(image, result))
     {
         // 结果会通过信号槽处理
     }
@@ -449,7 +449,7 @@ void DLExample::BatchClassify()
     batchFileNames_ = validFiles;
     
     // 执行批量分类
-    dlProcessor_->classifyBatch(images, results);
+    dlProcessor_->ClassifyBatch(images, results);
 }
 
 void DLExample::OnClassificationComplete(const ClassificationResult& result)

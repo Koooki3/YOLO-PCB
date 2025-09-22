@@ -50,208 +50,208 @@ bool CreateDirectory(const string& path)
 //   成功返回0，失败返回非零错误码
 int CalculateTransformationMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& PixelCoord, Matrix3d& matrix, const string& filename = "")
 {
-    // 变量定义
-    const int pointCount = WorldCoord.count(); // 坐标点数量
-    int row1, row2;                            // 矩阵行索引
-    double u, v, x, y;                         // 临时坐标变量
-    Vector2d pixel_mean = Vector2d::Zero();    // 像素坐标均值
-    Vector2d world_mean = Vector2d::Zero();    // 世界坐标均值
-    double pixel_scale = 0.0;                  // 像素坐标尺度
-    double world_scale = 0.0;                  // 世界坐标尺度
-    Vector2d pixel_center;                     // 像素中心点
-    double distance, weight;                   // 距离和权重变量
-    VectorXd weights;                          // 权重向量
-    MatrixXd W;                                // 权重矩阵
-    MatrixXd ATWA;                             // A^T * W * A矩阵
-    VectorXd ATWb;                             // A^T * W * b向量
-    VectorXd x;                                // 解向量
-    VectorXd residual;                         // 残差向量
-    double current_error, prev_error;          // 误差变量
-    VectorXd correction;                       // 修正向量
-    VectorXd final_residual;                   // 最终残差
-    double final_error;                        // 最终误差
-    Vector3d pixel, world;                     // 坐标向量
-    double error_x, error_y;                   // 坐标误差
-    string filePath;                           // 文件路径
+//    // 变量定义
+//    const int pointCount = WorldCoord.count(); // 坐标点数量
+//    int row1, row2;                            // 矩阵行索引
+//    double u, v, x, y;                         // 临时坐标变量
+//    Vector2d pixel_mean = Vector2d::Zero();    // 像素坐标均值
+//    Vector2d world_mean = Vector2d::Zero();    // 世界坐标均值
+//    double pixel_scale = 0.0;                  // 像素坐标尺度
+//    double world_scale = 0.0;                  // 世界坐标尺度
+//    Vector2d pixel_center;                     // 像素中心点
+//    double distance, weight;                   // 距离和权重变量
+//    VectorXd weights;                          // 权重向量
+//    MatrixXd W;                                // 权重矩阵
+//    MatrixXd ATWA;                             // A^T * W * A矩阵
+//    VectorXd ATWb;                             // A^T * W * b向量
+//    VectorXd x;                                // 解向量
+//    VectorXd residual;                         // 残差向量
+//    double current_error, prev_error;          // 误差变量
+//    VectorXd correction;                       // 修正向量
+//    VectorXd final_residual;                   // 最终残差
+//    double final_error;                        // 最终误差
+//    Vector3d pixel, world;                     // 坐标向量
+//    double error_x, error_y;                   // 坐标误差
+//    string filePath;                           // 文件路径
     
-    // 参数校验
-    if (WorldCoord.count() != PixelCoord.count())
-    {
-        cerr << "错误: 世界坐标与像素坐标数量不匹配" << endl;
-        return 1; // 错误码1: 坐标数量不匹配
-    }
+//    // 参数校验
+//    if (WorldCoord.count() != PixelCoord.count())
+//    {
+//        cerr << "错误: 世界坐标与像素坐标数量不匹配" << endl;
+//        return 1; // 错误码1: 坐标数量不匹配
+//    }
 
-    if (pointCount < 3)
-    {
-        cerr << "错误: 至少需要3个对应点" << endl;
-        return 2; // 错误码2: 点数不足
-    }
+//    if (pointCount < 3)
+//    {
+//        cerr << "错误: 至少需要3个对应点" << endl;
+//        return 2; // 错误码2: 点数不足
+//    }
 
-    try
-    {
-        // 预分配内存并避免重复计算
-        MatrixXd A = MatrixXd::Zero(2 * pointCount, 6); // 系数矩阵
-        VectorXd b = VectorXd::Zero(2 * pointCount); // 常数向量
+//    try
+//    {
+//        // 预分配内存并避免重复计算
+//        MatrixXd A = MatrixXd::Zero(2 * pointCount, 6); // 系数矩阵
+//        VectorXd b = VectorXd::Zero(2 * pointCount); // 常数向量
 
-        // 使用更高效的矩阵填充方式
-        for (int i = 0; i < pointCount; ++i)
-        {
-            u = PixelCoord[i].x();
-            v = PixelCoord[i].y();
-            x = WorldCoord[i].x();
-            y = WorldCoord[i].y();
+//        // 使用更高效的矩阵填充方式
+//        for (int i = 0; i < pointCount; ++i)
+//        {
+//            u = PixelCoord[i].x();
+//            v = PixelCoord[i].y();
+//            x = WorldCoord[i].x();
+//            y = WorldCoord[i].y();
 
-            row1 = 2 * i;
-            row2 = 2 * i + 1;
+//            row1 = 2 * i;
+//            row2 = 2 * i + 1;
 
-            // x坐标方程: x = a*u + b*v + c
-            A(row1, 0) = u;
-            A(row1, 1) = v;
-            A(row1, 2) = 1.0;
-            b(row1) = x;
+//            // x坐标方程: x = a*u + b*v + c
+//            A(row1, 0) = u;
+//            A(row1, 1) = v;
+//            A(row1, 2) = 1.0;
+//            b(row1) = x;
 
-            // y坐标方程: y = d*u + e*v + f
-            A(row2, 3) = u;
-            A(row2, 4) = v;
-            A(row2, 5) = 1.0;
-            b(row2) = y;
-        }
+//            // y坐标方程: y = d*u + e*v + f
+//            A(row2, 3) = u;
+//            A(row2, 4) = v;
+//            A(row2, 5) = 1.0;
+//            b(row2) = y;
+//        }
 
-        // 精度优化1: 数据归一化处理（提高数值稳定性）
-        pixel_mean = Vector2d::Zero();
-        world_mean = Vector2d::Zero();
+//        // 精度优化1: 数据归一化处理（提高数值稳定性）
+//        pixel_mean = Vector2d::Zero();
+//        world_mean = Vector2d::Zero();
 
-        for (int i = 0; i < pointCount; ++i) 
-        {
-            pixel_mean += Vector2d(PixelCoord[i].x(), PixelCoord[i].y());
-            world_mean += Vector2d(WorldCoord[i].x(), WorldCoord[i].y());
-        }
-        pixel_mean /= pointCount;
-        world_mean /= pointCount;
+//        for (int i = 0; i < pointCount; ++i)
+//        {
+//            pixel_mean += Vector2d(PixelCoord[i].x(), PixelCoord[i].y());
+//            world_mean += Vector2d(WorldCoord[i].x(), WorldCoord[i].y());
+//        }
+//        pixel_mean /= pointCount;
+//        world_mean /= pointCount;
 
-        pixel_scale = 0.0;
-        world_scale = 0.0;
-        for (int i = 0; i < pointCount; ++i) 
-        {
-            pixel_scale += (Vector2d(PixelCoord[i].x(), PixelCoord[i].y()) - pixel_mean).norm();
-            world_scale += (Vector2d(WorldCoord[i].x(), WorldCoord[i].y()) - world_mean).norm();
-        }
-        pixel_scale /= pointCount;
-        world_scale /= pointCount;
+//        pixel_scale = 0.0;
+//        world_scale = 0.0;
+//        for (int i = 0; i < pointCount; ++i)
+//        {
+//            pixel_scale += (Vector2d(PixelCoord[i].x(), PixelCoord[i].y()) - pixel_mean).norm();
+//            world_scale += (Vector2d(WorldCoord[i].x(), WorldCoord[i].y()) - world_mean).norm();
+//        }
+//        pixel_scale /= pointCount;
+//        world_scale /= pointCount;
 
-        // 高级精度优化1: 加权最小二乘法
-        // 根据点的质量分配权重（距离中心越近的点权重越高）
-        weights = VectorXd::Ones(2 * pointCount);
-        pixel_center = pixel_mean;
-        for (int i = 0; i < pointCount; ++i) 
-        {
-            Vector2d pixel_vec(PixelCoord[i].x(), PixelCoord[i].y());
-            distance = (pixel_vec - pixel_center).norm();
-            weight = exp(-distance * distance / (2.0 * pixel_scale * pixel_scale));
-            weights(2*i) = weight;
-            weights(2*i+1) = weight;
-        }
+//        // 高级精度优化1: 加权最小二乘法
+//        // 根据点的质量分配权重（距离中心越近的点权重越高）
+//        weights = VectorXd::Ones(2 * pointCount);
+//        pixel_center = pixel_mean;
+//        for (int i = 0; i < pointCount; ++i)
+//        {
+//            Vector2d pixel_vec(PixelCoord[i].x(), PixelCoord[i].y());
+//            distance = (pixel_vec - pixel_center).norm();
+//            weight = exp(-distance * distance / (2.0 * pixel_scale * pixel_scale));
+//            weights(2*i) = weight;
+//            weights(2*i+1) = weight;
+//        }
 
-        // 构建加权矩阵
-        W = weights.asDiagonal();
-        ATWA = A.transpose() * W * A;
-        ATWb = A.transpose() * W * b;
+//        // 构建加权矩阵
+//        W = weights.asDiagonal();
+//        ATWA = A.transpose() * W * A;
+//        ATWb = A.transpose() * W * b;
 
-        // 高级精度优化2: 使用更稳定的求解方法
-        x = ATWA.completeOrthogonalDecomposition().solve(ATWb);
+//        // 高级精度优化2: 使用更稳定的求解方法
+//        x = ATWA.completeOrthogonalDecomposition().solve(ATWb);
 
-        // 高级精度优化3: 多次迭代精化
-        const int max_refinement_iterations = 3;
-        prev_error = numeric_limits<double>::max();
+//        // 高级精度优化3: 多次迭代精化
+//        const int max_refinement_iterations = 3;
+//        prev_error = numeric_limits<double>::max();
 
-        for (int iter = 0; iter < max_refinement_iterations; ++iter) 
-        {
-            residual = b - A * x;
-            current_error = residual.norm();
+//        for (int iter = 0; iter < max_refinement_iterations; ++iter)
+//        {
+//            residual = b - A * x;
+//            current_error = residual.norm();
 
-            // 如果误差不再显著减小，停止迭代
-            if (abs(prev_error - current_error) < 1e-12 * prev_error) 
-            {
-                break;
-            }
-            prev_error = current_error;
+//            // 如果误差不再显著减小，停止迭代
+//            if (abs(prev_error - current_error) < 1e-12 * prev_error)
+//            {
+//                break;
+//            }
+//            prev_error = current_error;
 
-            // 求解修正量
-            correction = ATWA.completeOrthogonalDecomposition().solve(A.transpose() * W * residual);
-            x += correction;
-        }
+//            // 求解修正量
+//            correction = ATWA.completeOrthogonalDecomposition().solve(A.transpose() * W * residual);
+//            x += correction;
+//        }
 
-        // 高级精度优化4: RANSAC异常点检测（可选）
-        // 可以添加RANSAC来检测和移除异常点，进一步提高精度
+//        // 高级精度优化4: RANSAC异常点检测（可选）
+//        // 可以添加RANSAC来检测和移除异常点，进一步提高精度
 
-        // 计算最终误差并输出
-        final_residual = b - A * x;
-        final_error = final_residual.norm();
-        cout << "最终残差范数: " << scientific << setprecision(6) << final_error << endl;
+//        // 计算最终误差并输出
+//        final_residual = b - A * x;
+//        final_error = final_residual.norm();
+//        cout << "最终残差范数: " << scientific << setprecision(6) << final_error << endl;
 
-        // 输出每个点的误差
-        cout << "各点误差分析:" << endl;
-        for (int i = 0; i < pointCount; ++i) 
-        {
-            Vector2d pixel_err(final_residual(2*i), final_residual(2*i+1));
-            cout << "点 " << i << ": 误差 = " << pixel_err.norm() << " pixels" << endl;
-        }
+//        // 输出每个点的误差
+//        cout << "各点误差分析:" << endl;
+//        for (int i = 0; i < pointCount; ++i)
+//        {
+//            Vector2d pixel_err(final_residual(2*i), final_residual(2*i+1));
+//            cout << "点 " << i << ": 误差 = " << pixel_err.norm() << " pixels" << endl;
+//        }
 
-        // 构建变换矩阵
-        matrix << x(0), x(1), x(2),
-                  x(3), x(4), x(5),
-                  0.0,  0.0,  1.0;
+//        // 构建变换矩阵
+//        matrix << x(0), x(1), x(2),
+//                  x(3), x(4), x(5),
+//                  0.0,  0.0,  1.0;
 
-        // 输出矩阵信息
-        cout << "变换矩阵:" << endl;
-        cout << fixed << setprecision(10);
-        cout << matrix << endl;
+//        // 输出矩阵信息
+//        cout << "变换矩阵:" << endl;
+//        cout << fixed << setprecision(10);
+//        cout << matrix << endl;
 
-        // 验证变换矩阵
-        cout << "验证变换结果:" << endl;
-        for (int i = 0; i < pointCount; ++i)
-        {
-            pixel = Vector3d(PixelCoord[i].x(), PixelCoord[i].y(), 1.0);
-            world = matrix * pixel;
+//        // 验证变换矩阵
+//        cout << "验证变换结果:" << endl;
+//        for (int i = 0; i < pointCount; ++i)
+//        {
+//            pixel = Vector3d(PixelCoord[i].x(), PixelCoord[i].y(), 1.0);
+//            world = matrix * pixel;
 
-            error_x = abs(world[0] - WorldCoord[i].x());
-            error_y = abs(world[1] - WorldCoord[i].y());
+//            error_x = abs(world[0] - WorldCoord[i].x());
+//            error_y = abs(world[1] - WorldCoord[i].y());
 
-            cout << "像素坐标: (" << pixel[0] << ", " << pixel[1] << ") -> ";
-            cout << "计算的世界坐标: (" << world[0] << ", " << world[1] << ") ";
-            cout << "实际的世界坐标: (" << WorldCoord[i].x() << ", " << WorldCoord[i].y() << ")" << endl;
-            cout << " 误差: (" << error_x << ", " << error_y << ")" << endl;
-        }
+//            cout << "像素坐标: (" << pixel[0] << ", " << pixel[1] << ") -> ";
+//            cout << "计算的世界坐标: (" << world[0] << ", " << world[1] << ") ";
+//            cout << "实际的世界坐标: (" << WorldCoord[i].x() << ", " << WorldCoord[i].y() << ")" << endl;
+//            cout << " 误差: (" << error_x << ", " << error_y << ")" << endl;
+//        }
 
-        // 如果提供了文件名，保存矩阵到文件
-        if (!filename.empty())
-        {
-            // 使用相对路径 "../matrix.bin"
-            filePath = "../matrix.bin";
+//        // 如果提供了文件名，保存矩阵到文件
+//        if (!filename.empty())
+//        {
+//            // 使用相对路径 "../matrix.bin"
+//            filePath = "../matrix.bin";
 
-            // 保存矩阵到文件
-            ofstream fout(filePath, ios::binary);
-            if (fout.is_open())
-            {
-                fout << fixed << setprecision(10) << matrix << endl;
-                fout.close();
-                cout << "矩阵保存成功: " << filePath << endl;
-            }
-            else
-            {
-                cerr << "错误: 无法打开文件 " << filePath << endl;
-                return 4; // 错误码4: 文件打开失败
-            }
-        }
+//            // 保存矩阵到文件
+//            ofstream fout(filePath, ios::binary);
+//            if (fout.is_open())
+//            {
+//                fout << fixed << setprecision(10) << matrix << endl;
+//                fout.close();
+//                cout << "矩阵保存成功: " << filePath << endl;
+//            }
+//            else
+//            {
+//                cerr << "错误: 无法打开文件 " << filePath << endl;
+//                return 4; // 错误码4: 文件打开失败
+//            }
+//        }
 
-        return 0; // 成功
+//        return 0; // 成功
 
-    }
-    catch (const exception& e)
-    {
-        cerr << "错误: " << e.what() << endl;
-        return 6; // 错误码6: 计算过程中发生异常
-    }
+//    }
+//    catch (const exception& e)
+//    {
+//        cerr << "错误: " << e.what() << endl;
+//        return 6; // 错误码6: 计算过程中发生异常
+//    }
 }
 
 
@@ -299,14 +299,10 @@ int GetCoordsOpenCV(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, 
     dis_row = (height * 774.0) / 2182.0;
     rmin = r - 10;
     rmax = r + 10;
-
-    // 定义9个搜索区域
-    vector<Rect> searchAreas;
-    vector<Point2f> worldCoords;
     
     // 计算世界坐标
-    double world_dis_col = 1049.0 * size / 2734.0;
-    double world_dis_row = 774.0 * size / 2734.0;
+    world_dis_col = 1049.0 * size / 2734.0;
+    world_dis_row = 774.0 * size / 2734.0;
 
     // 定义9个区域的世界坐标
     for(int row = 0; row < 3; row++) 
@@ -516,7 +512,6 @@ int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<dou
     findContours(edges, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
 
     // 过滤短轮廓
-    vector<vector<Point>> longContours;
     for(const auto& contour : contours) 
     {
         if(arcLength(contour, true) > 50) 
@@ -650,7 +645,6 @@ Result CalculateLength(const Mat& input, const Params& params, double bias) {
     vector<Vec4i> hierarchy;                  // 轮廓层级
     vector<vector<Point>> preservedContours;  // 保留的轮廓
     vector<vector<Point>> filteredContours;   // 过滤的轮廓
-    auto max_it;                              // 最大轮廓迭代器
     int thickness;                            // 绘制线宽
     RotatedRect rotatedRect;                  // 旋转矩形
     Size2f rotatedSize;                       // 旋转矩形尺寸
@@ -713,7 +707,7 @@ Result CalculateLength(const Mat& input, const Params& params, double bias) {
     }
 
     // 查找最大面积的轮廓
-    max_it = max_element(preservedContours.begin(), preservedContours.end(),
+    auto max_it = max_element(preservedContours.begin(), preservedContours.end(),
                          [](const vector<Point>& a, const vector<Point>& b) {
                              return contourArea(a) < contourArea(b);
                          });
