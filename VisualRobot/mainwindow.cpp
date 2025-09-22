@@ -7,7 +7,6 @@
 #include <ctime>
 #include <QDir>
 #include <QDateTime>
-#include <QDir>
 #include <QImage>
 #include <cstdlib>
 #include <QStandardPaths>
@@ -46,8 +45,10 @@ MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow)
 {
+    // 初始化UI
     ui->setupUi(this);
 
+    // 初始化相机相关变量
     memset(&m_stDevList, 0, sizeof(MV_CC_DEVICE_INFO_LIST));
     m_pcMyCamera = NULL;
     m_bGrabbing = false;
@@ -91,10 +92,12 @@ MainWindow::~MainWindow()
 // ch:显示错误信息 | en:Show error message
 void MainWindow::ShowErrorMsg(QString csMessage, unsigned int nErrorNum)
 {
-    QString errorMsg = csMessage;
+    // 变量定义
+    QString errorMsg = csMessage;  // 错误消息字符串
+    QString TempMsg;               // 临时消息字符串
+
     if (nErrorNum != 0)
     {
-        QString TempMsg;
         TempMsg.asprintf(": Error = %x: ", nErrorNum);
         errorMsg += TempMsg;
     }
@@ -184,14 +187,13 @@ void MainWindow::on_bnEnum_clicked()
     int nRet = CMvCamera::EnumDevices(MV_GIGE_DEVICE | MV_USB_DEVICE | MV_GENTL_CAMERALINK_DEVICE | MV_GENTL_CXP_DEVICE | MV_GENTL_XOF_DEVICE, &m_stDevList);
     if (MV_OK != nRet)
     {
-        appendLog("枚举设备错误", ERROR);
+        AppendLog("枚举设备错误", ERROR);
         return;
     }
-    appendLog(QString("枚举到 %1 个设备").arg(m_stDevList.nDeviceNum), INFO);
+    AppendLog(QString("枚举到 %1 个设备").arg(m_stDevList.nDeviceNum), INFO);
     // ch:将值加入到信息列表框中并显示出来 | en:Add value to the information list box and display
     for (unsigned int i = 0; i < m_stDevList.nDeviceNum; i++)
     {
-
         MV_CC_DEVICE_INFO* pDeviceInfo = m_stDevList.pDeviceInfo[i];
         if (NULL == pDeviceInfo)
         {
@@ -233,12 +235,12 @@ void MainWindow::on_bnEnum_clicked()
         {
             if (strcmp("", (char*)pDeviceInfo->SpecialInfo.stCMLInfo.chUserDefinedName) != 0)
             {
-                snprintf(strUserName, 256, "[%d]CML:  %s (%s)", i,pDeviceInfo->SpecialInfo.stCMLInfo.chUserDefinedName,
+                snprintf(strUserName, 256, "[%d]CML:  %s (%s)", i, pDeviceInfo->SpecialInfo.stCMLInfo.chUserDefinedName,
                          pDeviceInfo->SpecialInfo.stCMLInfo.chSerialNumber);
             }
             else
             {
-                snprintf(strUserName, 256, "[%d]CML:  %s (%s)", i,pDeviceInfo->SpecialInfo.stCMLInfo.chModelName,
+                snprintf(strUserName, 256, "[%d]CML:  %s (%s)", i, pDeviceInfo->SpecialInfo.stCMLInfo.chModelName,
                          pDeviceInfo->SpecialInfo.stCMLInfo.chSerialNumber);
             }
         }
@@ -246,12 +248,12 @@ void MainWindow::on_bnEnum_clicked()
         {
             if (strcmp("", (char*)pDeviceInfo->SpecialInfo.stCXPInfo.chUserDefinedName) != 0)
             {
-                snprintf(strUserName, 256, "[%d]CXP:  %s (%s)", i,pDeviceInfo->SpecialInfo.stCXPInfo.chUserDefinedName,
+                snprintf(strUserName, 256, "[%d]CXP:  %s (%s)", i, pDeviceInfo->SpecialInfo.stCXPInfo.chUserDefinedName,
                          pDeviceInfo->SpecialInfo.stCXPInfo.chSerialNumber);
             }
             else
             {
-                snprintf(strUserName, 256, "[%d]CXP:  %s (%s)", i,pDeviceInfo->SpecialInfo.stCXPInfo.chModelName,
+                snprintf(strUserName, 256, "[%d]CXP:  %s (%s)", i, pDeviceInfo->SpecialInfo.stCXPInfo.chModelName,
                          pDeviceInfo->SpecialInfo.stCXPInfo.chSerialNumber);
             }
         }
@@ -259,19 +261,19 @@ void MainWindow::on_bnEnum_clicked()
         {
             if (strcmp("", (char*)pDeviceInfo->SpecialInfo.stXoFInfo.chUserDefinedName) != 0)
             {
-                snprintf(strUserName, 256, "[%d]XOF:  %s (%s)", i,pDeviceInfo->SpecialInfo.stXoFInfo.chUserDefinedName,
+                snprintf(strUserName, 256, "[%d]XOF:  %s (%s)", i, pDeviceInfo->SpecialInfo.stXoFInfo.chUserDefinedName,
                          pDeviceInfo->SpecialInfo.stXoFInfo.chSerialNumber);
             }
             else
             {
-                snprintf(strUserName, 256, "[%d]XOF:  %s (%s)",i, pDeviceInfo->SpecialInfo.stXoFInfo.chModelName,
+                snprintf(strUserName, 256, "[%d]XOF:  %s (%s)", i, pDeviceInfo->SpecialInfo.stXoFInfo.chModelName,
                          pDeviceInfo->SpecialInfo.stXoFInfo.chSerialNumber);
             }
         }
         else
         {
             ShowErrorMsg("Unknown device enumerated", 0);
-            appendLog("未知设备被枚举", WARNNING);
+            AppendLog("未知设备被枚举", WARNNING);
         }
         ui->ComboDevices->addItem(QString::fromLocal8Bit(strUserName));
     }
@@ -279,7 +281,7 @@ void MainWindow::on_bnEnum_clicked()
     if (0 == m_stDevList.nDeviceNum)
     {
         ShowErrorMsg("No device", 0);
-        appendLog("没有设备", WARNNING);
+        AppendLog("没有设备", WARNNING);
         return;
     }
     ui->ComboDevices->setCurrentIndex(0);
@@ -291,7 +293,7 @@ void MainWindow::on_bnOpen_clicked()
     if ((nIndex < 0) | (nIndex >= MV_MAX_DEVICE_NUM))
     {
         ShowErrorMsg("Please select device", 0);
-        appendLog("请选择设备", WARNNING);
+        AppendLog("请选择设备", WARNNING);
         return;
     }
 
@@ -299,17 +301,17 @@ void MainWindow::on_bnOpen_clicked()
     if (NULL == m_stDevList.pDeviceInfo[nIndex])
     {
         ShowErrorMsg("Device does not exist", 0);
-        appendLog("设备不存在", ERROR);
+        AppendLog("设备不存在", ERROR);
         return;
     }
 
-    if(m_pcMyCamera == NULL)
+    if (m_pcMyCamera == NULL)
     {
         m_pcMyCamera = new (nothrow) CMvCamera;
         if (NULL == m_pcMyCamera)
         {
             ShowErrorMsg("new CMvCamera Instance failed", MV_E_RESOURCE);
-            appendLog("新建相机实例失败", ERROR);
+            AppendLog("新建相机实例失败", ERROR);
             return;
         }
     }
@@ -320,11 +322,11 @@ void MainWindow::on_bnOpen_clicked()
         delete m_pcMyCamera;
         m_pcMyCamera = NULL;
         ShowErrorMsg("Open Fail", nRet);
-        appendLog("相机打开失败", ERROR);
+        AppendLog("相机打开失败", ERROR);
         return;
     }
 
-    appendLog("设备打开成功", INFO);
+    AppendLog("设备打开成功", INFO);
 
     // ch:探测网络最佳包大小(只对GigE相机有效) | en:Detection network optimal package size(It only works for the GigE camera)
     if (m_stDevList.pDeviceInfo[nIndex]->nTLayerType == MV_GIGE_DEVICE)
@@ -394,29 +396,29 @@ void MainWindow::on_bnClose_clicked()
     ui->bnGetParam->setEnabled(false);
 
 
-    appendLog("设备关闭成功", INFO);
+    AppendLog("设备关闭成功", INFO);
 }
 
 void MainWindow::on_bnContinuesMode_clicked()
 {
-    if(true == ui->bnContinuesMode->isChecked())
+    if (true == ui->bnContinuesMode->isChecked())
     {
         m_pcMyCamera->SetEnumValue("TriggerMode", MV_TRIGGER_MODE_OFF);
         ui->cbSoftTrigger->setEnabled(false);
         ui->bnTriggerExec->setEnabled(false);
     }
-    appendLog("连续模式已开启", INFO);
+    AppendLog("连续模式已开启", INFO);
 }
 
 void MainWindow::on_bnTriggerMode_clicked()
 {
-    if(true == ui->bnTriggerMode->isChecked())
+    if (true == ui->bnTriggerMode->isChecked())
     {
         m_pcMyCamera->SetEnumValue("TriggerMode", MV_TRIGGER_MODE_ON);
-        if(true == ui->cbSoftTrigger->isChecked())
+        if (true == ui->cbSoftTrigger->isChecked())
         {
             m_pcMyCamera->SetEnumValue("TriggerSource", MV_TRIGGER_SOURCE_SOFTWARE);
-            if(m_bGrabbing)
+            if (m_bGrabbing)
             {
                 ui->bnTriggerExec->setEnabled(true);
             }
@@ -427,7 +429,7 @@ void MainWindow::on_bnTriggerMode_clicked()
         }
         ui->cbSoftTrigger->setEnabled(true);
     }
-    appendLog("触发模式已开启", INFO);
+    AppendLog("触发模式已开启", INFO);
 }
 
 void MainWindow::on_bnStart_clicked()
@@ -438,15 +440,15 @@ void MainWindow::on_bnStart_clicked()
     if (MV_OK != nRet)
     {
         ShowErrorMsg("Start grabbing fail", nRet);
-        appendLog("开始抓图失败", ERROR);
+        AppendLog("开始抓图失败", ERROR);
         return;
     }
-    appendLog("开始抓图成功", INFO);
+    AppendLog("开始抓图成功", INFO);
     m_bGrabbing = true;
 
     ui->bnStart->setEnabled(false);
     ui->bnStop->setEnabled(true);
-    if(true == ui->bnTriggerMode->isChecked() && ui->cbSoftTrigger->isChecked())
+    if (true == ui->bnTriggerMode->isChecked() && ui->cbSoftTrigger->isChecked())
     {
         ui->bnTriggerExec->setEnabled(true);
     }
@@ -458,10 +460,10 @@ void MainWindow::on_bnStop_clicked()
     if (MV_OK != nRet)
     {
         ShowErrorMsg("Stop grabbing fail", nRet);
-        appendLog("停止抓图失败", ERROR);
+        AppendLog("停止抓图失败", ERROR);
         return;
     }
-    appendLog("停止抓图成功", INFO);
+    AppendLog("停止抓图成功", INFO);
     m_bGrabbing = false;
 
     ui->bnStart->setEnabled(true);
@@ -471,19 +473,19 @@ void MainWindow::on_bnStop_clicked()
 
 void MainWindow::on_cbSoftTrigger_clicked()
 {
-    if(true == ui->cbSoftTrigger->isChecked())
+    if (true == ui->cbSoftTrigger->isChecked())
     {
         m_pcMyCamera->SetEnumValue("TriggerSource", MV_TRIGGER_SOURCE_SOFTWARE);
         if (m_bGrabbing)
         {
             ui->bnTriggerExec->setEnabled(true);
-            appendLog("软件触发已开启", INFO);
+            AppendLog("软件触发已开启", INFO);
         }
     }
     else
     {
         m_pcMyCamera->SetEnumValue("TriggerSource", MV_TRIGGER_SOURCE_LINE0);
-        appendLog("软件触发已关闭", INFO);
+        AppendLog("软件触发已关闭", INFO);
         ui->bnTriggerExec->setEnabled(false);
     }
 }
@@ -494,11 +496,11 @@ void MainWindow::on_bnTriggerExec_clicked()
     if(MV_OK != nRet)
     {
         ShowErrorMsg("Trigger Software fail", nRet);
-        appendLog("软件触发失败", ERROR);
+        AppendLog("软件触发失败", ERROR);
     }
     else
     {
-        appendLog("软件触发成功", INFO);
+        AppendLog("软件触发成功", INFO);
     }
 }
 
@@ -511,36 +513,36 @@ void MainWindow::on_bnGetParam_clicked()
     if (MV_OK != nRet)
     {
         ShowErrorMsg("Get Exposure Time Fail", nRet);
-        appendLog("获取曝光时间失败", ERROR);
+        AppendLog("获取曝光时间失败", ERROR);
     }
     else
     {
         ui->tbExposure->setText(QString("%1").arg(stFloatValue.fCurValue));
-        appendLog(QString("获取曝光时间成功: %1").arg(stFloatValue.fCurValue), INFO);
+        AppendLog(QString("获取曝光时间成功: %1").arg(stFloatValue.fCurValue), INFO);
     }
 
     nRet = m_pcMyCamera->GetFloatValue("Gain", &stFloatValue);
     if (MV_OK != nRet)
     {
         ShowErrorMsg("Get Gain Fail", nRet);
-        appendLog("获取增益失败", ERROR);
+        AppendLog("获取增益失败", ERROR);
     }
     else
     {
         ui->tbGain->setText(QString("%1").arg(stFloatValue.fCurValue));
-        appendLog(QString("获取增益成功: %1").arg(stFloatValue.fCurValue), INFO);
+        AppendLog(QString("获取增益成功: %1").arg(stFloatValue.fCurValue), INFO);
     }
 
     nRet = m_pcMyCamera->GetFloatValue("ResultingFrameRate", &stFloatValue);
     if (MV_OK != nRet)
     {
         ShowErrorMsg("Get Frame Rate Fail", nRet);
-        appendLog("获取帧率失败", ERROR);
+        AppendLog("获取帧率失败", ERROR);
     }
     else
     {
         ui->tbFrameRate->setText(QString("%1").arg(stFloatValue.fCurValue));
-        appendLog(QString("获取帧率成功: %1").arg(stFloatValue.fCurValue), INFO);
+        AppendLog(QString("获取帧率成功: %1").arg(stFloatValue.fCurValue), INFO);
     }
 }
 
@@ -551,11 +553,11 @@ void MainWindow::on_bnSetParam_clicked()
     if (MV_OK != nRet)
     {
         ShowErrorMsg("Set Exposure Time Fail", nRet);
-        appendLog("设置曝光时间失败", ERROR);
+        AppendLog("设置曝光时间失败", ERROR);
     }
     else
     {
-        appendLog(QString("设置曝光时间成功: %1").arg(ui->tbExposure->text()), INFO);
+        AppendLog(QString("设置曝光时间成功: %1").arg(ui->tbExposure->text()), INFO);
     }
 
     m_pcMyCamera->SetEnumValue("GainAuto", 0);
@@ -563,22 +565,22 @@ void MainWindow::on_bnSetParam_clicked()
     if (MV_OK != nRet)
     {
         ShowErrorMsg("Set Gain Fail", nRet);
-        appendLog("设置增益失败", ERROR);
+        AppendLog("设置增益失败", ERROR);
     }
     else
     {
-        appendLog(QString("设置增益成功: %1").arg(ui->tbGain->text()), INFO);
+        AppendLog(QString("设置增益成功: %1").arg(ui->tbGain->text()), INFO);
     }
 
     nRet = m_pcMyCamera->SetFloatValue("AcquisitionFrameRate", ui->tbFrameRate->text().toFloat());
     if (MV_OK != nRet)
     {
         ShowErrorMsg("Set Frame Rate Fail", nRet);
-        appendLog("设置帧率失败", ERROR);
+        AppendLog("设置帧率失败", ERROR);
     }
     else
     {
-        appendLog(QString("设置帧率成功: %1").arg(ui->tbFrameRate->text()), INFO);
+        AppendLog(QString("设置帧率成功: %1").arg(ui->tbFrameRate->text()), INFO);
     }
 }
 
@@ -587,7 +589,7 @@ void MainWindow::on_pushButton_clicked()
     if (!m_pcMyCamera)
     {
         QMessageBox::warning(this, "保存图片", "相机对象无效！");
-        appendLog("相机对象无效", ERROR);
+        AppendLog("相机对象无效", ERROR);
         return;
     }
 
@@ -618,7 +620,7 @@ void MainWindow::on_pushButton_clicked()
         if (!m_hasFrame || m_lastFrame.empty())
         {
             QMessageBox::warning(this, "保存图片", "暂无可用图像，请先开始采集。");
-            appendLog("暂无可用图像，请先开始采集", WARNNING);
+            AppendLog("暂无可用图像，请先开始采集", WARNNING);
             return;
         }
         frame = m_lastFrame;   // 拷贝到本地变量，避免持锁编码
@@ -631,7 +633,7 @@ void MainWindow::on_pushButton_clicked()
     if (!pDst)
     {
         QMessageBox::warning(this, "保存图片", "内存不足（编码缓冲）！");
-        appendLog("内存不足（编码缓冲）", ERROR);
+        AppendLog("内存不足（编码缓冲）", ERROR);
         return;
     }
 
@@ -651,7 +653,7 @@ void MainWindow::on_pushButton_clicked()
     if (MV_OK != nRet || save.nImageLen == 0)
     {
         ShowErrorMsg("保存失败（编码阶段）", nRet);
-        appendLog("保存失败（编码阶段）", ERROR);
+        AppendLog("保存失败（编码阶段）", ERROR);
         return;
     }
 
@@ -663,14 +665,14 @@ void MainWindow::on_pushButton_clicked()
     if (!f.open(QIODevice::WriteOnly))
     {
         QMessageBox::warning(this, "保存图片", "无法打开文件进行写入！");
-        appendLog("保存图片，无法打开文件进行写入", ERROR);
+        AppendLog("保存图片，无法打开文件进行写入", ERROR);
         return;
     }
     f.write(reinterpret_cast<const char*>(pDst.get()), save.nImageLen);
     f.close();
 
     QMessageBox::information(this, "保存图片", QString("保存成功：%1").arg(fpath));
-    appendLog(QString("保存成功，地址为：%1").arg(fpath), INFO);
+    AppendLog(QString("保存成功，地址为：%1").arg(fpath), INFO);
 
     // 如果选择了角点检测，才执行检测算法
     if (needDetection) 
@@ -691,29 +693,29 @@ void MainWindow::on_pushButton_clicked()
         cout << "]" << endl;
         if (ProcessedOK)
         {
-            appendLog("角点检测算法执行失败，请调整曝光或者重选待测物体", ERROR);
+            AppendLog("角点检测算法执行失败，请调整曝光或者重选待测物体", ERROR);
             return;
         }
         else
         {
-            appendLog("待检测图像读取成功，角点检测算法执行完毕", INFO);
+            AppendLog("待检测图像读取成功，角点检测算法执行完毕", INFO);
         }
 
         if (Row.size() != Col.size())
         {
-            appendLog("获取到的x,y参数数量不匹配", ERROR);
+            AppendLog("获取到的x,y参数数量不匹配", ERROR);
             return;
         }
         else if (Row.empty() || Col.empty())
         {
-            appendLog("未能正确检测到角点", ERROR);
+            AppendLog("未能正确检测到角点", ERROR);
             return;
         }
         else
         {
             for (size_t i = 0; i < Row.size(); ++i)
             {
-                appendLog(QString("第%1个角点(x,y)像素坐标为:(%2, %3)")
+                AppendLog(QString("第%1个角点(x,y)像素坐标为:(%2, %3)")
                           .arg(i+1)
                           .arg(Col[i])
                           .arg(Row[i]),
@@ -738,12 +740,12 @@ void MainWindow::on_pushButton_clicked()
         ui->widgetDisplay_2->setPixmap(scaledPixmap);
         ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
 
-        appendLog("图片显示成功", INFO);
+        AppendLog("图片显示成功", INFO);
     }
 }
 
 // 调试信息打印函数（输入：调试信息（QString）+宏定义调试信息等级）
-void MainWindow::appendLog(const QString &message, int logType, double value)
+void MainWindow::AppendLog(const QString &message, int logType, double value)
 {
     // 添加时间戳
     QString timeStamp = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss : ");
@@ -795,7 +797,7 @@ void MainWindow::on_GetLength_clicked()
 //    vector<QPointF> points;
 //    points.reserve(Row.size()); // 预分配空间
 ////    Matrix3d transMatrix = readTransformationMatrix("../matrix.bin");
-////    appendLog("成功读取变换矩阵，详见终端显示", INFO);
+////    AppendLog("成功读取变换矩阵，详见终端显示", INFO);
 ////    // 输出变换矩阵
 ////    cout << "变换矩阵:" << endl;
 ////    cout << fixed << setprecision(10); // 设置输出精度
@@ -803,7 +805,7 @@ void MainWindow::on_GetLength_clicked()
 
 //    if (Row.size() <=0 || Col.size() <= 0 || (Row.size() != Col.size()))
 //    {
-//        appendLog("未能正确读取角点", ERROR);
+//        AppendLog("未能正确读取角点", ERROR);
 //        return;
 //    }
 
@@ -825,13 +827,13 @@ void MainWindow::on_GetLength_clicked()
 //        // 输出转换信息
 //        cout << "点 " << i << ": 像素坐标 (" << x << ", " << y << ") -> ";
 ////        cout << "世界坐标 (" << transformedPoint.x() << ", " << transformedPoint.y() << ")" << endl;
-////        appendLog(QString("第%1个角点(x,y)世界坐标为：(%2, %3)")
+////        AppendLog(QString("第%1个角点(x,y)世界坐标为：(%2, %3)")
 ////                  .arg(i+1)
 ////                  .arg(static_cast<double>(transformedPoint.x()))
 ////                  .arg(static_cast<double>(transformedPoint.y())),
 ////                  INFO);
 //    }
-////    appendLog("坐标矩阵变换成功", INFO);
+////    AppendLog("坐标矩阵变换成功", INFO);
 
 //    // 计算点之间的欧几里得距离
 //    auto euclideanDistance = [](const QPointF& a, const QPointF& b)
@@ -856,11 +858,11 @@ void MainWindow::on_GetLength_clicked()
 //    sort(distances.rbegin(), distances.rend());
 
 //    double diagonal = ((double)distances[0] + (double)distances[1]) / 2;
-//    appendLog(QString("物件对角线（mm）：%1").arg(diagonal), INFO);
+//    AppendLog(QString("物件对角线（mm）：%1").arg(diagonal), INFO);
 //    double length = ((double)distances[2] + (double)distances[3]) / 2;
-//    appendLog(QString("物件长度（mm）：%1").arg(length), INFO);
+//    AppendLog(QString("物件长度（mm）：%1").arg(length), INFO);
 //    double width = ((double)distances[4] + (double)distances[5]) / 2;
-//    appendLog(QString("物件宽度（mm）：%1").arg(width), INFO);
+//    AppendLog(QString("物件宽度（mm）：%1").arg(width), INFO);
 
 //    // 输出结果
 //    cout << "各点欧式距离（降序）:" << endl;
@@ -878,7 +880,7 @@ void MainWindow::on_GetLength_clicked()
     if (inputImage.empty()) 
     {
         cerr << "无法读取输入图像: " << inputPath << endl;
-        appendLog("无法读取输入图像", ERROR);
+        AppendLog("无法读取输入图像", ERROR);
         return;
     }
 
@@ -928,11 +930,11 @@ void MainWindow::on_GetLength_clicked()
     ui->widgetDisplay_2->setPixmap(scaledPixmap);
     ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
 
-    appendLog("图片显示成功", INFO);
-    appendLog("检长算法执行完成", INFO);
-    appendLog(QString("物件长度（mm）：%1").arg((double)result.heights[0]), INFO);
-    appendLog(QString("物件宽度（mm）：%1").arg((double)result.widths[0]), INFO);
-    appendLog(QString("物件倾角（°）：%1").arg((double)result.angles[0]), INFO);
+    AppendLog("图片显示成功", INFO);
+    AppendLog("检长算法执行完成", INFO);
+    AppendLog(QString("物件长度（mm）：%1").arg((double)result.heights[0]), INFO);
+    AppendLog(QString("物件宽度（mm）：%1").arg((double)result.widths[0]), INFO);
+    AppendLog(QString("物件倾角（°）：%1").arg((double)result.angles[0]), INFO);
 
     drawOverlayOnDisplay2((double)result.heights[0], (double)result.widths[0], (double)result.angles[0]);
 }
@@ -944,7 +946,7 @@ void MainWindow::on_genMatrix_clicked()
     int getCoordsOk = getCoords_opencv(WorldCoord, PixelCoord, 100.0);
     if (getCoordsOk != 0)
     {
-        appendLog("坐标获取错误", ERROR);
+        AppendLog("坐标获取错误", ERROR);
     }
 
     // 在命令行显示坐标结果
@@ -980,7 +982,7 @@ void MainWindow::on_genMatrix_clicked()
     if (result == 0)
     {
         cout << "变换矩阵计算并保存成功!" << endl;
-        appendLog("变换矩阵计算并保存成功", ERROR);
+        AppendLog("变换矩阵计算并保存成功", ERROR);
 
         // 使用变换矩阵将像素坐标转换回世界坐标
         cout << endl << "=== 使用变换矩阵转换像素坐标 ===" << endl;
@@ -1023,7 +1025,7 @@ void MainWindow::on_genMatrix_clicked()
             }
             matrixStr += "|\n";
         }
-        appendLog(matrixStr, INFO);
+        AppendLog(matrixStr, INFO);
 
         // 然后显示误差结果
         for (int i = 0; i < PixelCoord.size(); i++) 
@@ -1052,13 +1054,13 @@ void MainWindow::on_genMatrix_clicked()
                                  .arg(y_transformed, 0, 'f', 3);
 
             // 调用日志函数显示结果
-            appendLog(message, INFO, total_error); // 使用信息级别，并将误差作为value传递
+            AppendLog(message, INFO, total_error); // 使用信息级别，并将误差作为value传递
         }
     }
     else
     {
         cout << "变换矩阵计算失败，错误码: " << result << endl;
-        appendLog(QString("变换矩阵计算失败，错误码:%1").arg(result), ERROR);
+        AppendLog(QString("变换矩阵计算失败，错误码:%1").arg(result), ERROR);
     }
 }
 
@@ -1070,7 +1072,7 @@ void MainWindow::on_btnOpenManual_clicked()
     // 尝试使用系统默认程序打开PDF
     QDesktopServices::openUrl(QUrl::fromLocalFile(pdfPath));
     
-    appendLog("已尝试打开调试信息手册", INFO);
+    AppendLog("已尝试打开调试信息手册", INFO);
 }
 
 void MainWindow::drawOverlayOnDisplay2(double length, double width, double angle)
@@ -1079,7 +1081,7 @@ void MainWindow::drawOverlayOnDisplay2(double length, double width, double angle
     QPixmap src = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue);
     if (src.isNull()) 
     {
-        appendLog("没有可叠加的图像（widgetDisplay_2 为空）", WARNNING);
+        AppendLog("没有可叠加的图像（widgetDisplay_2 为空）", WARNNING);
         return;
     }
 
@@ -1124,5 +1126,5 @@ void MainWindow::on_CallDLwindow_clicked()
     DLExample* dlExample = new DLExample(nullptr);
     dlExample->setAttribute(Qt::WA_DeleteOnClose);
     dlExample->show();
-    appendLog("深度学习二分类示例窗口已打开", INFO);
+    AppendLog("深度学习二分类示例窗口已打开", INFO);
 }

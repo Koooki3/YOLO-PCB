@@ -29,8 +29,8 @@ public:
 
     void static __stdcall ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INFO_EX* pFrameInfo, void* pUser);
     void ImageCallBackInner(unsigned char * pData, MV_FRAME_OUT_INFO_EX* pFrameInf);
-    void appendLog(const QString &message, int logType, double value = 0.0);
-    void drawOverlayOnDisplay2(double length, double width, double diagonal);
+    void AppendLog(const QString &message, int logType, double value = 0.0);
+    void DrawOverlayOnDisplay2(double length, double width, double diagonal);
 
 private:
 

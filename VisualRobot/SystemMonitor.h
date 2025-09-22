@@ -26,9 +26,9 @@ private slots:
 private:
     QTimer *m_updateTimer;
     
-    float getCpuUsage();
-    float getMemoryUsage();
-    float getTemperature();
+    float GetCpuUsage();           // 获取CPU使用率
+    float GetMemoryUsage();        // 获取内存使用率
+    float GetTemperature();        // 获取系统温度
     
     // 用于CPU使用率计算的辅助变量
     unsigned long long m_lastTotalUser;

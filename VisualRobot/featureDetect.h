@@ -25,7 +25,8 @@ public:
     ~FeatureDetector();
 
     // 特征匹配和几何验证函数
-    static std::vector<cv::DMatch> filterMatches(
+    // 对特征匹配进行多阶段筛选，包括响应值筛选、比率测试和RANSAC几何验证
+    static std::vector<cv::DMatch> FilterMatches(
         const std::vector<cv::KeyPoint>& keypoints1,
         const std::vector<cv::KeyPoint>& keypoints2,
         const std::vector<std::vector<cv::DMatch>>& knnMatches,
@@ -34,7 +35,8 @@ public:
         const FeatureParams& params);
 
     // 特征识别测试函数
-    static void testFeatureDetection(const QString& imagePath1, const QString& imagePath2);
+    // 完整的特征检测流程测试，包括图像读取、预处理、特征提取、匹配和结果可视化
+    static void TestFeatureDetection(const QString& imagePath1, const QString& imagePath2);
 
 private:
     // 可以在这里添加类的私有成员

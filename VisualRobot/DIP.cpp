@@ -32,9 +32,11 @@ using namespace std;
 using namespace cv;
 
 // 创建目录的辅助函数
-bool createDirectory(const string& path)
+bool CreateDirectory(const string& path)
 {
-    QDir dir(QString::fromStdString(path));
+    // 变量定义
+    QDir dir(QString::fromStdString(path)); // QDir对象用于目录操作
+    
     return dir.mkpath("."); // 创建路径及其所有父目录
 }
 
@@ -46,10 +48,33 @@ bool createDirectory(const string& path)
 //   filename - 保存矩阵的文件名
 // 返回值:
 //   成功返回0，失败返回非零错误码
-int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& PixelCoord, Matrix3d& matrix, const string& filename = "")
+int CalculateTransformationMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& PixelCoord, Matrix3d& matrix, const string& filename = "")
 {
+    // 变量定义
+    const int pointCount = WorldCoord.count(); // 坐标点数量
+    int row1, row2;                            // 矩阵行索引
+    double u, v, x, y;                         // 临时坐标变量
+    Vector2d pixel_mean = Vector2d::Zero();    // 像素坐标均值
+    Vector2d world_mean = Vector2d::Zero();    // 世界坐标均值
+    double pixel_scale = 0.0;                  // 像素坐标尺度
+    double world_scale = 0.0;                  // 世界坐标尺度
+    Vector2d pixel_center;                     // 像素中心点
+    double distance, weight;                   // 距离和权重变量
+    VectorXd weights;                          // 权重向量
+    MatrixXd W;                                // 权重矩阵
+    MatrixXd ATWA;                             // A^T * W * A矩阵
+    VectorXd ATWb;                             // A^T * W * b向量
+    VectorXd x;                                // 解向量
+    VectorXd residual;                         // 残差向量
+    double current_error, prev_error;          // 误差变量
+    VectorXd correction;                       // 修正向量
+    VectorXd final_residual;                   // 最终残差
+    double final_error;                        // 最终误差
+    Vector3d pixel, world;                     // 坐标向量
+    double error_x, error_y;                   // 坐标误差
+    string filePath;                           // 文件路径
+    
     // 参数校验
-    const int pointCount = WorldCoord.count();
     if (WorldCoord.count() != PixelCoord.count())
     {
         cerr << "错误: 世界坐标与像素坐标数量不匹配" << endl;
@@ -65,19 +90,19 @@ int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& Pixe
     try
     {
         // 预分配内存并避免重复计算
-        MatrixXd A = MatrixXd::Zero(2 * pointCount, 6);
-        VectorXd b = VectorXd::Zero(2 * pointCount);
+        MatrixXd A = MatrixXd::Zero(2 * pointCount, 6); // 系数矩阵
+        VectorXd b = VectorXd::Zero(2 * pointCount); // 常数向量
 
         // 使用更高效的矩阵填充方式
         for (int i = 0; i < pointCount; ++i)
         {
-            const double u = PixelCoord[i].x();
-            const double v = PixelCoord[i].y();
-            const double x = WorldCoord[i].x();
-            const double y = WorldCoord[i].y();
+            u = PixelCoord[i].x();
+            v = PixelCoord[i].y();
+            x = WorldCoord[i].x();
+            y = WorldCoord[i].y();
 
-            const int row1 = 2 * i;
-            const int row2 = 2 * i + 1;
+            row1 = 2 * i;
+            row2 = 2 * i + 1;
 
             // x坐标方程: x = a*u + b*v + c
             A(row1, 0) = u;
@@ -93,8 +118,8 @@ int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& Pixe
         }
 
         // 精度优化1: 数据归一化处理（提高数值稳定性）
-        Vector2d pixel_mean = Vector2d::Zero();
-        Vector2d world_mean = Vector2d::Zero();
+        pixel_mean = Vector2d::Zero();
+        world_mean = Vector2d::Zero();
 
         for (int i = 0; i < pointCount; ++i) 
         {
@@ -104,8 +129,8 @@ int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& Pixe
         pixel_mean /= pointCount;
         world_mean /= pointCount;
 
-        double pixel_scale = 0.0;
-        double world_scale = 0.0;
+        pixel_scale = 0.0;
+        world_scale = 0.0;
         for (int i = 0; i < pointCount; ++i) 
         {
             pixel_scale += (Vector2d(PixelCoord[i].x(), PixelCoord[i].y()) - pixel_mean).norm();
@@ -116,33 +141,33 @@ int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& Pixe
 
         // 高级精度优化1: 加权最小二乘法
         // 根据点的质量分配权重（距离中心越近的点权重越高）
-        VectorXd weights = VectorXd::Ones(2 * pointCount);
-        Vector2d pixel_center = pixel_mean;
+        weights = VectorXd::Ones(2 * pointCount);
+        pixel_center = pixel_mean;
         for (int i = 0; i < pointCount; ++i) 
         {
             Vector2d pixel_vec(PixelCoord[i].x(), PixelCoord[i].y());
-            double distance = (pixel_vec - pixel_center).norm();
-            double weight = exp(-distance * distance / (2.0 * pixel_scale * pixel_scale));
+            distance = (pixel_vec - pixel_center).norm();
+            weight = exp(-distance * distance / (2.0 * pixel_scale * pixel_scale));
             weights(2*i) = weight;
             weights(2*i+1) = weight;
         }
 
         // 构建加权矩阵
-        MatrixXd W = weights.asDiagonal();
-        MatrixXd ATWA = A.transpose() * W * A;
-        VectorXd ATWb = A.transpose() * W * b;
+        W = weights.asDiagonal();
+        ATWA = A.transpose() * W * A;
+        ATWb = A.transpose() * W * b;
 
         // 高级精度优化2: 使用更稳定的求解方法
-        VectorXd x = ATWA.completeOrthogonalDecomposition().solve(ATWb);
+        x = ATWA.completeOrthogonalDecomposition().solve(ATWb);
 
         // 高级精度优化3: 多次迭代精化
         const int max_refinement_iterations = 3;
-        double prev_error = numeric_limits<double>::max();
+        prev_error = numeric_limits<double>::max();
 
         for (int iter = 0; iter < max_refinement_iterations; ++iter) 
         {
-            VectorXd residual = b - A * x;
-            double current_error = residual.norm();
+            residual = b - A * x;
+            current_error = residual.norm();
 
             // 如果误差不再显著减小，停止迭代
             if (abs(prev_error - current_error) < 1e-12 * prev_error) 
@@ -152,7 +177,7 @@ int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& Pixe
             prev_error = current_error;
 
             // 求解修正量
-            VectorXd correction = ATWA.completeOrthogonalDecomposition().solve(A.transpose() * W * residual);
+            correction = ATWA.completeOrthogonalDecomposition().solve(A.transpose() * W * residual);
             x += correction;
         }
 
@@ -160,8 +185,8 @@ int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& Pixe
         // 可以添加RANSAC来检测和移除异常点，进一步提高精度
 
         // 计算最终误差并输出
-        VectorXd final_residual = b - A * x;
-        double final_error = final_residual.norm();
+        final_residual = b - A * x;
+        final_error = final_residual.norm();
         cout << "最终残差范数: " << scientific << setprecision(6) << final_error << endl;
 
         // 输出每个点的误差
@@ -186,11 +211,11 @@ int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& Pixe
         cout << "验证变换结果:" << endl;
         for (int i = 0; i < pointCount; ++i)
         {
-            Vector3d pixel(PixelCoord[i].x(), PixelCoord[i].y(), 1.0);
-            Vector3d world = matrix * pixel;
+            pixel = Vector3d(PixelCoord[i].x(), PixelCoord[i].y(), 1.0);
+            world = matrix * pixel;
 
-            double error_x = abs(world[0] - WorldCoord[i].x());
-            double error_y = abs(world[1] - WorldCoord[i].y());
+            error_x = abs(world[0] - WorldCoord[i].x());
+            error_y = abs(world[1] - WorldCoord[i].y());
 
             cout << "像素坐标: (" << pixel[0] << ", " << pixel[1] << ") -> ";
             cout << "计算的世界坐标: (" << world[0] << ", " << world[1] << ") ";
@@ -202,7 +227,7 @@ int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& Pixe
         if (!filename.empty())
         {
             // 使用相对路径 "../matrix.bin"
-            string filePath = "../matrix.bin";
+            filePath = "../matrix.bin";
 
             // 保存矩阵到文件
             ofstream fout(filePath, ios::binary);
@@ -231,10 +256,33 @@ int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& Pixe
 
 
 // OpenCV版本的圆形检测算法
-int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double size = 100.0)
+// 参数:
+//   WorldCoord - 输出参数，存储检测到的世界坐标
+//   PixelCoord - 输出参数，存储检测到的像素坐标  
+//   size - 标定板尺寸，默认为100.0
+// 返回值:
+//   成功返回0，失败返回1
+int GetCoordsOpenCV(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double size = 100.0)
 {
+    // 变量定义
+    Mat image;                              // 输入图像
+    int height, width; // 图像高度和宽度
+    double r, dis_col, dis_row, rmin, rmax; // 圆形检测参数
+    vector<Rect> searchAreas;               // 搜索区域列表
+    vector<Point2f> worldCoords;            // 世界坐标列表
+    double world_dis_col, world_dis_row;    // 世界坐标间距
+    Mat grayImage, binaryImage;             // 灰度图和二值图
+    vector<Vec3f> detectedCircles;          // 检测到的圆形
+    Mat result;                             // 结果图像
+    vector<Point2f> detectedCenters;        // 检测到的圆心
+    vector<float> detectedRadii;            // 检测到的半径
+    vector<Point2f> detectedWorldCoords;    // 检测到的世界坐标
+    int radius, roi_size, x, y;             // ROI相关变量
+    Moments m;                              // 图像矩
+    double cx, cy;                          // 质心坐标
+    
     // 读取图像
-    Mat image = imread("/home/orangepi/Desktop/VisualRobot_Local/Img/capture.jpg");
+    image = imread("/home/orangepi/Desktop/VisualRobot_Local/Img/capture.jpg");
     if(image.empty()) 
     {
         qDebug() << "Error: Cannot read image file";
@@ -242,15 +290,15 @@ int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord,
     }
 
     // 获取图像尺寸
-    int height = image.rows;
-    int width = image.cols;
+    height = image.rows;
+    width = image.cols;
 
     // 计算参数（基于原始代码中的比例）
-    double r = (height * 316.0) / 2182.0;
-    double dis_col = (width * 1049.0) / 2734.0;
-    double dis_row = (height * 774.0) / 2182.0;
-    double rmin = r - 10;
-    double rmax = r + 10;
+    r = (height * 316.0) / 2182.0;
+    dis_col = (width * 1049.0) / 2734.0;
+    dis_row = (height * 774.0) / 2182.0;
+    rmin = r - 10;
+    rmax = r + 10;
 
     // 定义9个搜索区域
     vector<Rect> searchAreas;
@@ -277,19 +325,13 @@ int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord,
     }
 
     // 转换为灰度图
-    Mat grayImage;
     cvtColor(image, grayImage, COLOR_BGR2GRAY);
 
     // 二值化
-    Mat binaryImage;
     threshold(grayImage, binaryImage, 200, 255, THRESH_BINARY);
 
     // 在每个区域中检测圆
-    vector<Vec3f> detectedCircles;
-    Mat result = image.clone();
-    vector<Point2f> detectedCenters; // 存储检测到的圆心
-    vector<float> detectedRadii; // 存储检测到的半径
-    vector<Point2f> detectedWorldCoords; // 存储对应的世界坐标
+    result = image.clone();
 
     for(size_t i = 0; i < searchAreas.size(); i++) 
     {
@@ -299,7 +341,7 @@ int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord,
         // 使用Hough圆变换检测圆
         HoughCircles(roi, circles, HOUGH_GRADIENT, 1,
                         roi.rows/8,  // 最小圆心距离
-                        40, 5,     // Canny阈值，累加器阈值
+                        40, 5,       // Canny阈值，累加器阈值
                         rmin, rmax); // 最小和最大半径
 
         // 找到最佳匹配的圆
@@ -336,25 +378,25 @@ int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord,
     for (size_t i = 0; i < detectedCenters.size(); i++) 
     {
         // 根据圆的半径动态定义ROI区域（以检测到的圆心为中心，2r*2r像素区域）
-        int radius = static_cast<int>(detectedRadii[i]);
-        int roi_size = 2 * radius; // ROI大小为2r*2r
-        int x = max(0, static_cast<int>(detectedCenters[i].x - radius));
-        int y = max(0, static_cast<int>(detectedCenters[i].y - radius));
-        int width = min(roi_size, grayImage.cols - x);
-        int height = min(roi_size, grayImage.rows - y);
+        radius = static_cast<int>(detectedRadii[i]);
+        roi_size = 2 * radius; // ROI大小为2r*2r
+        x = max(0, static_cast<int>(detectedCenters[i].x - radius));
+        y = max(0, static_cast<int>(detectedCenters[i].y - radius));
+        int roi_width = min(roi_size, grayImage.cols - x);
+        int roi_height = min(roi_size, grayImage.rows - y);
         
-        if (width > 0 && height > 0) 
+        if (roi_width > 0 && roi_height > 0) 
         {
-            Mat roi = grayImage(Rect(x, y, width, height));
+            Mat roi = grayImage(Rect(x, y, roi_width, roi_height));
             
             // 计算图像矩
-            Moments m = moments(roi, true);
+            m = moments(roi, true);
             
             if (m.m00 != 0) 
             {
                 // 计算质心（相对于ROI的坐标）
-                double cx = m.m10 / m.m00;
-                double cy = m.m01 / m.m00;
+                cx = m.m10 / m.m00;
+                cy = m.m01 / m.m00;
                 
                 // 更新圆心坐标（转换回原图坐标系）
                 detectedCenters[i].x = x + cx;
@@ -380,15 +422,24 @@ int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord,
     return detectedCenters.empty() ? 1 : 0;
 }
 
-Matrix3d readTransformationMatrix(const string& filename)
+// 从文件读取变换矩阵
+// 参数:
+//   filename - 矩阵文件路径
+// 返回值:
+//   成功返回变换矩阵，失败抛出异常
+Matrix3d ReadTransformationMatrix(const string& filename)
 {
-    ifstream file(filename);
+    // 变量定义
+    ifstream file;     // 文件流对象
+    Matrix3d matrix;   // 变换矩阵
+    string line;       // 文件行内容
+    istringstream iss; // 字符串流用于解析
+    
+    file.open(filename);
     if (!file)
     {
         throw runtime_error("Cannot open file: " + filename);
     }
-
-    Matrix3d matrix;
 
     // 逐行读取文件内容
     for (int i = 0; i < 3; ++i)
@@ -413,14 +464,36 @@ Matrix3d readTransformationMatrix(const string& filename)
 }
 
 // OpenCV版本的矩形检测算法
-int Algorithm_opencv(const string& imgPath, vector<double>& Row, vector<double>& Col)
+// 参数:
+//   imgPath - 输入图像路径
+//   Row - 输出参数，存储矩形角点的行坐标
+//   Col - 输出参数，存储矩形角点的列坐标
+// 返回值:
+//   成功返回0，失败返回1
+int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<double>& Col)
 {
+    // 变量定义
+    Mat image, grayImage, binaryImage, smoothedImage, edges; // 图像处理变量
+    vector<vector<Point>> contours;                          // 轮廓列表
+    vector<Vec4i> hierarchy;                                 // 轮廓层级
+    vector<vector<Point>> longContours;                      // 长轮廓列表
+    vector<Point> rectContour;                               // 矩形轮廓
+    double maxArea;                                          // 最大面积
+    RotatedRect rect;                                        // 旋转矩形
+    vector<Point2f> boxPoints;                               // 矩形角点
+    vector<Point> intPoints;                                 // 整数角点
+    vector<Point> orderedPoints;                             // 排序后的角点
+    vector<Point2f> corners;                                 // 角点用于亚像素优化
+    Size winSize, zeroZone;                                  // 亚像素优化参数
+    TermCriteria criteria;                                   // 终止条件
+    Mat result;                                              // 结果图像
+    
     // 清空输入向量
     Row.clear();
     Col.clear();
 
     // 读取图像
-    Mat image = imread(imgPath);
+    image = imread(imgPath);
     if (image.empty()) 
     {
         qDebug() << "Error: Cannot read image file";
@@ -428,24 +501,18 @@ int Algorithm_opencv(const string& imgPath, vector<double>& Row, vector<double>&
     }
 
     // 转换为灰度图
-    Mat grayImage;
     cvtColor(image, grayImage, COLOR_BGR2GRAY);
 
     // 二值化
-    Mat binaryImage;
     threshold(grayImage, binaryImage, 128, 255, THRESH_BINARY);
 
     // 高斯滤波平滑处理
-    Mat smoothedImage;
     GaussianBlur(binaryImage, smoothedImage, Size(3, 3), 0);
 
     // Canny边缘检测
-    Mat edges;
     Canny(smoothedImage, edges, 20, 40);
 
     // 查找轮廓
-    vector<vector<Point>> contours;
-    vector<Vec4i> hierarchy;
     findContours(edges, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
 
     // 过滤短轮廓
@@ -459,19 +526,18 @@ int Algorithm_opencv(const string& imgPath, vector<double>& Row, vector<double>&
     }
 
     // 寻找最大的矩形轮廓
-    vector<Point> rectContour;
-    double maxArea = 0;
+    maxArea = 0;
     for(const auto& contour : longContours) 
     {
         double area = contourArea(contour);
         if(area > maxArea) 
         {
-            RotatedRect rect = minAreaRect(contour);
-            vector<Point2f> boxPoints(4);
+            rect = minAreaRect(contour);
+            boxPoints.resize(4);
             rect.points(boxPoints.data());
             
             // 转换为整数点
-            vector<Point> intPoints;
+            intPoints.clear();
             for(const auto& pt : boxPoints) 
             {
                 intPoints.push_back(Point(static_cast<int>(pt.x), static_cast<int>(pt.y)));
@@ -514,16 +580,16 @@ int Algorithm_opencv(const string& imgPath, vector<double>& Row, vector<double>&
         if (!rectContour.empty()) 
         {
             // 将角点转换为Point2f格式用于亚像素优化
-            vector<Point2f> corners;
+            corners.clear();
             for (int i = 0; i < 4; i++) 
             {
                 corners.push_back(Point2f(Col[i], Row[i]));
             }
             
             // 配置亚像素优化参数
-            Size winSize = Size(5, 5);
-            Size zeroZone = Size(-1, -1);
-            TermCriteria criteria = TermCriteria(TermCriteria::EPS + TermCriteria::MAX_ITER, 40, 0.001);
+            winSize = Size(5, 5);
+            zeroZone = Size(-1, -1);
+            criteria = TermCriteria(TermCriteria::EPS + TermCriteria::MAX_ITER, 40, 0.001);
             
             // 执行亚像素角点优化
             cornerSubPix(grayImage, corners, winSize, zeroZone, criteria);
@@ -537,7 +603,7 @@ int Algorithm_opencv(const string& imgPath, vector<double>& Row, vector<double>&
         }
 
         // 可视化结果
-        Mat result = image.clone();
+        result = image.clone();
 
         // 然后绘制红色的1像素精确矩形轮廓
         for(int i = 0; i < 4; i++) 
@@ -568,16 +634,35 @@ int Algorithm_opencv(const string& imgPath, vector<double>& Row, vector<double>&
 
 
 // 处理图像并计算尺寸的函数
-Result calculateLength(const Mat& input, const Params& params, double bias) {
-    Result result;
-
+// 参数:
+//   input - 输入图像
+//   params - 处理参数
+//   bias - 比例偏差
+// 返回值:
+//   包含宽度、高度、角度和图像的结果结构体
+Result CalculateLength(const Mat& input, const Params& params, double bias) {
+    // 变量定义
+    Result result;                            // 结果结构体
+    Mat source, binary, colorImage;           // 图像处理变量
+    int k;                                    // 滤波核大小
+    static Mat kernel;                        // 形态学核
+    vector<vector<Point>> contours;           // 轮廓列表
+    vector<Vec4i> hierarchy;                  // 轮廓层级
+    vector<vector<Point>> preservedContours;  // 保留的轮廓
+    vector<vector<Point>> filteredContours;   // 过滤的轮廓
+    auto max_it;                              // 最大轮廓迭代器
+    int thickness;                            // 绘制线宽
+    RotatedRect rotatedRect;                  // 旋转矩形
+    Size2f rotatedSize;                       // 旋转矩形尺寸
+    float spring_length, spring_width, angle; // 弹簧尺寸和角度
+    Point2f vertices[4];                      // 矩形顶点
+    int thickBorder;                          // 边框厚度
+    
     if (input.empty()) 
     {
         cerr << "图像读取失败" << endl;
         return result;
     }
-
-    Mat source;
 
     // 检查通道数，如果需要则转换为灰度图
     if (input.channels() > 1) 
@@ -592,7 +677,7 @@ Result calculateLength(const Mat& input, const Params& params, double bias) {
     // 多阶段滤波
     if (params.blurK >= 3) 
     {
-        int k = (params.blurK % 2 == 0) ? params.blurK - 1 : params.blurK;
+        k = (params.blurK % 2 == 0) ? params.blurK - 1 : params.blurK;
         if (k >= 3) 
         {
             Mat dst;
@@ -602,10 +687,9 @@ Result calculateLength(const Mat& input, const Params& params, double bias) {
     }
 
     // 预计算核
-    static Mat kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
+    kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
 
     // 阈值处理
-    Mat binary;
     binary = source > params.thresh;
     binary = 255 - binary;
 
@@ -613,11 +697,6 @@ Result calculateLength(const Mat& input, const Params& params, double bias) {
     morphologyEx(binary, binary, MORPH_DILATE, kernel);  // 仅膨胀操作
 
     // 查找轮廓
-    vector<vector<Point>> contours;
-    vector<Vec4i> hierarchy;
-    vector<vector<Point>> preservedContours;
-    vector<vector<Point>> filteredContours;
-
     findContours(binary, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
 
     // 按面积过滤轮廓
@@ -634,33 +713,31 @@ Result calculateLength(const Mat& input, const Params& params, double bias) {
     }
 
     // 查找最大面积的轮廓
-    auto max_it = max_element(preservedContours.begin(), preservedContours.end(),
-                             [](const vector<Point>& a, const vector<Point>& b) {
-                                 return contourArea(a) < contourArea(b);
-                             });
+    max_it = max_element(preservedContours.begin(), preservedContours.end(),
+                         [](const vector<Point>& a, const vector<Point>& b) {
+                             return contourArea(a) < contourArea(b);
+                         });
 
     // 基于图像宽度计算线宽
-    const int thickness = round(source.cols * 0.002);
+    thickness = round(source.cols * 0.002);
 
     // 转换为BGR用于彩色绘图
-    Mat colorImage;
     cvtColor(source, colorImage, COLOR_GRAY2BGR);
 
     if (max_it != preservedContours.end()) 
     {
         // 获取旋转矩形
-        RotatedRect rotatedRect = minAreaRect(*max_it);
-        Size2f rotatedSize = rotatedRect.size;
+        rotatedRect = minAreaRect(*max_it);
+        rotatedSize = rotatedRect.size;
 
-        float spring_length = max(rotatedSize.width, rotatedSize.height);
-        float spring_width = min(rotatedSize.width, rotatedSize.height);
+        spring_length = max(rotatedSize.width, rotatedSize.height);
+        spring_width = min(rotatedSize.width, rotatedSize.height);
         result.widths.push_back(spring_width*bias);
         result.heights.push_back(spring_length*bias);
 
         // 用绿色绘制边界框
-        Point2f vertices[4];
         rotatedRect.points(vertices);
-        const int thickBorder = static_cast<int>(thickness * 1);
+        thickBorder = static_cast<int>(thickness * 1);
 
         for (int i = 0; i < 4; i++) 
         {
@@ -672,7 +749,7 @@ Result calculateLength(const Mat& input, const Params& params, double bias) {
         }
 
         cout << "物件长度: " << spring_length*bias << ", 物件宽度: " << spring_width*bias << endl;
-        float angle = rotatedRect.angle;
+        angle = rotatedRect.angle;
         cout << "检测角度: " << angle << "°" << endl;
         result.angles.push_back(angle);
     } 
