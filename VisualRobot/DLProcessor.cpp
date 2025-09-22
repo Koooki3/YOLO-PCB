@@ -14,7 +14,7 @@ DLProcessor::DLProcessor(QObject *parent)
     , nmsThreshold_(0.4f)
     , isModelLoaded_(false)
 {
-    initDefaultParams();
+    InitDefaultParams();
 }
 
 DLProcessor::~DLProcessor()
@@ -22,20 +22,23 @@ DLProcessor::~DLProcessor()
 
 }
 
-void DLProcessor::initDefaultParams()
+void DLProcessor::InitDefaultParams()
 {
     // 初始化默认参数
-    inputSize_ = Size(224, 224);  // 常用的分类模型输入尺寸
+    inputSize_ = Size(224, 224);                // 常用的分类模型输入尺寸
     meanValues_ = Scalar(104.0, 177.0, 123.0);  // ImageNet均值
     scaleFactor_ = 1.0;
-    swapRB_ = true;  // OpenCV默认BGR，很多模型需要RGB
+    swapRB_ = true;                             // OpenCV默认BGR，很多模型需要RGB
 
     // 默认二分类标签
     classLabels_ = {"Class_0", "Class_1"};
 }
 
-bool DLProcessor::initModel(const string& modelPath, const string& configPath)
+bool DLProcessor::InitModel(const string& modelPath, const string& configPath)
 {
+    // 变量定义
+    bool modelLoaded = false;  // 模型加载状态
+
     try 
     {
         // 加载深度学习模型
@@ -64,6 +67,7 @@ bool DLProcessor::initModel(const string& modelPath, const string& configPath)
         // net_.setPreferableTarget(dnn::DNN_TARGET_CUDA);
 
         isModelLoaded_ = true;
+        modelLoaded = true;
         qDebug() << "Model loaded successfully from:" << QString::fromStdString(modelPath);
         return true;
     }
@@ -75,23 +79,27 @@ bool DLProcessor::initModel(const string& modelPath, const string& configPath)
     }
 }
 
-void DLProcessor::setModelParams(float confThreshold, float nmsThreshold)
+void DLProcessor::SetModelParams(float confThreshold, float nmsThreshold)
 {
     confThreshold_ = confThreshold;
     nmsThreshold_ = nmsThreshold;
 }
 
-void DLProcessor::setClassLabels(const vector<string>& labels)
+void DLProcessor::SetClassLabels(const vector<string>& labels)
 {
     classLabels_ = labels;
     qDebug() << "Class labels updated. Total classes:" << classLabels_.size();
 }
 
-bool DLProcessor::loadClassLabels(const string& labelPath)
+bool DLProcessor::LoadClassLabels(const string& labelPath)
 {
+    // 变量定义
+    ifstream file(labelPath);  // 文件流对象
+    string line;               // 存储每行读取的内容
+    bool loadSuccess = false;  // 加载成功标志
+
     try 
     {
-        ifstream file(labelPath);
         if (!file.is_open()) 
         {
             qDebug() << "Cannot open label file:" << QString::fromStdString(labelPath);
@@ -99,7 +107,6 @@ bool DLProcessor::loadClassLabels(const string& labelPath)
         }
 
         classLabels_.clear();
-        string line;
         while (getline(file, line)) 
         {
             if (!line.empty()) 
@@ -118,6 +125,7 @@ bool DLProcessor::loadClassLabels(const string& labelPath)
             qDebug() << "  Class" << i << ":" << QString::fromStdString(classLabels_[i]);
         }
 
+        loadSuccess = true;
         return true;
     }
     catch (const exception& e) 
@@ -127,7 +135,7 @@ bool DLProcessor::loadClassLabels(const string& labelPath)
     }
 }
 
-bool DLProcessor::validateInput(const Mat& frame)
+bool DLProcessor::ValidateInput(const Mat& frame)
 {
     if (frame.empty()) 
     {
@@ -144,15 +152,20 @@ bool DLProcessor::validateInput(const Mat& frame)
     return true;
 }
 
-bool DLProcessor::classifyImage(const Mat& frame, ClassificationResult& result)
+bool DLProcessor::ClassifyImage(const Mat& frame, ClassificationResult& result)
 {
+    // 变量定义
+    Mat blob;                            // 预处理后的blob数据
+    vector<Mat> outs;                    // 网络输出结果
+    bool classificationSuccess = false;  // 分类成功标志
+
     if (!isModelLoaded_) 
     {
         emit errorOccurred("Model not loaded!");
         return false;
     }
 
-    if (!validateInput(frame)) 
+    if (!ValidateInput(frame)) 
     {
         return false;
     }
@@ -160,15 +173,14 @@ bool DLProcessor::classifyImage(const Mat& frame, ClassificationResult& result)
     try 
     {
         // 预处理
-        Mat blob = preProcess(frame);
+        blob = PreProcess(frame);
 
         // 前向传播
         net_.setInput(blob);
-        vector<Mat> outs;
         net_.forward(outs, net_.getUnconnectedOutLayersNames());
 
         // 后处理 - 二分类
-        result = postProcessClassification(outs);
+        result = PostProcessClassification(outs);
 
         if (result.isValid) 
         {
@@ -176,6 +188,7 @@ bool DLProcessor::classifyImage(const Mat& frame, ClassificationResult& result)
             qDebug() << "Classification result: Class" << result.classId
                      << "(" << QString::fromStdString(result.className) << ")"
                      << "Confidence:" << result.confidence;
+            classificationSuccess = true;
         }
 
         return result.isValid;
@@ -188,8 +201,12 @@ bool DLProcessor::classifyImage(const Mat& frame, ClassificationResult& result)
     }
 }
 
-bool DLProcessor::classifyBatch(const vector<Mat>& frames, vector<ClassificationResult>& results)
+bool DLProcessor::ClassifyBatch(const vector<Mat>& frames, vector<ClassificationResult>& results)
 {
+    // 变量定义
+    bool allSuccess = true;             // 所有图像分类是否成功
+    ClassificationResult singleResult;  // 单张图像分类结果
+
     if (!isModelLoaded_) 
     {
         emit errorOccurred("Model not loaded!");
@@ -199,13 +216,12 @@ bool DLProcessor::classifyBatch(const vector<Mat>& frames, vector<Classification
     results.clear();
     results.reserve(frames.size());
 
-    bool allSuccess = true;
+    // 批量处理所有图像
     for (const auto& frame : frames) 
     {
-        ClassificationResult result;
-        if (classifyImage(frame, result)) 
+        if (ClassifyImage(frame, singleResult)) 
         {
-            results.push_back(result);
+            results.push_back(singleResult);
         } 
         else 
         {
@@ -223,10 +239,14 @@ bool DLProcessor::classifyBatch(const vector<Mat>& frames, vector<Classification
     return allSuccess;
 }
 
-bool DLProcessor::processFrame(const Mat& frame, Mat& output)
+bool DLProcessor::ProcessFrame(const Mat& frame, Mat& output)
 {
-    ClassificationResult result;
-    if (!classifyImage(frame, result)) 
+    // 变量定义
+    ClassificationResult result;  // 分类结果
+    string text;                  // 显示的文本内容
+    Scalar borderColor;           // 边框颜色
+
+    if (!ClassifyImage(frame, result)) 
     {
         return false;
     }
@@ -235,20 +255,20 @@ bool DLProcessor::processFrame(const Mat& frame, Mat& output)
     output = frame.clone();
 
     // 添加文本标注
-    string text = result.className + ": " + to_string(result.confidence);
+    text = result.className + ": " + to_string(result.confidence);
     putText(output, text, Point(10, 30), FONT_HERSHEY_SIMPLEX, 1.0, Scalar(0, 255, 0), 2);
 
     // 根据分类结果添加边框颜色
-    Scalar borderColor = (result.classId == 1) ? Scalar(0, 255, 0) : Scalar(0, 0, 255);
+    borderColor = (result.classId == 1) ? Scalar(0, 255, 0) : Scalar(0, 0, 255);
     rectangle(output, Point(0, 0), Point(output.cols-1, output.rows-1), borderColor, 3);
 
     emit processingComplete(output);
     return true;
 }
 
-Mat DLProcessor::preProcess(const Mat& frame)
+Mat DLProcessor::PreProcess(const Mat& frame)
 {
-    Mat blob;
+    Mat blob;  // 存储预处理后的blob数据
 
     try 
     {
@@ -276,9 +296,12 @@ Mat DLProcessor::preProcess(const Mat& frame)
     return blob;
 }
 
-ClassificationResult DLProcessor::postProcessClassification(const vector<Mat>& outs)
+ClassificationResult DLProcessor::PostProcessClassification(const vector<Mat>& outs)
 {
-    ClassificationResult result;
+    // 变量定义
+    ClassificationResult result;  // 存储分类结果
+    Mat output;                   // 网络输出数据
+    bool isLogits = false;        // 是否为logits输出
 
     if (outs.empty()) 
     {
@@ -289,7 +312,7 @@ ClassificationResult DLProcessor::postProcessClassification(const vector<Mat>& o
     try 
     {
         // 获取第一个输出（通常分类模型只有一个输出）
-        Mat output = outs[0];
+        output = outs[0];
 
         // 确保输出是1D向量
         if (output.dims > 2) 
@@ -335,7 +358,6 @@ ClassificationResult DLProcessor::postProcessClassification(const vector<Mat>& o
             }
 
             // 检查是否是logits（值较大）
-            bool isLogits = false;
             for (size_t i = 0; i < output.total(); i++) 
             {
                 if (abs(output.at<float>(i)) > 10.0f) 
@@ -414,30 +436,35 @@ ClassificationResult DLProcessor::postProcessClassification(const vector<Mat>& o
     return result;
 }
 
-void DLProcessor::postProcess(Mat& frame, const vector<Mat>& outs)
+void DLProcessor::PostProcess(Mat& frame, const vector<Mat>& outs)
 {
+    // 变量定义
+    ClassificationResult result;  // 分类结果
+    string text;                  // 显示的文本内容
+    Scalar borderColor;           // 边框颜色
+
     // 兼容原接口的后处理方法
-    ClassificationResult result = postProcessClassification(outs);
+    result = PostProcessClassification(outs);
 
     if (result.isValid) 
     {
         // 在图像上绘制分类结果
-        string text = result.className + ": " + to_string(result.confidence);
+        text = result.className + ": " + to_string(result.confidence);
         putText(frame, text, Point(10, 30), FONT_HERSHEY_SIMPLEX, 1.0, Scalar(0, 255, 0), 2);
 
         // 根据分类结果添加边框颜色
-        Scalar borderColor = (result.classId == 1) ? Scalar(0, 255, 0) : Scalar(0, 0, 255);
+        borderColor = (result.classId == 1) ? Scalar(0, 255, 0) : Scalar(0, 0, 255);
         rectangle(frame, Point(0, 0), Point(frame.cols-1, frame.rows-1), borderColor, 3);
     }
 }
 
-void DLProcessor::setInputSize(const Size& size)
+void DLProcessor::SetInputSize(const Size& size)
 {
     inputSize_ = size;
     qDebug() << "Input size set to:" << size.width << "x" << size.height;
 }
 
-void DLProcessor::setPreprocessParams(const Scalar& mean, const Scalar& std, double scaleFactor, bool swapRB)
+void DLProcessor::SetPreprocessParams(const Scalar& mean, const Scalar& std, double scaleFactor, bool swapRB)
 {
     meanValues_ = mean;
     stdValues_ = std;
@@ -451,17 +478,17 @@ void DLProcessor::setPreprocessParams(const Scalar& mean, const Scalar& std, dou
     qDebug() << "  Swap RB:" << swapRB;
 }
 
-float DLProcessor::getConfidenceThreshold() const
+float DLProcessor::GetConfidenceThreshold() const
 {
     return confThreshold_;
 }
 
-float DLProcessor::getNMSThreshold() const
+float DLProcessor::GetNMSThreshold() const
 {
     return nmsThreshold_;
 }
 
-void DLProcessor::enableGPU(bool enable)
+void DLProcessor::EnableGPU(bool enable)
 {
     if (!isModelLoaded_) 
     {
@@ -493,15 +520,15 @@ void DLProcessor::enableGPU(bool enable)
     }
 }
 
-void DLProcessor::resetToDefaults()
+void DLProcessor::ResetToDefaults()
 {
     confThreshold_ = 0.5f;
     nmsThreshold_ = 0.4f;
-    initDefaultParams();
+    InitDefaultParams();
     qDebug() << "Parameters reset to defaults";
 }
 
-string DLProcessor::getModelInfo() const
+string DLProcessor::GetModelInfo() const
 {
     if (!isModelLoaded_) 
     {
@@ -517,11 +544,14 @@ string DLProcessor::getModelInfo() const
     return info;
 }
 
-bool DLProcessor::saveClassLabels(const string& labelPath) const
+bool DLProcessor::SaveClassLabels(const string& labelPath) const
 {
+    // 变量定义
+    ofstream file(labelPath);  // 输出文件流
+    bool saveSuccess = false;  // 保存成功标志
+
     try 
     {
-        ofstream file(labelPath);
         if (!file.is_open()) 
         {
             qDebug() << "Cannot create label file:" << QString::fromStdString(labelPath);
@@ -535,6 +565,7 @@ bool DLProcessor::saveClassLabels(const string& labelPath) const
         file.close();
 
         qDebug() << "Saved" << classLabels_.size() << "class labels to:" << QString::fromStdString(labelPath);
+        saveSuccess = true;
         return true;
     } 
     catch (const exception& e) 
@@ -544,15 +575,20 @@ bool DLProcessor::saveClassLabels(const string& labelPath) const
     }
 }
 
-void DLProcessor::clearModel()
+void DLProcessor::ClearModel()
 {
     net_ = dnn::Net();
     isModelLoaded_ = false;
     qDebug() << "Model cleared";
 }
 
-bool DLProcessor::warmUp()
+bool DLProcessor::WarmUp()
 {
+    // 变量定义
+    Mat dummyInput;               // 虚拟输入图像
+    ClassificationResult result;  // 分类结果
+    bool warmUpSuccess = false;   // 预热成功标志
+
     if (!isModelLoaded_) 
     {
         qDebug() << "Cannot warm up: model not loaded";
@@ -562,13 +598,12 @@ bool DLProcessor::warmUp()
     try 
     {
         // 创建一个虚拟输入进行预热
-        Mat dummyInput = Mat::zeros(inputSize_, CV_8UC3);
-        ClassificationResult result;
+        dummyInput = Mat::zeros(inputSize_, CV_8UC3);
 
         qDebug() << "Warming up model...";
-        bool success = classifyImage(dummyInput, result);
+        warmUpSuccess = ClassifyImage(dummyInput, result);
 
-        if (success) 
+        if (warmUpSuccess) 
         {
             qDebug() << "Model warm-up completed successfully";
         } 
@@ -577,7 +612,7 @@ bool DLProcessor::warmUp()
             qDebug() << "Model warm-up failed";
         }
 
-        return success;
+        return warmUpSuccess;
     } 
     catch (const Exception& e) 
     {

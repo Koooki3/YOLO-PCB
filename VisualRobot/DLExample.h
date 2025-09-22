@@ -45,71 +45,71 @@ private slots:
     /**
      * @brief 浏览并选择模型文件
      */
-    void browseModel();
+    void BrowseModel();
     
     /**
      * @brief 浏览并选择标签文件
      */
-    void browseLabels();
+    void BrowseLabels();
     
     /**
      * @brief 加载标签文件
      */
-    void loadLabels();
+    void LoadLabels();
     
     /**
      * @brief 加载深度学习模型
      */
-    void loadModel();
+    void LoadModel();
     
     /**
      * @brief 设置模型参数
      */
-    void setParameters();
+    void SetParameters();
     
     /**
      * @brief 选择要分类的图像
      */
-    void selectImage();
+    void SelectImage();
     
     /**
      * @brief 对单张图像进行分类
      */
-    void classifyImage();
+    void ClassifyImage();
     
     /**
      * @brief 批量分类多张图像
      */
-    void batchClassify();
+    void BatchClassify();
     
     /**
      * @brief 处理单张图像分类完成信号
      * @param result 分类结果
      */
-    void onClassificationComplete(const ClassificationResult& result);
+    void OnClassificationComplete(const ClassificationResult& result);
     
     /**
      * @brief 处理批量分类完成信号
      * @param results 批量分类结果
      */
-    void onBatchProcessingComplete(const vector<ClassificationResult>& results);
+    void OnBatchProcessingComplete(const vector<ClassificationResult>& results);
     
     /**
      * @brief 处理深度学习错误信号
      * @param error 错误信息
      */
-    void onDLError(const QString& error);
+    void OnDLError(const QString& error);
 
 private:
     /**
      * @brief 初始化用户界面
      */
-    void setupUI();
+    void SetupUI();
     
     /**
      * @brief 连接信号和槽
      */
-    void connectSignals();
+    void ConnectSignals();
 
 private:
     // 核心组件

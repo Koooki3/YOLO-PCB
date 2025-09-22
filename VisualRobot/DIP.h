@@ -38,16 +38,16 @@ struct Result
     Mat image;
 };
 
-bool createDirectory(const string& path);
+bool CreateDirectory(const string& path);
 
-int TransMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& PixelCoord, Matrix3d& matrix, const string& filename);
+int CalculateTransformationMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& PixelCoord, Matrix3d& matrix, const string& filename = "");
 
-Matrix3d readTransformationMatrix(const string& filePath);
+Matrix3d ReadTransformationMatrix(const string& filename);
 
 // OpenCV版本的函数声明
-int Algorithm_opencv(const string& imgPath, vector<double>& Row, vector<double>& Col);
-int getCoords_opencv(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double size);
+int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<double>& Col);
+int GetCoordsOpenCV(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double size = 100.0);
 
-Result calculateLength(const Mat& input, const Params& params, double bias);
+Result CalculateLength(const Mat& input, const Params& params, double bias);
 
 #endif // DIP_H

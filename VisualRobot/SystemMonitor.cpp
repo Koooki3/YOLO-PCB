@@ -42,22 +42,35 @@ void SystemMonitor::stopMonitoring()
     m_updateTimer->stop();
 }
 
-float SystemMonitor::getCpuUsage()
+float SystemMonitor::GetCpuUsage()
 {
+    // 变量定义
+    ifstream statFile;               // /proc/stat 文件流
+    string line;                     // 读取的文件行内容
+    istringstream iss;               // 字符串流用于解析数据
+    string cpu;                      // CPU标识符
+    unsigned long long totalUser;    // 用户态CPU时间
+    unsigned long long totalUserLow; // 低优先级用户态CPU时间
+    unsigned long long totalSys;     // 内核态CPU时间
+    unsigned long long totalIdle;    // 空闲CPU时间
+    unsigned long long iowait;       // I/O等待时间
+    unsigned long long irq;          // 中断时间
+    unsigned long long softirq;      // 软中断时间
+    unsigned long long steal;        // 虚拟化环境中的steal时间
+
     // 直接尝试读取/proc/stat，不管是什么平台
-    ifstream statFile("/proc/stat");
+    statFile.open("/proc/stat");
+    
     if (!statFile.is_open()) 
     {
         qDebug() << "Can't open /proc/stat file";
         return 0.0f;
     }
 
-    string line;
+    // 读取CPU统计信息
     if (getline(statFile, line)) 
     {
-        istringstream iss(line);
-        string cpu;
-        unsigned long long totalUser, totalUserLow, totalSys, totalIdle, iowait, irq, softirq, steal;
+        iss.str(line);
         
         // 尝试读取所有CPU时间值
         if (!(iss >> cpu >> totalUser >> totalUserLow >> totalSys >> totalIdle 
@@ -67,9 +80,9 @@ float SystemMonitor::getCpuUsage()
             return 0.0f;
         }
         
+        // 首次运行，初始化数值
         if (m_lastTotalUser == 0) 
         {
-            // 首次运行，初始化数值
             m_lastTotalUser = totalUser;
             m_lastTotalUserLow = totalUserLow;
             m_lastTotalSys = totalSys;
@@ -107,8 +120,15 @@ float SystemMonitor::getCpuUsage()
     return 0.0f;
 }
 
-float SystemMonitor::getMemoryUsage()
+float SystemMonitor::GetMemoryUsage()
 {
+    // 变量定义
+    unsigned long totalMem = 0;    // 总内存大小（KB）
+    unsigned long freeMem = 0;     // 空闲内存大小（KB）
+    unsigned long buffers = 0;     // 缓冲区大小（KB）
+    unsigned long cached = 0;      // 缓存大小（KB）
+    string line;                   // 读取的每行数据
+
     // 尝试从/proc/meminfo读取内存信息
     ifstream memFile("/proc/meminfo");
     if (!memFile.is_open()) 
@@ -116,9 +136,6 @@ float SystemMonitor::getMemoryUsage()
         qDebug() << "Can't open /proc/meminfo file";
         return 0.0f;
     }
-
-    unsigned long totalMem = 0, freeMem = 0, buffers = 0, cached = 0;
-    string line;
     
     while (getline(memFile, line)) 
     {
@@ -154,33 +171,42 @@ float SystemMonitor::getMemoryUsage()
     return min(100.0f, max(0.0f, memUsage));
 }
 
-float SystemMonitor::getTemperature()
+float SystemMonitor::GetTemperature()
 {
+    // 变量定义
+    QStringList tempPaths;          // 温度传感器可能路径列表
+    QFile tempFile;                 // 温度文件对象
+    QString tempStr;                // 读取的温度字符串
+    bool ok;                        // 转换结果标志
+    float tempValue;                // 温度值
+
     // 尝试多个可能的温度传感器路径
-    QStringList tempPaths = {
+    tempPaths = {
         "/sys/class/thermal/thermal_zone0/temp",  // 标准路径
         "/sys/devices/virtual/thermal/thermal_zone0/temp", // 虚拟设备路径
         "/sys/class/hwmon/hwmon0/temp1_input"    // hwmon路径
     };
 
+    // 遍历所有可能的温度传感器路径
     for (const QString& path : tempPaths) 
     {
-        QFile tempFile(path);
+        tempFile.setFileName(path);
+        
         if (tempFile.exists() && tempFile.open(QIODevice::ReadOnly)) 
         {
-            QString tempStr = tempFile.readAll().trimmed();
+            tempStr = tempFile.readAll().trimmed();
             tempFile.close();
             
-            bool ok;
-            float temp = tempStr.toFloat(&ok);
+            tempValue = tempStr.toFloat(&ok);
+            
             if (ok) 
             {
                 // 根据读取值的范围来决定是否需要转换单位
-                if (temp > 1000) 
+                if (tempValue > 1000) 
                 {
-                    temp /= 1000.0f; // 转换为摄氏度
+                    tempValue /= 1000.0f; // 转换为摄氏度
                 }
-                return temp;
+                return tempValue;
             } 
             else 
             {
@@ -197,14 +223,15 @@ float SystemMonitor::getTemperature()
     QProcess process;
     process.start("sh", QStringList() << "-c" << "cat /sys/class/thermal/thermal_zone*/temp");
     process.waitForFinished(1000);
+    
     if (process.exitCode() == 0) 
     {
         QString output = process.readAllStandardOutput().trimmed();
-        bool ok;
-        float temp = output.toFloat(&ok) / 1000.0f;
+        tempValue = output.toFloat(&ok) / 1000.0f;
+        
         if (ok) 
         {
-            return temp;
+            return tempValue;
         }
     }
 
@@ -214,9 +241,11 @@ float SystemMonitor::getTemperature()
 
 void SystemMonitor::updateSystemStats()
 {
-    float cpuUsage = getCpuUsage();
-    float memUsage = getMemoryUsage();
-    float temperature = getTemperature();
+    // 获取系统状态数据
+    float cpuUsage = GetCpuUsage();
+    float memUsage = GetMemoryUsage();
+    float temperature = GetTemperature();
     
+    // 发送系统状态更新信号
     emit systemStatsUpdated(cpuUsage, memUsage, temperature);
 }
