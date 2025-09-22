@@ -40,13 +40,13 @@ struct Result
 
 bool CreateDirectory(const string& path);
 
-int CalculateTransformationMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& PixelCoord, Matrix3d& matrix, const string& filename = "");
+int CalculateTransformationMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& PixelCoord, Matrix3d& matrix, const string& filename);
 
 Matrix3d ReadTransformationMatrix(const string& filename);
 
 // OpenCV版本的函数声明
 int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<double>& Col);
-int GetCoordsOpenCV(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double size = 100.0);
+int GetCoordsOpenCV(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double size);
 
 Result CalculateLength(const Mat& input, const Params& params, double bias);
 

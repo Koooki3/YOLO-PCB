@@ -78,6 +78,8 @@ MainWindow::MainWindow(QWidget *parent) :
 
     // 启动监控
     m_sysMonitor->startMonitoring(1000); // 每秒更新一次
+
+    ui->genMatrix->setEnabled(false);
 }
 
 MainWindow::~MainWindow()
@@ -367,7 +369,6 @@ void MainWindow::on_bnOpen_clicked()
     ui->tbFrameRate->setEnabled(true);
     ui->bnSetParam->setEnabled(true);
     ui->bnGetParam->setEnabled(true);
-
 }
 
 void MainWindow::on_bnClose_clicked()
@@ -678,7 +679,7 @@ void MainWindow::on_pushButton_clicked()
     if (needDetection) 
     {
         //OpenCV版本
-        int ProcessedOK = Algorithm_opencv(fpath.toStdString(), Row, Col);
+        int ProcessedOK = DetectRectangleOpenCV(fpath.toStdString(), Row, Col);
         cout << "原始数据" << endl;
         cout << "Row = [";
         for (size_t i = 0; i < Row.size(); ++i)
@@ -892,8 +893,8 @@ void MainWindow::on_GetLength_clicked()
     params.areaMin = 100.0;
 
     // 处理图像
-    double bias = 30.0 / 911.5248;
-    Result result = calculateLength(inputImage, params, bias);
+    double bias = 1.0;
+    Result result = CalculateLength(inputImage, params, bias);
 
     // 保存输出图像
     if (!result.image.empty()) 
@@ -936,14 +937,14 @@ void MainWindow::on_GetLength_clicked()
     AppendLog(QString("物件宽度（mm）：%1").arg((double)result.widths[0]), INFO);
     AppendLog(QString("物件倾角（°）：%1").arg((double)result.angles[0]), INFO);
 
-    drawOverlayOnDisplay2((double)result.heights[0], (double)result.widths[0], (double)result.angles[0]);
+    DrawOverlayOnDisplay2((double)result.heights[0], (double)result.widths[0], (double)result.angles[0]);
 }
 
 void MainWindow::on_genMatrix_clicked()
 {
     WorldCoord.clear();
     PixelCoord.clear();
-    int getCoordsOk = getCoords_opencv(WorldCoord, PixelCoord, 100.0);
+    int getCoordsOk = GetCoordsOpenCV(WorldCoord, PixelCoord, 100.0);
     if (getCoordsOk != 0)
     {
         AppendLog("坐标获取错误", ERROR);
@@ -977,7 +978,7 @@ void MainWindow::on_genMatrix_clicked()
     Matrix3d transformationMatrix;
 
     // 调用函数计算变换矩阵并保存到文件
-    int result = TransMatrix(WorldCoord, PixelCoord, transformationMatrix, "../matrix.bin");
+    int result = CalculateTransformationMatrix(WorldCoord, PixelCoord, transformationMatrix, "../matrix.bin");
 
     if (result == 0)
     {
@@ -1075,7 +1076,7 @@ void MainWindow::on_btnOpenManual_clicked()
     AppendLog("已尝试打开调试信息手册", INFO);
 }
 
-void MainWindow::drawOverlayOnDisplay2(double length, double width, double angle)
+void MainWindow::DrawOverlayOnDisplay2(double length, double width, double angle)
 {
     // 使用value方式获取pixmap
     QPixmap src = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue);

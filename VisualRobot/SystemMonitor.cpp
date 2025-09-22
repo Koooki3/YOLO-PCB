@@ -174,14 +174,13 @@ float SystemMonitor::GetMemoryUsage()
 float SystemMonitor::GetTemperature()
 {
     // 变量定义
-    QStringList tempPaths;          // 温度传感器可能路径列表
     QFile tempFile;                 // 温度文件对象
     QString tempStr;                // 读取的温度字符串
     bool ok;                        // 转换结果标志
     float tempValue;                // 温度值
 
     // 尝试多个可能的温度传感器路径
-    tempPaths = {
+    QStringList tempPaths = {
         "/sys/class/thermal/thermal_zone0/temp",  // 标准路径
         "/sys/devices/virtual/thermal/thermal_zone0/temp", // 虚拟设备路径
         "/sys/class/hwmon/hwmon0/temp1_input"    // hwmon路径
