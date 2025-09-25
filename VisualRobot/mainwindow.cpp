@@ -61,17 +61,20 @@ MainWindow::MainWindow(QWidget *parent) :
     m_cpuLabel = new QLabel(this);
     m_memLabel = new QLabel(this);
     m_tempLabel = new QLabel(this);
+    m_sharpnessLabel = new QLabel(this);
 
     // 设置标签样式
     QString labelStyle = "QLabel { color: white; background-color: rgba(0, 0, 0, 150); padding: 5px; border-radius: 5px; }";
     m_cpuLabel->setStyleSheet(labelStyle);
     m_memLabel->setStyleSheet(labelStyle);
     m_tempLabel->setStyleSheet(labelStyle);
+    m_sharpnessLabel->setStyleSheet(labelStyle);
 
     // 添加标签到状态栏
     statusBar()->addWidget(m_cpuLabel);
     statusBar()->addWidget(m_memLabel);
     statusBar()->addWidget(m_tempLabel);
+    statusBar()->addWidget(m_sharpnessLabel);
 
     // 连接监控信号
     connect(m_sysMonitor, &SystemMonitor::systemStatsUpdated, this, &MainWindow::updateSystemStats);
@@ -80,6 +83,9 @@ MainWindow::MainWindow(QWidget *parent) :
     m_sysMonitor->startMonitoring(1000); // 每秒更新一次
 
     ui->genMatrix->setEnabled(false);
+
+    // 连接清晰度信号
+    connect(this, &MainWindow::sharpnessValueUpdated, this, &MainWindow::updateSharpnessDisplay);
 }
 
 MainWindow::~MainWindow()
@@ -154,6 +160,7 @@ void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INF
     }
 
     // 2) 缓存：深拷贝最新一帧到成员变量
+    vector<unsigned char> tempFrame;  // 临时变量用于清晰度计算
     if (pUser)
     {
         MainWindow* pMainWindow = static_cast<MainWindow*>(pUser);  // 再次获取 MainWindow 指针
@@ -162,6 +169,40 @@ void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INF
         memcpy(pMainWindow->m_lastFrame.data(), pData, pFrameInfo->nFrameLen);
         pMainWindow->m_lastInfo = *pFrameInfo;   // 结构体按值拷贝
         pMainWindow->m_hasFrame = true;
+
+        // 拷贝一份到临时变量，用于清晰度计算
+        tempFrame = pMainWindow->m_lastFrame;
+    }
+
+    // 3) 计算清晰度并发射信号
+    if (pUser && !tempFrame.empty())
+    {
+        MainWindow* pMainWindow = static_cast<MainWindow*>(pUser);
+        cv::Mat grayImage;
+        // 根据像素类型转换到灰度图
+        switch(pFrameInfo->enPixelType) {
+            case PixelType_Gvsp_Mono8:
+                grayImage = cv::Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC1, tempFrame.data());
+                break;
+            case PixelType_Gvsp_RGB8_Packed:
+                {
+                    cv::Mat colorImage = cv::Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC3, tempFrame.data());
+                    cv::cvtColor(colorImage, grayImage, cv::COLOR_RGB2GRAY);
+                }
+                break;
+            case PixelType_Gvsp_BGR8_Packed:
+                {
+                    cv::Mat colorImage = cv::Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC3, tempFrame.data());
+                    cv::cvtColor(colorImage, grayImage, cv::COLOR_BGR2GRAY);
+                }
+                break;
+            default:
+                // 不支持的格式，跳过清晰度计算
+                return;
+        }
+        double sharpness = pMainWindow->calculateTenengradSharpness(grayImage);
+        // 发射信号
+        emit pMainWindow->sharpnessValueUpdated(sharpness);
     }
 }
 
@@ -1128,4 +1169,60 @@ void MainWindow::on_CallDLwindow_clicked()
     dlExample->setAttribute(Qt::WA_DeleteOnClose);
     dlExample->show();
     AppendLog("深度学习二分类示例窗口已打开", INFO);
+}
+
+// Tenengrad清晰度计算函数
+double MainWindow::calculateTenengradSharpness(const cv::Mat& image)
+{
+    cv::Mat imageGrey;
+    
+    // 转换为灰度图
+    if (image.channels() == 3) {
+        cv::cvtColor(image, imageGrey, cv::COLOR_BGR2GRAY);
+    } else {
+        imageGrey = image.clone();
+    }
+    
+    cv::Mat imageSobel;
+    // 计算Sobel梯度
+    cv::Sobel(imageGrey, imageSobel, CV_16U, 1, 1);
+    
+    // 计算梯度的平方和
+    double meanValue = cv::mean(imageSobel)[0];
+    
+    return meanValue;
+}
+
+// 更新清晰度显示
+void MainWindow::updateSharpnessDisplay(double sharpness)
+{
+    // 更新状态栏的清晰度标签
+    if (m_sharpnessLabel) {
+        QString sharpnessText = QString("清晰度: %1").arg(sharpness, 0, 'f', 2);
+        m_sharpnessLabel->setText(sharpnessText);
+    }
+    
+    // 同时在日志中记录清晰度值（可选）
+    AppendLog(QString("当前图像清晰度: %1").arg(sharpness, 0, 'f', 2), INFO);
+}
+
+// 在图像上绘制清晰度叠加信息（保留函数，但当前主要用于状态栏显示）
+void MainWindow::drawSharpnessOverlay(double sharpness)
+{
+    // 此函数目前主要用于状态栏显示
+    // 如果需要直接在图像上叠加显示，可以在此处添加OpenCV绘制逻辑
+    // 但考虑到性能，建议使用状态栏显示
+    
+    // 示例：如果需要直接在图像上绘制，可以使用以下代码
+    /*
+    if (m_hasFrame && !m_lastFrame.empty()) {
+        // 将缓存数据转换为OpenCV Mat
+        cv::Mat image(m_lastInfo.nHeight, m_lastInfo.nWidth, CV_8UC1, m_lastFrame.data());
+        
+        // 在图像上绘制清晰度文本
+        std::string sharpnessText = "Sharpness: " + std::to_string(sharpness);
+        cv::putText(image, sharpnessText, cv::Point(10, 30), 
+                   cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(255, 255, 255), 2);
+    }
+    */
 }
