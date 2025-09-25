@@ -11,6 +11,8 @@
 - 📊 实时系统状态监控
 - 🛠️ 可配置的相机参数设置
 - 📈 特征检测和匹配功能
+- 🔍 Halcon 图像处理集成
+- 📷 图像去畸变处理
 
 ## 📁 项目结构
 
@@ -18,7 +20,7 @@
 VisualRobot/
 ├── Data/                          # 数据文件目录
 │   ├── Datasets/                  # 训练数据集
-│   │   └── cats/                  # 猫类图像
+│   │   ├── cats/                  # 猫类图像
 │   │   └── dogs/                  # 狗类图像
 │   ├── Labels/                    # 标签文件
 │   │   └── class_labels.txt       # 类别标签文件
@@ -29,6 +31,9 @@ VisualRobot/
 │   ├── 调试信息手册.md             # 系统调试和维护手册 (Markdown)
 │   ├── 调试信息手册.pdf            # 系统调试和维护手册 (PDF)
 │   └── 深度学习二分类使用指南.md    # 深度学习使用指南
+├── HalconCode/                    # Halcon 图像处理代码
+│   ├── Halcon.cpp                 # Halcon 功能实现
+│   └── Halcon.h                   # Halcon 功能头文件
 ├── Img/                           # 图像资源目录
 │   ├── capture.jpg                # 相机采集的原始图像
 │   ├── cat.jpg                    # 猫示例图像
@@ -50,8 +55,6 @@ VisualRobot/
 │   ├── DLProcessor.h              # 深度学习处理头文件
 │   ├── featureDetect.cpp          # 特征检测实现
 │   ├── featureDetect.h            # 特征检测头文件
-│   ├── Format.cpp                 # 数据格式转换实现
-│   ├── Format.h                   # 数据格式转换头文件
 │   ├── main.cpp                   # 程序入口点
 │   ├── mainwindow.cpp             # 主窗口实现
 │   ├── mainwindow.h               # 主窗口头文件
@@ -61,6 +64,8 @@ VisualRobot/
 │   ├── MvCamera.h                 # 工业相机控制头文件
 │   ├── SystemMonitor.cpp          # 系统监控实现
 │   ├── SystemMonitor.h            # 系统监控头文件
+│   ├── Undistort.cpp              # 图像去畸变处理实现
+│   ├── Undistort.h                # 图像去畸变处理头文件
 │   ├── VisualRobot_zh_EN.qm       # 编译后的翻译文件
 │   ├── VisualRobot_zh_EN.ts       # 中英文翻译源文件
 │   ├── VisualRobot.pro            # Qt 项目配置文件
@@ -68,6 +73,7 @@ VisualRobot/
 ├── detectedImg.jpg                # 最新检测结果图像
 ├── feature_matches.jpg            # 特征匹配结果图像
 ├── matrix.bin                     # 系统配置矩阵文件
+├── test.jpg                       # 测试图像
 └── README.md                      # 项目说明文档
 ```
 
@@ -79,10 +85,15 @@ VisualRobot/
 - **图像处理** - `DIP.*` 数字图像处理，包含图像增强和特征检测
 - **深度学习** - `DLProcessor.*`, `DLExample.*` 深度学习图像分类处理
 - **特征检测** - `featureDetect.*` 图像特征检测和匹配
-- **数据格式** - `Format.*` 数据格式转换，处理不同格式间的转换
 - **系统监控** - `SystemMonitor.*` 系统监控，追踪性能和资源使用
 - **数据处理** - `DataProcessor.*` 通用数据处理功能
+- **图像去畸变** - `Undistort.*` 相机畸变校正处理
 - **用户界面** - `mainwindow.*` 主窗口实现，包含界面逻辑
+- **系统统计** - `mainwindow_systemstats.cpp` 系统统计界面实现
+
+#### 📂 Halcon 代码 (HalconCode/)
+
+- **Halcon 集成** - `Halcon.*` Halcon 图像处理功能集成
 
 #### 📂 数据文件 (Data/)
 
@@ -108,6 +119,8 @@ VisualRobot/
 - `main.cpp` - 程序入口点，负责初始化应用程序、配置日志系统和启动主界面
 - `matrix.bin` - 系统配置矩阵文件，存储相机和算法参数
 - `resnet34_cat_dog_classifier.onnx` - 预训练的深度学习模型，用于猫狗图像分类
+- `Halcon.cpp/.h` - Halcon 图像处理功能集成
+- `Undistort.cpp/.h` - 相机畸变校正处理模块
 
 ## 💡 核心模块
 
@@ -130,6 +143,16 @@ VisualRobot/
 - 关键点检测
 - 特征描述符提取
 - 图像匹配和比对
+
+### Halcon 处理模块 (Halcon)
+- Halcon 图像算法集成
+- 高级图像处理功能
+- 工业视觉算法应用
+
+### 去畸变模块 (Undistort)
+- 相机畸变校正
+- 图像几何变换
+- 标定参数应用
 
 ### 系统监控模块 (SystemMonitor)
 - 实时性能监控
@@ -250,4 +273,4 @@ cd VisualRobot
 
 ---
 
-最后更新日期：2025年9月15日
+最后更新日期：2025年9月22日
