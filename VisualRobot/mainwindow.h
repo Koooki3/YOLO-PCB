@@ -12,6 +12,7 @@
 #include "SystemMonitor.h"
 #include <QLabel>
 #include "DLExample.h"
+#include "MvCameraControl.h"
 
 using namespace std;
 
@@ -22,6 +23,9 @@ class MainWindow;
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
+
+signals:
+    void sharpnessValueUpdated(double sharpness);
 
 public:
     explicit MainWindow(QWidget *parent = 0);
@@ -92,10 +96,17 @@ private:
     QLabel* m_cpuLabel;
     QLabel* m_memLabel;
     QLabel* m_tempLabel;
+    QLabel* m_sharpnessLabel;  // 清晰度显示标签
 
 private slots:
     void updateSystemStats(float cpuUsage, float memUsage, float temperature);
     void on_btnOpenManual_clicked();
+    void updateSharpnessDisplay(double sharpness);
+
+private:
+    // 清晰度计算相关
+    double calculateTenengradSharpness(const cv::Mat& image);
+    void drawSharpnessOverlay(double sharpness);
 
 };
 
