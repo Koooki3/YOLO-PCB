@@ -112,6 +112,7 @@ private:
     QVector<QPoint> m_polygonPoints;          // 存储多边形点坐标
     QPixmap m_originalPixmap;                 // 原始图片
     bool m_isImageLoaded;                     // 标记是否有图片加载
+    bool eventFilter(QObject* obj, QEvent* event);
     void setupPolygonDrawing();               // 初始化多边形绘制功能
     void handleMouseClickOnDisplay2(const QPoint& pos); // 处理鼠标点击
     void handleEnterKeyPress();               // 处理Enter键按下

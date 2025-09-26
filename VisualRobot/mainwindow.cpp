@@ -86,9 +86,6 @@ MainWindow::MainWindow(QWidget *parent) :
 
     // 连接清晰度信号
     connect(this, &MainWindow::sharpnessValueUpdated, this, &MainWindow::updateSharpnessDisplay);
-
-    // 初始化实时框选功能
-    setupRealTimeDetection();
     
     // 初始化多边形绘制功能
     setupPolygonDrawing();
