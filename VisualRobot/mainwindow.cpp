@@ -1258,8 +1258,9 @@ void MainWindow::setupPolygonDrawing()
     m_polygonPoints.clear();
     m_isImageLoaded = false;
     
-    // 设置widgetDisplay_2接受鼠标事件
+    // 设置widgetDisplay_2接受鼠标和键盘事件
     ui->widgetDisplay_2->setMouseTracking(true);
+    ui->widgetDisplay_2->setFocusPolicy(Qt::StrongFocus); // 允许获得焦点
     ui->widgetDisplay_2->installEventFilter(this);
     
     AppendLog("多边形绘制功能已初始化", INFO);
@@ -1284,6 +1285,16 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
             }
         }
     }
+    
+    // 如果widgetDisplay_2有焦点，也捕获主窗口的Enter键事件
+    if (ui->widgetDisplay_2->hasFocus() && event->type() == QEvent::KeyPress) {
+        QKeyEvent* keyEvent = static_cast<QKeyEvent*>(event);
+        if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) {
+            handleEnterKeyPress();
+            return true;
+        }
+    }
+    
     return QMainWindow::eventFilter(obj, event);
 }
 
@@ -1295,6 +1306,9 @@ void MainWindow::handleMouseClickOnDisplay2(const QPoint& pos)
         AppendLog("请在widgetDisplay_2上显示图片后再进行点击", WARNNING);
         return;
     }
+    
+    // 让widgetDisplay_2获得焦点，以便接收键盘事件
+    ui->widgetDisplay_2->setFocus();
     
     // 保存原始图片（如果尚未保存）
     if (!m_isImageLoaded) {
@@ -1328,6 +1342,10 @@ void MainWindow::handleMouseClickOnDisplay2(const QPoint& pos)
         painter.setPen(QPen(Qt::green, 2, Qt::DashLine));
         for (int i = 1; i < m_polygonPoints.size(); ++i) {
             painter.drawLine(m_polygonPoints[i-1], m_polygonPoints[i]);
+        }
+        // 如果是最后一个点，连接到第一个点形成闭合多边形预览
+        if (m_polygonPoints.size() >= 3) {
+            painter.drawLine(m_polygonPoints.last(), m_polygonPoints.first());
         }
     }
     
