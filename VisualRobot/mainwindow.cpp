@@ -782,7 +782,28 @@ void MainWindow::on_pushButton_clicked()
         ui->widgetDisplay_2->setPixmap(scaledPixmap);
         ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
 
-        AppendLog("图片显示成功", INFO);
+        AppendLog("检测后图像显示成功", INFO);
+    }
+    else
+    {
+        QString imagePath = "../Img/capture.jpg";
+
+        // 加载图片
+        QPixmap pixmap(imagePath);
+        if (pixmap.isNull())
+        {
+            QMessageBox::warning(this, "加载图片失败", "无法加载保存的图片！");
+            return;
+        }
+
+        // 缩放图片以适应QLabel大小，保持宽高比
+        QPixmap scaledPixmap = pixmap.scaled(ui->widgetDisplay_2->size(),
+                                             Qt::KeepAspectRatio,
+                                             Qt::SmoothTransformation);
+        ui->widgetDisplay_2->setPixmap(scaledPixmap);
+        ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
+
+        AppendLog("原始图像显示成功", INFO);
     }
 }
 
@@ -972,7 +993,7 @@ void MainWindow::on_GetLength_clicked()
     ui->widgetDisplay_2->setPixmap(scaledPixmap);
     ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
 
-    AppendLog("图片显示成功", INFO);
+    AppendLog("检测后图像显示成功", INFO);
     AppendLog("检长算法执行完成", INFO);
     AppendLog(QString("物件长度（mm）：%1").arg((double)result.heights[0]), INFO);
     AppendLog(QString("物件宽度（mm）：%1").arg((double)result.widths[0]), INFO);
