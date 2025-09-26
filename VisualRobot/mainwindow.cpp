@@ -1059,7 +1059,7 @@ void MainWindow::on_genMatrix_clicked()
     if (result == 0)
     {
         cout << "变换矩阵计算并保存成功!" << endl;
-        AppendLog("变换矩阵计算并保存成功", ERROR);
+        AppendLog("变换矩阵计算并保存成功", INFO);
 
         // 使用变换矩阵将像素坐标转换回世界坐标
         cout << endl << "=== 使用变换矩阵转换像素坐标 ===" << endl;
