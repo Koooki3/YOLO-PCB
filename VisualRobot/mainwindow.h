@@ -13,8 +13,6 @@
 #include <QLabel>
 #include "DLExample.h"
 #include "MvCameraControl.h"
-#include "ImageDisplayWidget.h"
-#include "RegionDetector.h"
 
 using namespace std;
 
@@ -109,16 +107,6 @@ private:
     // 清晰度计算相关
     double calculateTenengradSharpness(const cv::Mat& image);
     void drawSharpnessOverlay(double sharpness);
-
-    // 实时框选功能相关
-    ImageDisplayWidget* m_imageDisplayWidget;
-    RegionDetector* m_regionDetector;
-    bool m_enableRealTimeDetection;
-    int m_detectionBias;
-    
-    void setupRealTimeDetection();
-    void processFrameForRealTimeDetection(const cv::Mat& frame);
-    void enableRealTimeDetection(bool enable);
 
 };
 

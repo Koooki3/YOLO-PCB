@@ -27,9 +27,7 @@ SOURCES += \
     main.cpp \
     mainwindow.cpp \
     mainwindow_systemstats.cpp \
-    DLExample.cpp \
-    ImageDisplayWidget.cpp \
-    RegionDetector.cpp
+    DLExample.cpp
 
 HEADERS += \
     DIP.h \
@@ -38,9 +36,7 @@ HEADERS += \
     MvCamera.h \
     SystemMonitor.h \
     mainwindow.h \
-    DLExample.h \
-    ImageDisplayWidget.h \
-    RegionDetector.h
+    DLExample.h
 
 FORMS += \
     mainwindow.ui
