@@ -32,6 +32,7 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 #include <string.h>
+#include <QPainterPath>
 
 #define ERROR 2
 #define WARNNING 1
@@ -493,6 +494,8 @@ void MainWindow::on_bnStart_clicked()
 
     ui->bnStart->setEnabled(false);
     ui->bnStop->setEnabled(true);
+    ui->pushButton->setEnabled(true);
+    ui->GetLength->setEnabled(false);
     if (true == ui->bnTriggerMode->isChecked() && ui->cbSoftTrigger->isChecked())
     {
         ui->bnTriggerExec->setEnabled(true);
@@ -514,6 +517,8 @@ void MainWindow::on_bnStop_clicked()
     ui->bnStart->setEnabled(true);
     ui->bnStop->setEnabled(false);
     ui->bnTriggerExec->setEnabled(false);
+    ui->pushButton->setEnabled(false);
+    ui->GetLength->setEnabled(false);
 }
 
 void MainWindow::on_cbSoftTrigger_clicked()
@@ -718,6 +723,9 @@ void MainWindow::on_pushButton_clicked()
 
     QMessageBox::information(this, "保存图片", QString("保存成功：%1").arg(fpath));
     AppendLog(QString("保存成功，地址为：%1").arg(fpath), INFO);
+    ui->GetLength->setEnabled(true);
+    m_hasCroppedImage = false;
+    m_polygonCompleted = false;
 
     // 如果选择了角点检测，才执行检测算法
     if (needDetection) 
@@ -859,6 +867,7 @@ void MainWindow::AppendLog(const QString &message, int logType, double value)
 
 void MainWindow::on_GetLength_clicked()
 {
+    ui->GetLength->setEnabled(false);
     // 情况一：如果多边形未完成或没有裁剪图像，清除多边形显示并处理原始图像
     if (!m_polygonCompleted || !m_hasCroppedImage) {
         clearPolygonDisplay();
@@ -1004,9 +1013,6 @@ void MainWindow::on_GetLength_clicked()
         AppendLog(QString("裁剪区域物件倾角（°）：%1").arg((double)result.angles[0]), INFO);
 
         DrawOverlayOnDisplay2((double)result.heights[0], (double)result.widths[0], (double)result.angles[0]);
-        
-        // 重置状态，准备下一次操作
-        clearPolygonDisplay();
     }
 }
 
@@ -1473,30 +1479,30 @@ void MainWindow::cropImageToPolygon()
         AppendLog("需要至少3个点才能裁剪图像", WARNNING);
         return;
     }
-    
+
     // 将QPixmap转换为QImage
     QImage originalImage = m_originalPixmap.toImage();
-    
+
     // 计算多边形的边界框
     QPolygon polygon;
     for (const QPoint& point : m_polygonPoints) {
         polygon << point;
     }
-    
+
     QRect boundingRect = polygon.boundingRect();
-    
+
     // 确保边界框在图像范围内
     boundingRect = boundingRect.intersected(QRect(0, 0, originalImage.width(), originalImage.height()));
-    
+
     if (boundingRect.isEmpty()) {
         AppendLog("多边形区域超出图像范围", WARNNING);
         return;
     }
-    
+
     // 计算边界框的最大边长，确保为正方形
     int maxSize = qMax(boundingRect.width(), boundingRect.height());
     QRect squareRect(boundingRect.x(), boundingRect.y(), maxSize, maxSize);
-    
+
     // 调整正方形区域确保在图像范围内
     if (squareRect.right() >= originalImage.width()) {
         squareRect.moveLeft(originalImage.width() - maxSize);
@@ -1510,50 +1516,54 @@ void MainWindow::cropImageToPolygon()
     if (squareRect.top() < 0) {
         squareRect.moveTop(0);
     }
-    
+
     // 创建新的正方形图像
     QImage croppedImage(maxSize, maxSize, QImage::Format_ARGB32);
-    
+
     // 取样多边形边缘颜色作为背景色
     QColor backgroundColor = sampleBorderColor(originalImage, polygon);
-    
+
     // 用背景色填充整个图像
     croppedImage.fill(backgroundColor);
-    
+
     // 创建QPainter来绘制多边形区域
     QPainter painter(&croppedImage);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    
+
     // 设置剪裁路径为多边形（相对于正方形区域的坐标）
     QPolygon relativePolygon;
     for (const QPoint& point : m_polygonPoints) {
         relativePolygon << QPoint(point.x() - squareRect.x(), point.y() - squareRect.y());
     }
-    
-    painter.setClipPath(QPainterPath::fromPolygon(relativePolygon));
-    
+
+    // 修改这里：使用addPolygon而不是fromPolygon
+    QPainterPath clipPath;
+    clipPath.addPolygon(relativePolygon);
+    painter.setClipPath(clipPath);
+
     // 将原始图像的多边形区域绘制到新图像上
     painter.drawImage(0, 0, originalImage, squareRect.x(), squareRect.y(), squareRect.width(), squareRect.height());
-    
+
     painter.end();
-    
+
     // 转换为QPixmap
     m_croppedPixmap = QPixmap::fromImage(croppedImage);
     m_hasCroppedImage = true;
-    
-    // 将裁剪后的图像显示到widgetDisplay上
+
+    // 将裁剪后的图像显示到widgetDisplay_2上
     if (!m_croppedPixmap.isNull()) {
-        // 缩放图片以适应widgetDisplay大小，保持宽高比
+        // 缩放图片以适应widgetDisplay_2大小，保持宽高比
         QPixmap scaledPixmap = m_croppedPixmap.scaled(ui->widgetDisplay->size(),
                                                      Qt::KeepAspectRatio,
                                                      Qt::SmoothTransformation);
-        ui->widgetDisplay->setPixmap(scaledPixmap);
-        ui->widgetDisplay->setAlignment(Qt::AlignCenter);
-        AppendLog("裁剪后的图像已显示在widgetDisplay上", INFO);
+        ui->widgetDisplay_2->setPixmap(scaledPixmap);
+        ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
+        AppendLog("裁剪后的图像已显示", INFO);
     }
-    
+
     AppendLog(QString("多边形区域图像裁剪完成，尺寸: %1x%2 像素").arg(maxSize).arg(maxSize), INFO);
     AppendLog(QString("背景颜色: RGB(%1, %2, %3)").arg(backgroundColor.red()).arg(backgroundColor.green()).arg(backgroundColor.blue()), INFO);
+    ui->GetLength->setEnabled(true);
 }
 
 // 取样多边形边缘颜色作为背景色
