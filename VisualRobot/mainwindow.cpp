@@ -86,6 +86,9 @@ MainWindow::MainWindow(QWidget *parent) :
 
     // 连接清晰度信号
     connect(this, &MainWindow::sharpnessValueUpdated, this, &MainWindow::updateSharpnessDisplay);
+    
+    // 初始化实时框选功能
+    setupRealTimeDetection();
 }
 
 MainWindow::~MainWindow()
@@ -203,6 +206,33 @@ void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INF
         double sharpness = pMainWindow->calculateTenengradSharpness(grayImage);
         // 发射信号
         emit pMainWindow->sharpnessValueUpdated(sharpness);
+        
+        // 4) 实时框选检测处理
+        if (pUser && !tempFrame.empty())
+        {
+            MainWindow* pMainWindow = static_cast<MainWindow*>(pUser);
+            cv::Mat colorImage;
+            // 根据像素类型转换到彩色图用于检测
+            switch(pFrameInfo->enPixelType) {
+                case PixelType_Gvsp_Mono8:
+                    colorImage = cv::Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC1, tempFrame.data());
+                    cv::cvtColor(colorImage, colorImage, cv::COLOR_GRAY2BGR);
+                    break;
+                case PixelType_Gvsp_RGB8_Packed:
+                    colorImage = cv::Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC3, tempFrame.data());
+                    cv::cvtColor(colorImage, colorImage, cv::COLOR_RGB2BGR);
+                    break;
+                case PixelType_Gvsp_BGR8_Packed:
+                    colorImage = cv::Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC3, tempFrame.data());
+                    break;
+                default:
+                    // 不支持的格式，跳过实时检测
+                    return;
+            }
+            
+            // 处理实时检测
+            pMainWindow->processFrameForRealTimeDetection(colorImage);
+        }
     }
 }
 
@@ -1226,3 +1256,60 @@ void MainWindow::drawSharpnessOverlay(double sharpness)
     }
     */
 }
+
+// 初始化实时框选功能
+void MainWindow::setupRealTimeDetection()
+{
+    // 创建自定义显示控件替换原有的widgetDisplay
+    m_imageDisplayWidget = new ImageDisplayWidget(this);
+    m_imageDisplayWidget->setGeometry(ui->widgetDisplay->geometry());
+    m_imageDisplayWidget->show();
+    
+    // 创建区域检测器
+    m_regionDetector = new RegionDetector(this);
+    m_regionDetector->setThreshold(127);
+    m_regionDetector->setMinArea(100);
+    m_regionDetector->setMaxArea(1000000);
+    
+    m_enableRealTimeDetection = false;
+    m_detectionBias = 10; // 默认扩展10像素
+    
+    // 隐藏原有的widgetDisplay，使用自定义控件
+    ui->widgetDisplay->hide();
+}
+
+// 处理帧进行实时检测
+void MainWindow::processFrameForRealTimeDetection(const cv::Mat& frame)
+{
+    if (!m_enableRealTimeDetection || frame.empty()) {
+        return;
+    }
+    
+    // 检测区域
+    QVector<QRect> regions = m_regionDetector->detectRegionsWithBias(frame, m_detectionBias);
+    
+    // 更新显示
+    m_imageDisplayWidget->setImage(frame);
+    m_imageDisplayWidget->setRegions(regions);
+    
+    // 记录检测到的区域数量
+    if (!regions.isEmpty()) {
+        AppendLog(QString("检测到 %1 个待检测区域").arg(regions.size()), INFO);
+    }
+}
+
+// 启用/禁用实时检测
+void MainWindow::enableRealTimeDetection(bool enable)
+{
+    m_enableRealTimeDetection = enable;
+    if (enable) {
+        AppendLog("实时框选功能已启用", INFO);
+    } else {
+        AppendLog("实时框选功能已禁用", INFO);
+        m_imageDisplayWidget->clearRegions();
+    }
+}
+
+// 修改ImageCallBack函数，添加实时检测处理
+// 在现有的ImageCallBack函数中，我们需要在清晰度计算之后添加实时检测处理
+// 找到清晰度计算的部分，在其后添加实时检测调用
