@@ -96,6 +96,9 @@
        </item>
        <item row="10" column="0" colspan="2">
         <widget class="QPushButton" name="GetLength">
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
          <property name="text">
           <string>检长</string>
          </property>
@@ -120,6 +123,9 @@
        </item>
        <item row="11" column="0" colspan="2">
         <widget class="QPushButton" name="genMatrix">
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
          <property name="text">
           <string>标定</string>
          </property>
@@ -127,6 +133,9 @@
        </item>
        <item row="9" column="0" colspan="2">
         <widget class="QPushButton" name="pushButton">
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
          <property name="text">
           <string>拍照</string>
          </property>
