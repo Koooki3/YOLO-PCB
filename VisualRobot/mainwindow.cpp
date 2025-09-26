@@ -1227,7 +1227,7 @@ void MainWindow::updateSharpnessDisplay(double sharpness)
     }
     
     // 同时在日志中记录清晰度值（可选）
-    AppendLog(QString("当前图像清晰度: %1").arg(sharpness, 0, 'f', 2), INFO);
+//    AppendLog(QString("当前图像清晰度: %1").arg(sharpness, 0, 'f', 2), INFO);
 }
 
 // 在图像上绘制清晰度叠加信息（保留函数，但当前主要用于状态栏显示）
