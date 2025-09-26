@@ -108,6 +108,16 @@ private:
     double calculateTenengradSharpness(const cv::Mat& image);
     void drawSharpnessOverlay(double sharpness);
 
+    // 多边形绘制功能相关
+    QVector<QPoint> m_polygonPoints;          // 存储多边形点坐标
+    QPixmap m_originalPixmap;                 // 原始图片
+    bool m_isImageLoaded;                     // 标记是否有图片加载
+    void setupPolygonDrawing();               // 初始化多边形绘制功能
+    void handleMouseClickOnDisplay2(const QPoint& pos); // 处理鼠标点击
+    void handleEnterKeyPress();               // 处理Enter键按下
+    void drawPolygonOnImage();                // 在图片上绘制多边形
+    QPoint convertToImageCoordinates(const QPoint& widgetPoint); // 坐标转换
+
 };
 
 #endif // MAINWINDOW_H
