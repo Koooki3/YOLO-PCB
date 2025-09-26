@@ -112,12 +112,17 @@ private:
     QVector<QPoint> m_polygonPoints;          // 存储多边形点坐标
     QPixmap m_originalPixmap;                 // 原始图片
     bool m_isImageLoaded;                     // 标记是否有图片加载
+    bool m_polygonCompleted;                  // 标记多边形是否完成绘制
+    QPixmap m_croppedPixmap;                  // 裁剪后的图片
+    bool m_hasCroppedImage;                   // 标记是否有裁剪图片
     bool eventFilter(QObject* obj, QEvent* event);
     void setupPolygonDrawing();               // 初始化多边形绘制功能
     void handleMouseClickOnDisplay2(const QPoint& pos); // 处理鼠标点击
     void handleEnterKeyPress();               // 处理Enter键按下
     void drawPolygonOnImage();                // 在图片上绘制多边形
     QPoint convertToImageCoordinates(const QPoint& widgetPoint); // 坐标转换
+    void cropImageToPolygon();                // 裁剪多边形区域图像
+    void clearPolygonDisplay();               // 清除多边形显示
 
 };
 

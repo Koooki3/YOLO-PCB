@@ -859,150 +859,155 @@ void MainWindow::AppendLog(const QString &message, int logType, double value)
 
 void MainWindow::on_GetLength_clicked()
 {
+    // 情况一：如果多边形未完成或没有裁剪图像，清除多边形显示并处理原始图像
+    if (!m_polygonCompleted || !m_hasCroppedImage) {
+        clearPolygonDisplay();
+        
+        string inputPath = "/home/orangepi/Desktop/VisualRobot_Local/Img/capture.jpg";
+        string outputPath = "../detectedImg.jpg";
+        QString output = "../detectedImg.jpg";
 
-//    vector<QPointF> points;
-//    points.reserve(Row.size()); // 预分配空间
-////    Matrix3d transMatrix = readTransformationMatrix("../matrix.bin");
-////    AppendLog("成功读取变换矩阵，详见终端显示", INFO);
-////    // 输出变换矩阵
-////    cout << "变换矩阵:" << endl;
-////    cout << fixed << setprecision(10); // 设置输出精度
-////    cout << transMatrix << endl;
-
-//    if (Row.size() <=0 || Col.size() <= 0 || (Row.size() != Col.size()))
-//    {
-//        AppendLog("未能正确读取角点", ERROR);
-//        return;
-//    }
-
-//    for (size_t i = 0; i < Row.size(); ++i)
-//    {
-//        double x = Col[i];  // 获取列坐标（转换为 double）
-//        double y = Row[i];  // 获取行坐标（转换为 double）
-
-////        // 创建齐次坐标向量 [x, y, 1]
-////        Vector3d s(x, y, 1.0);
-////        // 应用变换矩阵
-////        Vector3d d = transMatrix * s;
-////        // 创建变换后的 QPointF
-////        QPointF transformedPoint(d(0), d(1));
-//        QPointF p(x, y);
-
-//        // 添加到结果向量
-//        points.push_back(p);
-//        // 输出转换信息
-//        cout << "点 " << i << ": 像素坐标 (" << x << ", " << y << ") -> ";
-////        cout << "世界坐标 (" << transformedPoint.x() << ", " << transformedPoint.y() << ")" << endl;
-////        AppendLog(QString("第%1个角点(x,y)世界坐标为：(%2, %3)")
-////                  .arg(i+1)
-////                  .arg(static_cast<double>(transformedPoint.x()))
-////                  .arg(static_cast<double>(transformedPoint.y())),
-////                  INFO);
-//    }
-////    AppendLog("坐标矩阵变换成功", INFO);
-
-//    // 计算点之间的欧几里得距离
-//    auto euclideanDistance = [](const QPointF& a, const QPointF& b)
-//    {
-//        // 采用非圆心标定版的检长策略
-//        double dx = (a.x() - b.x()) * 0.03294; // 100.0 / 3032.0
-//        double dy = (a.y() - b.y()) * 0.03306;
-//        return sqrt(dx * dx + dy * dy);
-//    };
-
-//    vector<double> distances;
-//    distances.reserve(6); // 预分配空间
-
-//    distances.push_back(euclideanDistance(points[0], points[1]));
-//    distances.push_back(euclideanDistance(points[0], points[2]));
-//    distances.push_back(euclideanDistance(points[0], points[3]));
-//    distances.push_back(euclideanDistance(points[1], points[2]));
-//    distances.push_back(euclideanDistance(points[1], points[3]));
-//    distances.push_back(euclideanDistance(points[2], points[3]));
-
-//    // 从大到小排序
-//    sort(distances.rbegin(), distances.rend());
-
-//    double diagonal = ((double)distances[0] + (double)distances[1]) / 2;
-//    AppendLog(QString("物件对角线（mm）：%1").arg(diagonal), INFO);
-//    double length = ((double)distances[2] + (double)distances[3]) / 2;
-//    AppendLog(QString("物件长度（mm）：%1").arg(length), INFO);
-//    double width = ((double)distances[4] + (double)distances[5]) / 2;
-//    AppendLog(QString("物件宽度（mm）：%1").arg(width), INFO);
-
-//    // 输出结果
-//    cout << "各点欧式距离（降序）:" << endl;
-//    for (const auto& dist : distances)
-//    {
-//        cout << dist << endl;
-//    }
-
-    string inputPath = "/home/orangepi/Desktop/VisualRobot_Local/Img/capture.jpg";
-    string outputPath = "../detectedImg.jpg";
-    QString output = "../detectedImg.jpg";
-
-    // 读取输入图像
-    Mat inputImage = imread(inputPath);
-    if (inputImage.empty()) 
-    {
-        cerr << "无法读取输入图像: " << inputPath << endl;
-        AppendLog("无法读取输入图像", ERROR);
-        return;
-    }
-
-    // 设置参数（可根据需要修改）
-    Params params;
-    params.thresh = 127;
-    params.maxval = 255;
-    params.blurK = 5;
-    params.areaMin = 100.0;
-
-    // 处理图像
-    double bias = 1.0;
-    Result result = CalculateLength(inputImage, params, bias);
-
-    // 保存输出图像
-    if (!result.image.empty()) 
-    {
-        bool success = imwrite(outputPath, result.image);
-        if (success) 
+        // 读取输入图像
+        Mat inputImage = imread(inputPath);
+        if (inputImage.empty()) 
         {
-            cout << "输出图像已保存到: " << outputPath << endl;
+            cerr << "无法读取输入图像: " << inputPath << endl;
+            AppendLog("无法读取输入图像", ERROR);
+            return;
+        }
+
+        // 设置参数（可根据需要修改）
+        Params params;
+        params.thresh = 127;
+        params.maxval = 255;
+        params.blurK = 5;
+        params.areaMin = 100.0;
+
+        // 处理图像
+        double bias = 1.0;
+        Result result = CalculateLength(inputImage, params, bias);
+
+        // 保存输出图像
+        if (!result.image.empty()) 
+        {
+            bool success = imwrite(outputPath, result.image);
+            if (success) 
+            {
+                cout << "输出图像已保存到: " << outputPath << endl;
+            } 
+            else 
+            {
+                cerr << "保存输出图像失败: " << outputPath << endl;
+                return;
+            }
         } 
         else 
         {
-            cerr << "保存输出图像失败: " << outputPath << endl;
+            cerr << "处理后的图像为空，无法保存" << endl;
             return;
         }
-    } 
-    else 
-    {
-        cerr << "处理后的图像为空，无法保存" << endl;
-        return;
+
+        // 加载图片
+        QPixmap pixmap(output);
+        if (pixmap.isNull()) 
+        {
+            QMessageBox::warning(this, "加载图片失败", "无法加载保存的图片！");
+            return;
+        }
+
+        // 缩放图片以适应QLabel大小，保持宽高比
+        QPixmap scaledPixmap = pixmap.scaled(ui->widgetDisplay_2->size(),
+                                             Qt::KeepAspectRatio,
+                                             Qt::SmoothTransformation);
+        ui->widgetDisplay_2->setPixmap(scaledPixmap);
+        ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
+
+        AppendLog("检测后图像显示成功", INFO);
+        AppendLog("检长算法执行完成", INFO);
+        AppendLog(QString("物件长度（mm）：%1").arg((double)result.heights[0]), INFO);
+        AppendLog(QString("物件宽度（mm）：%1").arg((double)result.widths[0]), INFO);
+        AppendLog(QString("物件倾角（°）：%1").arg((double)result.angles[0]), INFO);
+
+        DrawOverlayOnDisplay2((double)result.heights[0], (double)result.widths[0], (double)result.angles[0]);
     }
+    // 情况二：如果多边形已完成且有裁剪图像，处理裁剪后的图像
+    else {
+        AppendLog("检测到多边形区域，将处理裁剪后的图像", INFO);
+        
+        // 保存裁剪后的图像到临时文件
+        QString tempCroppedPath = "../Img/cropped_polygon.jpg";
+        m_croppedPixmap.save(tempCroppedPath);
+        
+        string inputPath = tempCroppedPath.toStdString();
+        string outputPath = "../detectedImg.jpg";
+        QString output = "../detectedImg.jpg";
 
-    // 加载图片
-    QPixmap pixmap(output);
-    if (pixmap.isNull()) 
-    {
-        QMessageBox::warning(this, "加载图片失败", "无法加载保存的图片！");
-        return;
+        // 读取裁剪后的图像
+        Mat inputImage = imread(inputPath);
+        if (inputImage.empty()) 
+        {
+            cerr << "无法读取裁剪后的图像: " << inputPath << endl;
+            AppendLog("无法读取裁剪后的图像", ERROR);
+            return;
+        }
+
+        // 设置参数（可根据需要修改）
+        Params params;
+        params.thresh = 127;
+        params.maxval = 255;
+        params.blurK = 5;
+        params.areaMin = 100.0;
+
+        // 处理图像
+        double bias = 1.0;
+        Result result = CalculateLength(inputImage, params, bias);
+
+        // 保存输出图像
+        if (!result.image.empty()) 
+        {
+            bool success = imwrite(outputPath, result.image);
+            if (success) 
+            {
+                cout << "输出图像已保存到: " << outputPath << endl;
+            } 
+            else 
+            {
+                cerr << "保存输出图像失败: " << outputPath << endl;
+                return;
+            }
+        } 
+        else 
+        {
+            cerr << "处理后的图像为空，无法保存" << endl;
+            return;
+        }
+
+        // 加载图片
+        QPixmap pixmap(output);
+        if (pixmap.isNull()) 
+        {
+            QMessageBox::warning(this, "加载图片失败", "无法加载保存的图片！");
+            return;
+        }
+
+        // 缩放图片以适应QLabel大小，保持宽高比
+        QPixmap scaledPixmap = pixmap.scaled(ui->widgetDisplay_2->size(),
+                                             Qt::KeepAspectRatio,
+                                             Qt::SmoothTransformation);
+        ui->widgetDisplay_2->setPixmap(scaledPixmap);
+        ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
+
+        AppendLog("裁剪区域检测后图像显示成功", INFO);
+        AppendLog("裁剪区域检长算法执行完成", INFO);
+        AppendLog(QString("裁剪区域物件长度（mm）：%1").arg((double)result.heights[0]), INFO);
+        AppendLog(QString("裁剪区域物件宽度（mm）：%1").arg((double)result.widths[0]), INFO);
+        AppendLog(QString("裁剪区域物件倾角（°）：%1").arg((double)result.angles[0]), INFO);
+
+        DrawOverlayOnDisplay2((double)result.heights[0], (double)result.widths[0], (double)result.angles[0]);
+        
+        // 重置状态，准备下一次操作
+        clearPolygonDisplay();
     }
-
-    // 缩放图片以适应QLabel大小，保持宽高比
-    QPixmap scaledPixmap = pixmap.scaled(ui->widgetDisplay_2->size(),
-                                         Qt::KeepAspectRatio,
-                                         Qt::SmoothTransformation);
-    ui->widgetDisplay_2->setPixmap(scaledPixmap);
-    ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
-
-    AppendLog("检测后图像显示成功", INFO);
-    AppendLog("检长算法执行完成", INFO);
-    AppendLog(QString("物件长度（mm）：%1").arg((double)result.heights[0]), INFO);
-    AppendLog(QString("物件宽度（mm）：%1").arg((double)result.widths[0]), INFO);
-    AppendLog(QString("物件倾角（°）：%1").arg((double)result.angles[0]), INFO);
-
-    DrawOverlayOnDisplay2((double)result.heights[0], (double)result.widths[0], (double)result.angles[0]);
 }
 
 void MainWindow::on_genMatrix_clicked()
@@ -1257,6 +1262,8 @@ void MainWindow::setupPolygonDrawing()
     // 初始化成员变量
     m_polygonPoints.clear();
     m_isImageLoaded = false;
+    m_polygonCompleted = false;
+    m_hasCroppedImage = false;
     
     // 设置widgetDisplay_2接受鼠标和键盘事件
     ui->widgetDisplay_2->setMouseTracking(true);
@@ -1450,7 +1457,78 @@ void MainWindow::drawPolygonOnImage()
         AppendLog(QString("顶点%1: (%2, %3)").arg(i+1).arg(m_polygonPoints[i].x()).arg(m_polygonPoints[i].y()), INFO);
     }
     
+    // 标记多边形完成并裁剪图像
+    m_polygonCompleted = true;
+    cropImageToPolygon();
+    
     // 清空点列表，准备下一次绘制
     m_polygonPoints.clear();
     m_isImageLoaded = false;
+}
+
+// 裁剪多边形区域图像
+void MainWindow::cropImageToPolygon()
+{
+    if (m_polygonPoints.size() < 3) {
+        AppendLog("需要至少3个点才能裁剪图像", WARNNING);
+        return;
+    }
+    
+    // 将QPixmap转换为QImage
+    QImage originalImage = m_originalPixmap.toImage();
+    
+    // 创建掩码图像
+    QImage maskImage(originalImage.size(), QImage::Format_ARGB32);
+    maskImage.fill(Qt::transparent);
+    
+    QPainter maskPainter(&maskImage);
+    maskPainter.setRenderHint(QPainter::Antialiasing, true);
+    maskPainter.setBrush(Qt::white);
+    maskPainter.setPen(Qt::NoPen);
+    
+    // 绘制多边形区域为白色（不透明）
+    QPolygon polygon;
+    for (const QPoint& point : m_polygonPoints) {
+        polygon << point;
+    }
+    maskPainter.drawPolygon(polygon);
+    maskPainter.end();
+    
+    // 创建裁剪后的图像
+    QImage croppedImage(originalImage.size(), QImage::Format_ARGB32);
+    croppedImage.fill(Qt::transparent);
+    
+    // 应用掩码
+    for (int y = 0; y < originalImage.height(); ++y) {
+        for (int x = 0; x < originalImage.width(); ++x) {
+            QRgb maskPixel = maskImage.pixel(x, y);
+            if (qAlpha(maskPixel) > 0) {
+                // 在掩码区域内，复制原始图像像素
+                croppedImage.setPixel(x, y, originalImage.pixel(x, y));
+            }
+        }
+    }
+    
+    // 转换为QPixmap
+    m_croppedPixmap = QPixmap::fromImage(croppedImage);
+    m_hasCroppedImage = true;
+    
+    AppendLog("多边形区域图像裁剪完成", INFO);
+}
+
+// 清除多边形显示
+void MainWindow::clearPolygonDisplay()
+{
+    // 恢复原始图片显示
+    if (!m_originalPixmap.isNull()) {
+        ui->widgetDisplay_2->setPixmap(m_originalPixmap);
+    }
+    
+    // 重置状态
+    m_polygonPoints.clear();
+    m_polygonCompleted = false;
+    m_hasCroppedImage = false;
+    m_isImageLoaded = false;
+    
+    AppendLog("已清除多边形显示", INFO);
 }
