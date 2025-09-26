@@ -123,6 +123,7 @@ private:
     QPoint convertToImageCoordinates(const QPoint& widgetPoint); // 坐标转换
     void cropImageToPolygon();                // 裁剪多边形区域图像
     void clearPolygonDisplay();               // 清除多边形显示
+    QColor sampleBorderColor(const QImage& image, const QPolygon& polygon); // 取样多边形边缘颜色
 
 };
 

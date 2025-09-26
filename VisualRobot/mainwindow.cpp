@@ -1466,7 +1466,7 @@ void MainWindow::drawPolygonOnImage()
     m_isImageLoaded = false;
 }
 
-// 裁剪多边形区域图像
+// 裁剪多边形区域图像并补全背景为矩形
 void MainWindow::cropImageToPolygon()
 {
     if (m_polygonPoints.size() < 3) {
@@ -1477,43 +1477,134 @@ void MainWindow::cropImageToPolygon()
     // 将QPixmap转换为QImage
     QImage originalImage = m_originalPixmap.toImage();
     
-    // 创建掩码图像
-    QImage maskImage(originalImage.size(), QImage::Format_ARGB32);
-    maskImage.fill(Qt::transparent);
-    
-    QPainter maskPainter(&maskImage);
-    maskPainter.setRenderHint(QPainter::Antialiasing, true);
-    maskPainter.setBrush(Qt::white);
-    maskPainter.setPen(Qt::NoPen);
-    
-    // 绘制多边形区域为白色（不透明）
+    // 计算多边形的边界框
     QPolygon polygon;
     for (const QPoint& point : m_polygonPoints) {
         polygon << point;
     }
-    maskPainter.drawPolygon(polygon);
-    maskPainter.end();
     
-    // 创建裁剪后的图像
-    QImage croppedImage(originalImage.size(), QImage::Format_ARGB32);
-    croppedImage.fill(Qt::transparent);
+    QRect boundingRect = polygon.boundingRect();
     
-    // 应用掩码
-    for (int y = 0; y < originalImage.height(); ++y) {
-        for (int x = 0; x < originalImage.width(); ++x) {
-            QRgb maskPixel = maskImage.pixel(x, y);
-            if (qAlpha(maskPixel) > 0) {
-                // 在掩码区域内，复制原始图像像素
-                croppedImage.setPixel(x, y, originalImage.pixel(x, y));
-            }
-        }
+    // 确保边界框在图像范围内
+    boundingRect = boundingRect.intersected(QRect(0, 0, originalImage.width(), originalImage.height()));
+    
+    if (boundingRect.isEmpty()) {
+        AppendLog("多边形区域超出图像范围", WARNNING);
+        return;
     }
+    
+    // 计算边界框的最大边长，确保为正方形
+    int maxSize = qMax(boundingRect.width(), boundingRect.height());
+    QRect squareRect(boundingRect.x(), boundingRect.y(), maxSize, maxSize);
+    
+    // 调整正方形区域确保在图像范围内
+    if (squareRect.right() >= originalImage.width()) {
+        squareRect.moveLeft(originalImage.width() - maxSize);
+    }
+    if (squareRect.bottom() >= originalImage.height()) {
+        squareRect.moveTop(originalImage.height() - maxSize);
+    }
+    if (squareRect.left() < 0) {
+        squareRect.moveLeft(0);
+    }
+    if (squareRect.top() < 0) {
+        squareRect.moveTop(0);
+    }
+    
+    // 创建新的正方形图像
+    QImage croppedImage(maxSize, maxSize, QImage::Format_ARGB32);
+    
+    // 取样多边形边缘颜色作为背景色
+    QColor backgroundColor = sampleBorderColor(originalImage, polygon);
+    
+    // 用背景色填充整个图像
+    croppedImage.fill(backgroundColor);
+    
+    // 创建QPainter来绘制多边形区域
+    QPainter painter(&croppedImage);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    
+    // 设置剪裁路径为多边形（相对于正方形区域的坐标）
+    QPolygon relativePolygon;
+    for (const QPoint& point : m_polygonPoints) {
+        relativePolygon << QPoint(point.x() - squareRect.x(), point.y() - squareRect.y());
+    }
+    
+    painter.setClipPath(QPainterPath::fromPolygon(relativePolygon));
+    
+    // 将原始图像的多边形区域绘制到新图像上
+    painter.drawImage(0, 0, originalImage, squareRect.x(), squareRect.y(), squareRect.width(), squareRect.height());
+    
+    painter.end();
     
     // 转换为QPixmap
     m_croppedPixmap = QPixmap::fromImage(croppedImage);
     m_hasCroppedImage = true;
     
-    AppendLog("多边形区域图像裁剪完成", INFO);
+    // 将裁剪后的图像显示到widgetDisplay上
+    if (!m_croppedPixmap.isNull()) {
+        // 缩放图片以适应widgetDisplay大小，保持宽高比
+        QPixmap scaledPixmap = m_croppedPixmap.scaled(ui->widgetDisplay->size(),
+                                                     Qt::KeepAspectRatio,
+                                                     Qt::SmoothTransformation);
+        ui->widgetDisplay->setPixmap(scaledPixmap);
+        ui->widgetDisplay->setAlignment(Qt::AlignCenter);
+        AppendLog("裁剪后的图像已显示在widgetDisplay上", INFO);
+    }
+    
+    AppendLog(QString("多边形区域图像裁剪完成，尺寸: %1x%2 像素").arg(maxSize).arg(maxSize), INFO);
+    AppendLog(QString("背景颜色: RGB(%1, %2, %3)").arg(backgroundColor.red()).arg(backgroundColor.green()).arg(backgroundColor.blue()), INFO);
+}
+
+// 取样多边形边缘颜色作为背景色
+QColor MainWindow::sampleBorderColor(const QImage& image, const QPolygon& polygon)
+{
+    QVector<QRgb> borderPixels;
+    int sampleCount = 0;
+    
+    // 在多边形边缘取样像素颜色
+    for (int i = 0; i < polygon.size(); ++i) {
+        QPoint p1 = polygon[i];
+        QPoint p2 = polygon[(i + 1) % polygon.size()];
+        
+        // 沿着边缘取样
+        int steps = qMax(qAbs(p2.x() - p1.x()), qAbs(p2.y() - p1.y()));
+        if (steps > 0) {
+            for (int j = 0; j <= steps; ++j) {
+                float t = (float)j / steps;
+                QPoint samplePoint(
+                    qRound(p1.x() * (1 - t) + p2.x() * t),
+                    qRound(p1.y() * (1 - t) + p2.y() * t)
+                );
+                
+                // 确保采样点在图像范围内
+                if (samplePoint.x() >= 0 && samplePoint.x() < image.width() &&
+                    samplePoint.y() >= 0 && samplePoint.y() < image.height()) {
+                    
+                    borderPixels.append(image.pixel(samplePoint));
+                    sampleCount++;
+                    
+                    // 限制采样数量以提高性能
+                    if (sampleCount >= 100) break;
+                }
+            }
+        }
+        if (sampleCount >= 100) break;
+    }
+    
+    if (borderPixels.isEmpty()) {
+        return Qt::white; // 默认背景色
+    }
+    
+    // 计算平均颜色
+    long long r = 0, g = 0, b = 0;
+    for (QRgb pixel : borderPixels) {
+        r += qRed(pixel);
+        g += qGreen(pixel);
+        b += qBlue(pixel);
+    }
+    
+    return QColor(r / borderPixels.size(), g / borderPixels.size(), b / borderPixels.size());
 }
 
 // 清除多边形显示
