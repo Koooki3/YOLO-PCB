@@ -86,6 +86,12 @@ MainWindow::MainWindow(QWidget *parent) :
 
     // 连接清晰度信号
     connect(this, &MainWindow::sharpnessValueUpdated, this, &MainWindow::updateSharpnessDisplay);
+
+    // 初始化实时框选功能
+    setupRealTimeDetection();
+    
+    // 初始化多边形绘制功能
+    setupPolygonDrawing();
 }
 
 MainWindow::~MainWindow()
@@ -1246,4 +1252,190 @@ void MainWindow::drawSharpnessOverlay(double sharpness)
                    cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(255, 255, 255), 2);
     }
     */
+}
+
+// 初始化多边形绘制功能
+void MainWindow::setupPolygonDrawing()
+{
+    // 初始化成员变量
+    m_polygonPoints.clear();
+    m_isImageLoaded = false;
+    
+    // 设置widgetDisplay_2接受鼠标事件
+    ui->widgetDisplay_2->setMouseTracking(true);
+    ui->widgetDisplay_2->installEventFilter(this);
+    
+    AppendLog("多边形绘制功能已初始化", INFO);
+}
+
+// 事件过滤器，用于捕获widgetDisplay_2的鼠标点击和键盘事件
+bool MainWindow::eventFilter(QObject* obj, QEvent* event)
+{
+    if (obj == ui->widgetDisplay_2) {
+        if (event->type() == QEvent::MouseButtonPress) {
+            QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+            if (mouseEvent->button() == Qt::LeftButton) {
+                handleMouseClickOnDisplay2(mouseEvent->pos());
+                return true;
+            }
+        }
+        else if (event->type() == QEvent::KeyPress) {
+            QKeyEvent* keyEvent = static_cast<QKeyEvent*>(event);
+            if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) {
+                handleEnterKeyPress();
+                return true;
+            }
+        }
+    }
+    return QMainWindow::eventFilter(obj, event);
+}
+
+// 处理鼠标点击事件
+void MainWindow::handleMouseClickOnDisplay2(const QPoint& pos)
+{
+    // 检查是否有图片加载
+    if (!ui->widgetDisplay_2->pixmap() || ui->widgetDisplay_2->pixmap()->isNull()) {
+        AppendLog("请在widgetDisplay_2上显示图片后再进行点击", WARNNING);
+        return;
+    }
+    
+    // 保存原始图片（如果尚未保存）
+    if (!m_isImageLoaded) {
+        m_originalPixmap = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue);
+        m_isImageLoaded = true;
+    }
+    
+    // 将控件坐标转换为图像坐标
+    QPoint imagePoint = convertToImageCoordinates(pos);
+    
+    // 添加点到多边形点列表
+    m_polygonPoints.append(imagePoint);
+    
+    // 在图片上显示点击点
+    QPixmap currentPixmap = m_originalPixmap.copy();
+    QPainter painter(&currentPixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    
+    // 绘制点击点
+    painter.setPen(QPen(Qt::red, 3));
+    painter.setBrush(QBrush(Qt::red));
+    painter.drawEllipse(imagePoint, 5, 5);
+    
+    // 绘制点序号
+    painter.setPen(QPen(Qt::white, 2));
+    painter.setFont(QFont("Arial", 10, QFont::Bold));
+    painter.drawText(imagePoint + QPoint(8, -8), QString::number(m_polygonPoints.size()));
+    
+    // 如果已有多个点，绘制连线
+    if (m_polygonPoints.size() > 1) {
+        painter.setPen(QPen(Qt::green, 2, Qt::DashLine));
+        for (int i = 1; i < m_polygonPoints.size(); ++i) {
+            painter.drawLine(m_polygonPoints[i-1], m_polygonPoints[i]);
+        }
+    }
+    
+    painter.end();
+    
+    // 更新显示
+    ui->widgetDisplay_2->setPixmap(currentPixmap);
+    
+    AppendLog(QString("已添加第%1个点，坐标(%2, %3)").arg(m_polygonPoints.size()).arg(imagePoint.x()).arg(imagePoint.y()), INFO);
+}
+
+// 处理Enter键按下事件
+void MainWindow::handleEnterKeyPress()
+{
+    if (m_polygonPoints.size() < 3) {
+        AppendLog(QString("需要至少3个点才能绘制多边形，当前只有%1个点").arg(m_polygonPoints.size()), WARNNING);
+        return;
+    }
+    
+    AppendLog(QString("开始绘制多边形，共%1个点").arg(m_polygonPoints.size()), INFO);
+    drawPolygonOnImage();
+}
+
+// 坐标转换：将控件坐标转换为图像坐标
+QPoint MainWindow::convertToImageCoordinates(const QPoint& widgetPoint)
+{
+    if (!ui->widgetDisplay_2->pixmap() || ui->widgetDisplay_2->pixmap()->isNull()) {
+        return widgetPoint;
+    }
+    
+    QPixmap pixmap = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue);
+    QSize pixmapSize = pixmap.size();
+    QSize widgetSize = ui->widgetDisplay_2->size();
+    
+    // 计算缩放比例和偏移量
+    double scaleX = static_cast<double>(pixmapSize.width()) / widgetSize.width();
+    double scaleY = static_cast<double>(pixmapSize.height()) / widgetSize.height();
+    
+    // 计算图像在控件中的显示区域（居中显示）
+    int offsetX = (widgetSize.width() - pixmapSize.width() / scaleX) / 2;
+    int offsetY = (widgetSize.height() - pixmapSize.height() / scaleY) / 2;
+    
+    // 转换为图像坐标
+    int imageX = static_cast<int>((widgetPoint.x() - offsetX) * scaleX);
+    int imageY = static_cast<int>((widgetPoint.y() - offsetY) * scaleY);
+    
+    // 确保坐标在图像范围内
+    imageX = qMax(0, qMin(imageX, pixmapSize.width() - 1));
+    imageY = qMax(0, qMin(imageY, pixmapSize.height() - 1));
+    
+    return QPoint(imageX, imageY);
+}
+
+// 绘制多边形
+void MainWindow::drawPolygonOnImage()
+{
+    if (m_polygonPoints.size() < 3) {
+        AppendLog("需要至少3个点才能绘制多边形", WARNNING);
+        return;
+    }
+    
+    // 恢复原始图片
+    QPixmap currentPixmap = m_originalPixmap.copy();
+    QPainter painter(&currentPixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    
+    // 绘制多边形
+    painter.setPen(QPen(Qt::blue, 3));
+    painter.setBrush(QBrush(QColor(0, 0, 255, 50))); // 半透明蓝色填充
+    
+    QPolygon polygon;
+    for (const QPoint& point : m_polygonPoints) {
+        polygon << point;
+    }
+    painter.drawPolygon(polygon);
+    
+    // 绘制顶点和序号
+    painter.setPen(QPen(Qt::red, 3));
+    painter.setBrush(QBrush(Qt::red));
+    for (int i = 0; i < m_polygonPoints.size(); ++i) {
+        painter.drawEllipse(m_polygonPoints[i], 5, 5);
+        painter.setPen(QPen(Qt::white, 2));
+        painter.setFont(QFont("Arial", 10, QFont::Bold));
+        painter.drawText(m_polygonPoints[i] + QPoint(8, -8), QString::number(i+1));
+        painter.setPen(QPen(Qt::red, 3));
+    }
+    
+    // 在图像上显示多边形信息
+    QString infoText = QString("多边形: %1个顶点").arg(m_polygonPoints.size());
+    painter.setPen(QPen(Qt::white, 2));
+    painter.setFont(QFont("Arial", 12, QFont::Bold));
+    painter.drawText(10, 30, infoText);
+    
+    painter.end();
+    
+    // 更新显示
+    ui->widgetDisplay_2->setPixmap(currentPixmap);
+    
+    // 在日志中显示所有点的坐标
+    AppendLog("多边形绘制完成，顶点坐标：", INFO);
+    for (int i = 0; i < m_polygonPoints.size(); ++i) {
+        AppendLog(QString("顶点%1: (%2, %3)").arg(i+1).arg(m_polygonPoints[i].x()).arg(m_polygonPoints[i].y()), INFO);
+    }
+    
+    // 清空点列表，准备下一次绘制
+    m_polygonPoints.clear();
+    m_isImageLoaded = false;
 }
