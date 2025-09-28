@@ -1212,9 +1212,12 @@ double MainWindow::calculateTenengradSharpness(const cv::Mat& image)
     cv::Mat imageGrey;
     
     // 转换为灰度图
-    if (image.channels() == 3) {
+    if (image.channels() == 3) 
+    {
         cv::cvtColor(image, imageGrey, cv::COLOR_BGR2GRAY);
-    } else {
+    } 
+    else 
+    {
         imageGrey = image.clone();
     }
     
@@ -1232,13 +1235,11 @@ double MainWindow::calculateTenengradSharpness(const cv::Mat& image)
 void MainWindow::updateSharpnessDisplay(double sharpness)
 {
     // 更新状态栏的清晰度标签
-    if (m_sharpnessLabel) {
+    if (m_sharpnessLabel) 
+    {
         QString sharpnessText = QString("清晰度: %1").arg(sharpness, 0, 'f', 2);
         m_sharpnessLabel->setText(sharpnessText);
     }
-    
-    // 同时在日志中记录清晰度值（可选）
-//    AppendLog(QString("当前图像清晰度: %1").arg(sharpness, 0, 'f', 2), INFO);
 }
 
 // 在图像上绘制清晰度叠加信息（保留函数，但当前主要用于状态栏显示）
@@ -1282,17 +1283,22 @@ void MainWindow::setupPolygonDrawing()
 // 事件过滤器，用于捕获widgetDisplay_2的鼠标点击和键盘事件
 bool MainWindow::eventFilter(QObject* obj, QEvent* event)
 {
-    if (obj == ui->widgetDisplay_2) {
-        if (event->type() == QEvent::MouseButtonPress) {
+    if (obj == ui->widgetDisplay_2) 
+    {
+        if (event->type() == QEvent::MouseButtonPress) 
+        {
             QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
-            if (mouseEvent->button() == Qt::LeftButton) {
+            if (mouseEvent->button() == Qt::LeftButton) 
+            {
                 handleMouseClickOnDisplay2(mouseEvent->pos());
                 return true;
             }
         }
-        else if (event->type() == QEvent::KeyPress) {
+        else if (event->type() == QEvent::KeyPress) 
+        {
             QKeyEvent* keyEvent = static_cast<QKeyEvent*>(event);
-            if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) {
+            if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) 
+            {
                 handleEnterKeyPress();
                 return true;
             }
@@ -1300,9 +1306,11 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
     }
     
     // 如果widgetDisplay_2有焦点，也捕获主窗口的Enter键事件
-    if (ui->widgetDisplay_2->hasFocus() && event->type() == QEvent::KeyPress) {
+    if (ui->widgetDisplay_2->hasFocus() && event->type() == QEvent::KeyPress) 
+    {
         QKeyEvent* keyEvent = static_cast<QKeyEvent*>(event);
-        if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) {
+        if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) 
+        {
             handleEnterKeyPress();
             return true;
         }
@@ -1315,7 +1323,8 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
 void MainWindow::handleMouseClickOnDisplay2(const QPoint& pos)
 {
     // 检查是否有图片加载
-    if (!ui->widgetDisplay_2->pixmap() || ui->widgetDisplay_2->pixmap()->isNull()) {
+    if (!ui->widgetDisplay_2->pixmap() || ui->widgetDisplay_2->pixmap()->isNull()) 
+    {
         AppendLog("请在widgetDisplay_2上显示图片后再进行点击", WARNNING);
         return;
     }
@@ -1324,7 +1333,8 @@ void MainWindow::handleMouseClickOnDisplay2(const QPoint& pos)
     ui->widgetDisplay_2->setFocus();
     
     // 保存原始图片（如果尚未保存）
-    if (!m_isImageLoaded) {
+    if (!m_isImageLoaded) 
+    {
         m_originalPixmap = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue);
         m_isImageLoaded = true;
     }
@@ -1351,13 +1361,16 @@ void MainWindow::handleMouseClickOnDisplay2(const QPoint& pos)
     painter.drawText(imagePoint + QPoint(8, -8), QString::number(m_polygonPoints.size()));
     
     // 如果已有多个点，绘制连线
-    if (m_polygonPoints.size() > 1) {
+    if (m_polygonPoints.size() > 1) 
+    {
         painter.setPen(QPen(Qt::green, 2, Qt::DashLine));
-        for (int i = 1; i < m_polygonPoints.size(); ++i) {
+        for (int i = 1; i < m_polygonPoints.size(); ++i) 
+        {
             painter.drawLine(m_polygonPoints[i-1], m_polygonPoints[i]);
         }
         // 如果是最后一个点，连接到第一个点形成闭合多边形预览
-        if (m_polygonPoints.size() >= 3) {
+        if (m_polygonPoints.size() >= 3) 
+        {
             painter.drawLine(m_polygonPoints.last(), m_polygonPoints.first());
         }
     }
@@ -1373,7 +1386,8 @@ void MainWindow::handleMouseClickOnDisplay2(const QPoint& pos)
 // 处理Enter键按下事件
 void MainWindow::handleEnterKeyPress()
 {
-    if (m_polygonPoints.size() < 3) {
+    if (m_polygonPoints.size() < 3) 
+    {
         AppendLog(QString("需要至少3个点才能绘制多边形，当前只有%1个点").arg(m_polygonPoints.size()), WARNNING);
         return;
     }
@@ -1385,29 +1399,62 @@ void MainWindow::handleEnterKeyPress()
 // 坐标转换：将控件坐标转换为图像坐标
 QPoint MainWindow::convertToImageCoordinates(const QPoint& widgetPoint)
 {
-    if (!ui->widgetDisplay_2->pixmap() || ui->widgetDisplay_2->pixmap()->isNull()) {
+    if (!ui->widgetDisplay_2->pixmap() || ui->widgetDisplay_2->pixmap()->isNull()) 
+    {
         return widgetPoint;
     }
     
-    QPixmap pixmap = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue);
-    QSize pixmapSize = pixmap.size();
+    // 获取原始图像尺寸
+    QSize originalSize = m_originalPixmap.size();
+    if (originalSize.isEmpty()) 
+    {
+        originalSize = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue).size();
+    }
+    
+    // 获取控件尺寸
     QSize widgetSize = ui->widgetDisplay_2->size();
     
-    // 计算缩放比例和偏移量
-    double scaleX = static_cast<double>(pixmapSize.width()) / widgetSize.width();
-    double scaleY = static_cast<double>(pixmapSize.height()) / widgetSize.height();
+    // 计算图像在控件中的显示区域（保持宽高比居中显示）
+    double widgetAspect = static_cast<double>(widgetSize.width()) / widgetSize.height();
+    double imageAspect = static_cast<double>(originalSize.width()) / originalSize.height();
     
-    // 计算图像在控件中的显示区域（居中显示）
-    int offsetX = (widgetSize.width() - pixmapSize.width() / scaleX) / 2;
-    int offsetY = (widgetSize.height() - pixmapSize.height() / scaleY) / 2;
+    QRect displayRect;
     
-    // 转换为图像坐标
-    int imageX = static_cast<int>((widgetPoint.x() - offsetX) * scaleX);
-    int imageY = static_cast<int>((widgetPoint.y() - offsetY) * scaleY);
+    if (widgetAspect > imageAspect) 
+    {
+        // 控件更宽，图像在垂直方向填充
+        int displayHeight = widgetSize.height();
+        int displayWidth = static_cast<int>(displayHeight * imageAspect);
+        int offsetX = (widgetSize.width() - displayWidth) / 2;
+        displayRect = QRect(offsetX, 0, displayWidth, displayHeight);
+    } 
+    else 
+    {
+        // 控件更高，图像在水平方向填充
+        int displayWidth = widgetSize.width();
+        int displayHeight = static_cast<int>(displayWidth / imageAspect);
+        int offsetY = (widgetSize.height() - displayHeight) / 2;
+        displayRect = QRect(0, offsetY, displayWidth, displayHeight);
+    }
+    
+    // 检查点击是否在图像显示区域内
+    if (!displayRect.contains(widgetPoint)) 
+    {
+        // 如果点击在图像区域外，返回无效点
+        return QPoint(-1, -1);
+    }
+    
+    // 计算相对位置比例
+    double relX = static_cast<double>(widgetPoint.x() - displayRect.x()) / displayRect.width();
+    double relY = static_cast<double>(widgetPoint.y() - displayRect.y()) / displayRect.height();
+    
+    // 映射到原始图像坐标
+    int imageX = static_cast<int>(relX * originalSize.width());
+    int imageY = static_cast<int>(relY * originalSize.height());
     
     // 确保坐标在图像范围内
-    imageX = qMax(0, qMin(imageX, pixmapSize.width() - 1));
-    imageY = qMax(0, qMin(imageY, pixmapSize.height() - 1));
+    imageX = qMax(0, qMin(imageX, originalSize.width() - 1));
+    imageY = qMax(0, qMin(imageY, originalSize.height() - 1));
     
     return QPoint(imageX, imageY);
 }
@@ -1415,7 +1462,8 @@ QPoint MainWindow::convertToImageCoordinates(const QPoint& widgetPoint)
 // 绘制多边形
 void MainWindow::drawPolygonOnImage()
 {
-    if (m_polygonPoints.size() < 3) {
+    if (m_polygonPoints.size() < 3) 
+    {
         AppendLog("需要至少3个点才能绘制多边形", WARNNING);
         return;
     }
@@ -1430,7 +1478,8 @@ void MainWindow::drawPolygonOnImage()
     painter.setBrush(QBrush(QColor(0, 0, 255, 50))); // 半透明蓝色填充
     
     QPolygon polygon;
-    for (const QPoint& point : m_polygonPoints) {
+    for (const QPoint& point : m_polygonPoints) 
+    {
         polygon << point;
     }
     painter.drawPolygon(polygon);
@@ -1438,7 +1487,8 @@ void MainWindow::drawPolygonOnImage()
     // 绘制顶点和序号
     painter.setPen(QPen(Qt::red, 3));
     painter.setBrush(QBrush(Qt::red));
-    for (int i = 0; i < m_polygonPoints.size(); ++i) {
+    for (int i = 0; i < m_polygonPoints.size(); ++i) 
+    {
         painter.drawEllipse(m_polygonPoints[i], 5, 5);
         painter.setPen(QPen(Qt::white, 2));
         painter.setFont(QFont("Arial", 10, QFont::Bold));
@@ -1459,7 +1509,8 @@ void MainWindow::drawPolygonOnImage()
     
     // 在日志中显示所有点的坐标
     AppendLog("多边形绘制完成，顶点坐标：", INFO);
-    for (int i = 0; i < m_polygonPoints.size(); ++i) {
+    for (int i = 0; i < m_polygonPoints.size(); ++i) 
+    {
         AppendLog(QString("顶点%1: (%2, %3)").arg(i+1).arg(m_polygonPoints[i].x()).arg(m_polygonPoints[i].y()), INFO);
     }
     
@@ -1475,7 +1526,8 @@ void MainWindow::drawPolygonOnImage()
 // 裁剪多边形区域图像并补全背景为矩形
 void MainWindow::cropImageToPolygon()
 {
-    if (m_polygonPoints.size() < 3) {
+    if (m_polygonPoints.size() < 3) 
+    {
         AppendLog("需要至少3个点才能裁剪图像", WARNNING);
         return;
     }
@@ -1485,7 +1537,8 @@ void MainWindow::cropImageToPolygon()
 
     // 计算多边形的边界框
     QPolygon polygon;
-    for (const QPoint& point : m_polygonPoints) {
+    for (const QPoint& point : m_polygonPoints) 
+    {
         polygon << point;
     }
 
@@ -1494,7 +1547,8 @@ void MainWindow::cropImageToPolygon()
     // 确保边界框在图像范围内
     boundingRect = boundingRect.intersected(QRect(0, 0, originalImage.width(), originalImage.height()));
 
-    if (boundingRect.isEmpty()) {
+    if (boundingRect.isEmpty()) 
+    {
         AppendLog("多边形区域超出图像范围", WARNNING);
         return;
     }
@@ -1504,16 +1558,20 @@ void MainWindow::cropImageToPolygon()
     QRect squareRect(boundingRect.x(), boundingRect.y(), maxSize, maxSize);
 
     // 调整正方形区域确保在图像范围内
-    if (squareRect.right() >= originalImage.width()) {
+    if (squareRect.right() >= originalImage.width()) 
+    {
         squareRect.moveLeft(originalImage.width() - maxSize);
     }
-    if (squareRect.bottom() >= originalImage.height()) {
+    if (squareRect.bottom() >= originalImage.height()) 
+    {
         squareRect.moveTop(originalImage.height() - maxSize);
     }
-    if (squareRect.left() < 0) {
+    if (squareRect.left() < 0) 
+    {
         squareRect.moveLeft(0);
     }
-    if (squareRect.top() < 0) {
+    if (squareRect.top() < 0) 
+    {
         squareRect.moveTop(0);
     }
 
@@ -1532,7 +1590,8 @@ void MainWindow::cropImageToPolygon()
 
     // 设置剪裁路径为多边形（相对于正方形区域的坐标）
     QPolygon relativePolygon;
-    for (const QPoint& point : m_polygonPoints) {
+    for (const QPoint& point : m_polygonPoints) 
+    {
         relativePolygon << QPoint(point.x() - squareRect.x(), point.y() - squareRect.y());
     }
 
@@ -1551,7 +1610,8 @@ void MainWindow::cropImageToPolygon()
     m_hasCroppedImage = true;
 
     // 将裁剪后的图像显示到widgetDisplay_2上
-    if (!m_croppedPixmap.isNull()) {
+    if (!m_croppedPixmap.isNull()) 
+    {
         // 缩放图片以适应widgetDisplay_2大小，保持宽高比
         QPixmap scaledPixmap = m_croppedPixmap.scaled(ui->widgetDisplay->size(),
                                                      Qt::KeepAspectRatio,
@@ -1573,14 +1633,17 @@ QColor MainWindow::sampleBorderColor(const QImage& image, const QPolygon& polygo
     int sampleCount = 0;
     
     // 在多边形边缘取样像素颜色
-    for (int i = 0; i < polygon.size(); ++i) {
+    for (int i = 0; i < polygon.size(); ++i) 
+    {
         QPoint p1 = polygon[i];
         QPoint p2 = polygon[(i + 1) % polygon.size()];
         
         // 沿着边缘取样
         int steps = qMax(qAbs(p2.x() - p1.x()), qAbs(p2.y() - p1.y()));
-        if (steps > 0) {
-            for (int j = 0; j <= steps; ++j) {
+        if (steps > 0) 
+        {
+            for (int j = 0; j <= steps; ++j) 
+            {
                 float t = (float)j / steps;
                 QPoint samplePoint(
                     qRound(p1.x() * (1 - t) + p2.x() * t),
@@ -1602,13 +1665,15 @@ QColor MainWindow::sampleBorderColor(const QImage& image, const QPolygon& polygo
         if (sampleCount >= 100) break;
     }
     
-    if (borderPixels.isEmpty()) {
+    if (borderPixels.isEmpty()) 
+    {
         return Qt::white; // 默认背景色
     }
     
     // 计算平均颜色
     long long r = 0, g = 0, b = 0;
-    for (QRgb pixel : borderPixels) {
+    for (QRgb pixel : borderPixels) 
+    {
         r += qRed(pixel);
         g += qGreen(pixel);
         b += qBlue(pixel);
@@ -1621,7 +1686,8 @@ QColor MainWindow::sampleBorderColor(const QImage& image, const QPolygon& polygo
 void MainWindow::clearPolygonDisplay()
 {
     // 恢复原始图片显示
-    if (!m_originalPixmap.isNull()) {
+    if (!m_originalPixmap.isNull()) 
+    {
         ui->widgetDisplay_2->setPixmap(m_originalPixmap);
     }
     
