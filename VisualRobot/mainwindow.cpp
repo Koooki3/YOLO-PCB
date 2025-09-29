@@ -184,7 +184,8 @@ void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INF
         MainWindow* pMainWindow = static_cast<MainWindow*>(pUser);
         cv::Mat grayImage;
         // 根据像素类型转换到灰度图
-        switch(pFrameInfo->enPixelType) {
+        switch(pFrameInfo->enPixelType) 
+        {
             case PixelType_Gvsp_Mono8:
                 grayImage = cv::Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC1, tempFrame.data());
                 break;
@@ -768,11 +769,7 @@ void MainWindow::on_pushButton_clicked()
         {
             for (size_t i = 0; i < Row.size(); ++i)
             {
-                AppendLog(QString("第%1个角点(x,y)像素坐标为:(%2, %3)")
-                          .arg(i+1)
-                          .arg(Col[i])
-                          .arg(Row[i]),
-                          INFO);
+                AppendLog(QString("第%1个角点(x,y)像素坐标为:(%2, %3)").arg(i+1).arg(Col[i]).arg(Row[i]), INFO);
             }
         }
 
@@ -787,9 +784,7 @@ void MainWindow::on_pushButton_clicked()
         }
 
         // 缩放图片以适应QLabel大小，保持宽高比
-        QPixmap scaledPixmap = pixmap.scaled(ui->widgetDisplay_2->size(),
-                                             Qt::KeepAspectRatio,
-                                             Qt::SmoothTransformation);
+        QPixmap scaledPixmap = pixmap.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
         ui->widgetDisplay_2->setPixmap(scaledPixmap);
         ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
 
@@ -808,9 +803,7 @@ void MainWindow::on_pushButton_clicked()
         }
 
         // 缩放图片以适应QLabel大小，保持宽高比
-        QPixmap scaledPixmap = pixmap.scaled(ui->widgetDisplay_2->size(),
-                                             Qt::KeepAspectRatio,
-                                             Qt::SmoothTransformation);
+        QPixmap scaledPixmap = pixmap.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
         ui->widgetDisplay_2->setPixmap(scaledPixmap);
         ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
 
@@ -869,7 +862,8 @@ void MainWindow::on_GetLength_clicked()
 {
     ui->GetLength->setEnabled(false);
     // 情况一：如果多边形未完成或没有裁剪图像，清除多边形显示并处理原始图像
-    if (!m_polygonCompleted || !m_hasCroppedImage) {
+    if (!m_polygonCompleted || !m_hasCroppedImage) 
+    {
         clearPolygonDisplay();
         
         string inputPath = "/home/orangepi/Desktop/VisualRobot_Local/Img/capture.jpg";
@@ -925,9 +919,7 @@ void MainWindow::on_GetLength_clicked()
         }
 
         // 缩放图片以适应QLabel大小，保持宽高比
-        QPixmap scaledPixmap = pixmap.scaled(ui->widgetDisplay_2->size(),
-                                             Qt::KeepAspectRatio,
-                                             Qt::SmoothTransformation);
+        QPixmap scaledPixmap = pixmap.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
         ui->widgetDisplay_2->setPixmap(scaledPixmap);
         ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
 
@@ -940,7 +932,8 @@ void MainWindow::on_GetLength_clicked()
         DrawOverlayOnDisplay2((double)result.heights[0], (double)result.widths[0], (double)result.angles[0]);
     }
     // 情况二：如果多边形已完成且有裁剪图像，处理裁剪后的图像
-    else {
+    else 
+    {
         AppendLog("检测到多边形区域，将处理裁剪后的图像", INFO);
         
         // 保存裁剪后的图像到临时文件
@@ -1000,9 +993,7 @@ void MainWindow::on_GetLength_clicked()
         }
 
         // 缩放图片以适应QLabel大小，保持宽高比
-        QPixmap scaledPixmap = pixmap.scaled(ui->widgetDisplay_2->size(),
-                                             Qt::KeepAspectRatio,
-                                             Qt::SmoothTransformation);
+        QPixmap scaledPixmap = pixmap.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
         ui->widgetDisplay_2->setPixmap(scaledPixmap);
         ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
 
@@ -1123,12 +1114,7 @@ void MainWindow::on_genMatrix_clicked()
             double total_error = sqrt(error_x * error_x + error_y * error_y);
 
             // 创建格式化的输出消息
-            QString message = QString("点 %1: 理论世界坐标(%2, %3) -> 变换后世界坐标(%4, %5)")
-                                 .arg(i)
-                                 .arg(WorldCoord[i].x(), 0, 'f', 3)
-                                 .arg(WorldCoord[i].y(), 0, 'f', 3)
-                                 .arg(x_transformed, 0, 'f', 3)
-                                 .arg(y_transformed, 0, 'f', 3);
+            QString message = QString("点 %1: 理论世界坐标(%2, %3) -> 变换后世界坐标(%4, %5)").arg(i).arg(WorldCoord[i].x(), 0, 'f', 3).arg(WorldCoord[i].y(), 0, 'f', 3).arg(x_transformed, 0, 'f', 3).arg(y_transformed, 0, 'f', 3);
 
             // 调用日志函数显示结果
             AppendLog(message, INFO, total_error); // 使用信息级别，并将误差作为value传递
@@ -1167,23 +1153,16 @@ void MainWindow::DrawOverlayOnDisplay2(double length, double width, double angle
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setRenderHint(QPainter::TextAntialiasing, true);
 
-    QString text = QString("长: %1 mm\n宽: %2 mm\n角度: %3 °")
-                       .arg(length,   0, 'f', 3)
-                       .arg(width,    0, 'f', 3)
-                       .arg(angle, 0, 'f', 3);
+    QString text = QString("长: %1 mm\n宽: %2 mm\n角度: %3 °").arg(length,   0, 'f', 3).arg(width,    0, 'f', 3).arg(angle, 0, 'f', 3);
 
     QFont font; font.setPointSize(12); font.setBold(true);
     p.setFont(font);
 
     QFontMetrics fm(font);
     const int margin = 10, pad = 8;
-    QRect textRect = fm.boundingRect(QRect(0, 0, annotated.width()/2, annotated.height()),
-                                     Qt::AlignRight | Qt::AlignTop | Qt::TextWordWrap, text);
+    QRect textRect = fm.boundingRect(QRect(0, 0, annotated.width()/2, annotated.height()), Qt::AlignRight | Qt::AlignTop | Qt::TextWordWrap, text);
 
-    QRect boxRect(annotated.width() - textRect.width() - 2*pad - margin,
-                  margin,
-                  textRect.width() + 2*pad,
-                  textRect.height() + 2*pad);
+    QRect boxRect(annotated.width() - textRect.width() - 2*pad - margin, margin, textRect.width() + 2*pad, textRect.height() + 2*pad);
 
     // 半透明底框
     p.setPen(Qt::NoPen);
@@ -1240,27 +1219,6 @@ void MainWindow::updateSharpnessDisplay(double sharpness)
         QString sharpnessText = QString("清晰度: %1").arg(sharpness, 0, 'f', 2);
         m_sharpnessLabel->setText(sharpnessText);
     }
-}
-
-// 在图像上绘制清晰度叠加信息（保留函数，但当前主要用于状态栏显示）
-void MainWindow::drawSharpnessOverlay(double sharpness)
-{
-    // 此函数目前主要用于状态栏显示
-    // 如果需要直接在图像上叠加显示，可以在此处添加OpenCV绘制逻辑
-    // 但考虑到性能，建议使用状态栏显示
-    
-    // 示例：如果需要直接在图像上绘制，可以使用以下代码
-    /*
-    if (m_hasFrame && !m_lastFrame.empty()) {
-        // 将缓存数据转换为OpenCV Mat
-        cv::Mat image(m_lastInfo.nHeight, m_lastInfo.nWidth, CV_8UC1, m_lastFrame.data());
-        
-        // 在图像上绘制清晰度文本
-        std::string sharpnessText = "Sharpness: " + std::to_string(sharpness);
-        cv::putText(image, sharpnessText, cv::Point(10, 30), 
-                   cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(255, 255, 255), 2);
-    }
-    */
 }
 
 // 初始化多边形绘制功能
@@ -1613,9 +1571,7 @@ void MainWindow::cropImageToPolygon()
     if (!m_croppedPixmap.isNull()) 
     {
         // 缩放图片以适应widgetDisplay_2大小，保持宽高比
-        QPixmap scaledPixmap = m_croppedPixmap.scaled(ui->widgetDisplay->size(),
-                                                     Qt::KeepAspectRatio,
-                                                     Qt::SmoothTransformation);
+        QPixmap scaledPixmap = m_croppedPixmap.scaled(ui->widgetDisplay->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
         ui->widgetDisplay_2->setPixmap(scaledPixmap);
         ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
         AppendLog("裁剪后的图像已显示", INFO);
@@ -1651,18 +1607,23 @@ QColor MainWindow::sampleBorderColor(const QImage& image, const QPolygon& polygo
                 );
                 
                 // 确保采样点在图像范围内
-                if (samplePoint.x() >= 0 && samplePoint.x() < image.width() &&
-                    samplePoint.y() >= 0 && samplePoint.y() < image.height()) {
-                    
+                if (samplePoint.x() >= 0 && samplePoint.x() < image.width() && samplePoint.y() >= 0 && samplePoint.y() < image.height()) 
+                { 
                     borderPixels.append(image.pixel(samplePoint));
                     sampleCount++;
                     
                     // 限制采样数量以提高性能
-                    if (sampleCount >= 100) break;
+                    if (sampleCount >= 100) 
+                    {
+                        break;
+                    }
                 }
             }
         }
-        if (sampleCount >= 100) break;
+        if (sampleCount >= 100) 
+        {
+            break;
+        }
     }
     
     if (borderPixels.isEmpty()) 
