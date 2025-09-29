@@ -124,6 +124,18 @@ private:
     void clearPolygonDisplay();               // 清除多边形显示
     QColor sampleBorderColor(const QImage& image, const QPolygon& polygon); // 取样多边形边缘颜色
 
+    // 矩形拖动选取功能相关
+    bool m_isDragging;                        // 标记是否正在拖动
+    QPoint m_dragStartPoint;                  // 拖动起始点
+    QPoint m_dragEndPoint;                    // 拖动结束点
+    QRect m_selectedRect;                     // 选中的矩形区域
+    bool m_rectCompleted;                     // 标记矩形选择是否完成
+    void handleMousePressOnDisplay2(const QPoint& pos); // 处理鼠标按下
+    void handleMouseMoveOnDisplay2(const QPoint& pos);  // 处理鼠标移动
+    void handleMouseReleaseOnDisplay2(const QPoint& pos); // 处理鼠标释放
+    void drawRectangleOnImage();              // 绘制矩形区域
+    void cropImageToRectangle();              // 裁剪矩形区域图像
+
 };
 
 #endif // MAINWINDOW_H
