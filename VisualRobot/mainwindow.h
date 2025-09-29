@@ -106,7 +106,6 @@ private slots:
 private:
     // 清晰度计算相关
     double calculateTenengradSharpness(const cv::Mat& image);
-    void drawSharpnessOverlay(double sharpness);
 
     // 多边形绘制功能相关
     QVector<QPoint> m_polygonPoints;          // 存储多边形点坐标
