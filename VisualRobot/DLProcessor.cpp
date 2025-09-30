@@ -58,11 +58,11 @@ bool DLProcessor::InitModel(const string& modelPath, const string& configPath)
             return false;
         }
 
-        // 设置计算后端（根据实际硬件选择）
+        // 设置计算后端 (根据实际硬件选择) 
         net_.setPreferableBackend(dnn::DNN_BACKEND_OPENCV);
         net_.setPreferableTarget(dnn::DNN_TARGET_CPU);
 
-        // 可选：如果有GPU支持
+        // 可选: 如果有GPU支持
         // net_.setPreferableBackend(dnn::DNN_BACKEND_CUDA);
         // net_.setPreferableTarget(dnn::DNN_TARGET_CUDA);
 
@@ -118,7 +118,7 @@ bool DLProcessor::LoadClassLabels(const string& labelPath)
 
         qDebug() << "Loaded" << classLabels_.size() << "class labels from:" << QString::fromStdString(labelPath);
 
-        // 调试输出：显示加载的标签内容
+        // 调试输出: 显示加载的标签内容
         qDebug() << "Loaded class labels:";
         for (size_t i = 0; i < classLabels_.size(); i++) 
         {
@@ -272,7 +272,7 @@ Mat DLProcessor::PreProcess(const Mat& frame)
 
     try 
     {
-        // 转换颜色空间（如果需要）
+        // 转换颜色空间 (如果需要) 
         Mat processedFrame = frame;
         if (frame.channels() == 1 && inputSize_.width > 0) 
         {
@@ -311,7 +311,7 @@ ClassificationResult DLProcessor::PostProcessClassification(const vector<Mat>& o
 
     try 
     {
-        // 获取第一个输出（通常分类模型只有一个输出）
+        // 获取第一个输出 (通常分类模型只有一个输出) 
         output = outs[0];
 
         // 确保输出是1D向量
@@ -326,14 +326,14 @@ ClassificationResult DLProcessor::PostProcessClassification(const vector<Mat>& o
             output = output.reshape(1, totalSize);
         }
 
-        // 调试输出：显示原始模型输出
+        // 调试输出: 显示原始模型输出
         qDebug() << "Raw model output:";
         if (output.total() == 1) 
         {
             float rawValue = output.at<float>(0);
             qDebug() << "Single output value:" << rawValue;
 
-            // 如果输出值很大（可能是logits），使用用户建议的100阈值
+            // 如果输出值很大 (可能是logits) ，使用用户建议的100阈值
             if (abs(rawValue) > 10.0f) 
             {
                 result.classId = (rawValue > 100.0f) ? 1 : 0;
@@ -357,7 +357,7 @@ ClassificationResult DLProcessor::PostProcessClassification(const vector<Mat>& o
                 qDebug() << "  Output[" << i << "]:" << output.at<float>(i);
             }
 
-            // 检查是否是logits（值较大）
+            // 检查是否是logits (值较大) 
             for (size_t i = 0; i < output.total(); i++) 
             {
                 if (abs(output.at<float>(i)) > 10.0f) 

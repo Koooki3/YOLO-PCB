@@ -204,7 +204,7 @@ void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INF
         pMainWindow->ImageCallBackInner(pData, pFrameInfo);  // 调用内部处理函数
     }
 
-    // 1) 可选：仍然显示
+    // 1) 可选: 仍然显示
     if (pUser)
     {
         MainWindow* pMainWindow = static_cast<MainWindow*>(pUser);  // 确保pUser非空后再访问
@@ -221,7 +221,7 @@ void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INF
         }
     }
 
-    // 2) 缓存：深拷贝最新一帧到成员变量
+    // 2) 缓存: 深拷贝最新一帧到成员变量
     vector<unsigned char> tempFrame;  // 临时变量用于清晰度计算
     if (pUser)
     {
@@ -755,7 +755,7 @@ void MainWindow::on_pushButton_clicked()
 
     // 创建选择对话框
     msgBox.setWindowTitle("选择检测模式");
-    msgBox.setText("请选择检测模式：");
+    msgBox.setText("请选择检测模式: ");
     cornerButton = msgBox.addButton("角点检测模式", QMessageBox::ActionRole);
     circleButton = msgBox.addButton("最小外接矩形检测模式", QMessageBox::ActionRole);
     cancelButton = msgBox.addButton(QMessageBox::Cancel);
@@ -784,19 +784,19 @@ void MainWindow::on_pushButton_clicked()
         info  = m_lastInfo;
     }
 
-    // 预分配编码缓冲（给足空间）
+    // 预分配编码缓冲 (给足空间) 
     dstMax = info.nWidth * info.nHeight * 3 + 4096;
     pDst = make_unique<unsigned char[]>(dstMax);
     if (!pDst)
     {
-        QMessageBox::warning(this, "保存图片", "内存不足（编码缓冲）！");
-        AppendLog("内存不足（编码缓冲）", ERROR);
+        QMessageBox::warning(this, "保存图片", "内存不足 (编码缓冲) ！");
+        AppendLog("内存不足 (编码缓冲) ", ERROR);
         return;
     }
 
-    // 让 SDK 负责像素转换 + JPEG/PNG 编码（与头文件一致）
+    // 让 SDK 负责像素转换 + JPEG/PNG 编码 (与头文件一致) 
     save.enImageType   = MV_Image_Jpeg;              // 也可 MV_Image_Png
-    save.enPixelType   = info.enPixelType;           // 源像素格式（SDK内部转）
+    save.enPixelType   = info.enPixelType;           // 源像素格式 (SDK内部转) 
     save.nWidth        = info.nWidth;
     save.nHeight       = info.nHeight;
     save.nDataLen      = info.nFrameLen;
@@ -808,8 +808,8 @@ void MainWindow::on_pushButton_clicked()
     nRet = m_pcMyCamera->SaveImage(&save);
     if (MV_OK != nRet || save.nImageLen == 0)
     {
-        ShowErrorMsg("保存失败（编码阶段）", nRet);
-        AppendLog("保存失败（编码阶段）", ERROR);
+        ShowErrorMsg("保存失败 (编码阶段) ", nRet);
+        AppendLog("保存失败 (编码阶段) ", ERROR);
         return;
     }
 
@@ -827,8 +827,8 @@ void MainWindow::on_pushButton_clicked()
     f.write(reinterpret_cast<const char*>(pDst.get()), save.nImageLen);
     f.close();
 
-    QMessageBox::information(this, "保存图片", QString("保存成功：%1").arg(fpath));
-    AppendLog(QString("保存成功，地址为：%1").arg(fpath), INFO);
+    QMessageBox::information(this, "保存图片", QString("保存成功: %1").arg(fpath));
+    AppendLog(QString("保存成功，地址为: %1").arg(fpath), INFO);
     ui->GetLength->setEnabled(true);
     m_hasCroppedImage = false;
     m_polygonCompleted = false;
@@ -916,7 +916,7 @@ void MainWindow::on_pushButton_clicked()
     }
 }
 
-// 调试信息打印函数（输入：调试信息（QString）+宏定义调试信息等级）
+// 调试信息打印函数 (输入: 调试信息 (QString) +宏定义调试信息等级) 
 void MainWindow::AppendLog(const QString &message, int logType, double value)
 {
     // 变量定义
@@ -930,9 +930,9 @@ void MainWindow::AppendLog(const QString &message, int logType, double value)
     timeStamp = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss : ");
     fullMessage = timeStamp + message;
 
-    // 检查value是否为有效值（非零或非默认值），您可以根据需要调整条件
-    // 这里使用了一个简单的检查：如果value不是0.0，则追加它
-    // 注意：这可能不适用于所有情况，您可能需要更精确的检查（例如与NaN比较）
+    // 检查value是否为有效值 (非零或非默认值) ，您可以根据需要调整条件
+    // 这里使用了一个简单的检查: 如果value不是0.0，则追加它
+    // 注意: 这可能不适用于所有情况，您可能需要更精确的检查 (例如与NaN比较) 
     if (value != 0.0) 
     {
         fullMessage += " " + QString::number(value);
@@ -985,7 +985,7 @@ void MainWindow::on_GetLength_clicked()
 
     ui->GetLength->setEnabled(false);
 
-    // 情况一：如果多边形未完成或没有裁剪图像，清除多边形显示并处理原始图像
+    // 情况一: 如果多边形未完成或没有裁剪图像，清除多边形显示并处理原始图像
     if (!m_polygonCompleted || !m_hasCroppedImage) 
     {
         QElapsedTimer timer;     // 计时器
@@ -1006,7 +1006,7 @@ void MainWindow::on_GetLength_clicked()
             return;
         }
 
-        // 设置参数（可根据需要修改）
+        // 设置参数 (可根据需要修改) 
         params.thresh = 127;
         params.maxval = 255;
         params.blurK = 5;
@@ -1036,8 +1036,8 @@ void MainWindow::on_GetLength_clicked()
             return;
         }
 
-        qint64 elapsed = timer.elapsed(); // 获取经过的时间（毫秒）
-        AppendLog(QString("图像处理时间（毫秒）：%1").arg(elapsed), INFO);
+        qint64 elapsed = timer.elapsed(); // 获取经过的时间 (毫秒) 
+        AppendLog(QString("图像处理时间 (毫秒) : %1").arg(elapsed), INFO);
 
         // 加载图片
         pixmap = QPixmap(output);
@@ -1054,13 +1054,13 @@ void MainWindow::on_GetLength_clicked()
 
         AppendLog("检测后图像显示成功", INFO);
         AppendLog("检长算法执行完成", INFO);
-        AppendLog(QString("物件长度（mm）：%1").arg((double)result.heights[0]), INFO);
-        AppendLog(QString("物件宽度（mm）：%1").arg((double)result.widths[0]), INFO);
-        AppendLog(QString("物件倾角（°）：%1").arg((double)result.angles[0]), INFO);
+        AppendLog(QString("物件长度 (mm) : %1").arg((double)result.heights[0]), INFO);
+        AppendLog(QString("物件宽度 (mm) : %1").arg((double)result.widths[0]), INFO);
+        AppendLog(QString("物件倾角 (°) : %1").arg((double)result.angles[0]), INFO);
 
         DrawOverlayOnDisplay2((double)result.heights[0], (double)result.widths[0], (double)result.angles[0]);
     }
-    // 情况二：如果多边形已完成且有裁剪图像，处理裁剪后的图像
+    // 情况二: 如果多边形已完成且有裁剪图像，处理裁剪后的图像
     else 
     {
         QElapsedTimer timer;     // 计时器
@@ -1085,7 +1085,7 @@ void MainWindow::on_GetLength_clicked()
             return;
         }
 
-        // 设置参数（可根据需要修改）
+        // 设置参数 (可根据需要修改) 
         params.thresh = 127;
         params.maxval = 255;
         params.blurK = 5;
@@ -1115,8 +1115,8 @@ void MainWindow::on_GetLength_clicked()
             return;
         }
 
-        qint64 elapsed = timer.elapsed(); // 获取经过的时间（毫秒）
-        AppendLog(QString("裁剪区域图像处理时间（毫秒）：%1").arg(elapsed), INFO);
+        qint64 elapsed = timer.elapsed(); // 获取经过的时间 (毫秒) 
+        AppendLog(QString("裁剪区域图像处理时间 (毫秒) : %1").arg(elapsed), INFO);
 
         // 加载图片
         pixmap = QPixmap(output);
@@ -1133,9 +1133,9 @@ void MainWindow::on_GetLength_clicked()
 
         AppendLog("裁剪区域检测后图像显示成功", INFO);
         AppendLog("裁剪区域检长算法执行完成", INFO);
-        AppendLog(QString("裁剪区域物件长度（mm）：%1").arg((double)result.heights[0]), INFO);
-        AppendLog(QString("裁剪区域物件宽度（mm）：%1").arg((double)result.widths[0]), INFO);
-        AppendLog(QString("裁剪区域物件倾角（°）：%1").arg((double)result.angles[0]), INFO);
+        AppendLog(QString("裁剪区域物件长度 (mm) : %1").arg((double)result.heights[0]), INFO);
+        AppendLog(QString("裁剪区域物件宽度 (mm) : %1").arg((double)result.widths[0]), INFO);
+        AppendLog(QString("裁剪区域物件倾角 (°) : %1").arg((double)result.angles[0]), INFO);
 
         DrawOverlayOnDisplay2((double)result.heights[0], (double)result.widths[0], (double)result.angles[0]);
     }
@@ -1306,7 +1306,7 @@ void MainWindow::DrawOverlayOnDisplay2(double length, double width, double angle
     src = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue);
     if (src.isNull()) 
     {
-        AppendLog("没有可叠加的图像（widgetDisplay_2 为空）", WARNNING);
+        AppendLog("没有可叠加的图像 (widgetDisplay_2 为空) ", WARNNING);
         return;
     }
 
@@ -1469,7 +1469,7 @@ void MainWindow::HandleMouseClickOnDisplay2(const QPoint& pos)
     // 让widgetDisplay_2获得焦点，以便接收键盘事件
     ui->widgetDisplay_2->setFocus();
     
-    // 保存原始图片（如果尚未保存）
+    // 保存原始图片 (如果尚未保存) 
     if (!m_isImageLoaded) 
     {
         m_originalPixmap = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue);
@@ -1533,7 +1533,7 @@ void MainWindow::HandleEnterKeyPress()
     DrawPolygonOnImage();
 }
 
-// 坐标转换：将控件坐标转换为图像坐标
+// 坐标转换: 将控件坐标转换为图像坐标
 QPoint MainWindow::ConvertToImageCoordinates(const QPoint& widgetPoint)
 {
     // 变量定义
@@ -1562,7 +1562,7 @@ QPoint MainWindow::ConvertToImageCoordinates(const QPoint& widgetPoint)
     // 获取控件尺寸
     widgetSize = ui->widgetDisplay_2->size();
     
-    // 计算图像在控件中的显示区域（保持宽高比居中显示）
+    // 计算图像在控件中的显示区域 (保持宽高比居中显示) 
     widgetAspect = static_cast<double>(widgetSize.width()) / widgetSize.height();
     imageAspect = static_cast<double>(originalSize.width()) / originalSize.height();
     
@@ -1660,7 +1660,7 @@ void MainWindow::DrawPolygonOnImage()
     ui->widgetDisplay_2->setPixmap(currentPixmap);
     
     // 在日志中显示所有点的坐标
-    AppendLog("多边形绘制完成，顶点坐标：", INFO);
+    AppendLog("多边形绘制完成，顶点坐标: ", INFO);
     for (i = 0; i < m_polygonPoints.size(); ++i) 
     {
         AppendLog(QString("顶点%1: (%2, %3)").arg(i+1).arg(m_polygonPoints[i].x()).arg(m_polygonPoints[i].y()), INFO);
@@ -1751,13 +1751,13 @@ void MainWindow::CropImageToPolygon()
     painter.begin(&croppedImage);
     painter.setRenderHint(QPainter::Antialiasing, true);
 
-    // 设置剪裁路径为多边形（相对于正方形区域的坐标）
+    // 设置剪裁路径为多边形 (相对于正方形区域的坐标) 
     for (const QPoint& point : m_polygonPoints) 
     {
         relativePolygon << QPoint(point.x() - squareRect.x(), point.y() - squareRect.y());
     }
 
-    // 修改这里：使用addPolygon而不是fromPolygon
+    // 修改这里: 使用addPolygon而不是fromPolygon
     clipPath.addPolygon(relativePolygon);
     painter.setClipPath(clipPath);
 

@@ -5,7 +5,7 @@
 CameraCalibrator::CameraCalibrator(cv::Size boardSize, float squareSize)
     : boardSize(boardSize), squareSize(squareSize) {}
 
-// 准备物体点（世界坐标系中的点）
+// 准备物体点 (世界坐标系中的点) 
 std::vector<cv::Point3f> CameraCalibrator::prepareObjectPoints() {
     std::vector<cv::Point3f> objP;
     for (int i = 0; i < boardSize.height; i++) {

@@ -11,7 +11,7 @@ namespace fs = std::filesystem;
 class CameraCalibrator {
 private:
     cv::Size boardSize;          // 棋盘格内角点数量 (width, height)
-    float squareSize;           // 棋盘格方格的实际大小（单位：毫米）
+    float squareSize;           // 棋盘格方格的实际大小 (单位: 毫米) 
     std::vector<std::vector<cv::Point3f>> objectPoints; // 世界坐标系中的三维点
     std::vector<std::vector<cv::Point2f>> imagePoints;  // 图像坐标系中的二维点
     cv::Size imageSize;         // 图像尺寸
@@ -25,7 +25,7 @@ private:
 public:
     CameraCalibrator(cv::Size boardSize, float squareSize = 1.0f);
 
-    // 准备物体点（世界坐标系中的点）
+    // 准备物体点 (世界坐标系中的点) 
     std::vector<cv::Point3f> prepareObjectPoints();
 
     // 处理单张图像，提取角点

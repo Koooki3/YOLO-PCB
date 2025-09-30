@@ -43,7 +43,7 @@ Mat DataProcessor::StandardizeImage(const Mat& input)
     // 计算图像的最小和最大像素值
     minMaxLoc(input, &minVal, &maxVal);
     
-    // 标准化处理：将像素值映射到0-255范围
+    // 标准化处理: 将像素值映射到0-255范围
     input.convertTo(standardized, CV_8U, 255.0 / (maxVal - minVal), 0);
     
     return standardized;
@@ -113,7 +113,7 @@ Mat DataProcessor::AdjustBrightness(const Mat& input, double alpha)
     // 克隆原始图像
     adjusted = input.clone();
     
-    // 调整亮度：alpha控制亮度偏移量
+    // 调整亮度: alpha控制亮度偏移量
     adjusted.convertTo(adjusted, -1, 1, alpha);
     
     return adjusted;
@@ -127,7 +127,7 @@ Mat DataProcessor::AdjustContrast(const Mat& input, double beta)
     // 克隆原始图像
     adjusted = input.clone();
     
-    // 调整对比度：beta控制对比度比例
+    // 调整对比度: beta控制对比度比例
     adjusted.convertTo(adjusted, -1, beta, 0);
     
     return adjusted;
@@ -247,37 +247,37 @@ vector<Mat> DataProcessor::ApplyAugmentation(const Mat& input, int numAugmentati
         current = input.clone();
         
         // 随机应用数据增强操作
-        // 亮度调整（50%概率）
+        // 亮度调整 (50%概率) 
         if (RandomDouble(0, 1) > 0.5)
         {
             current = AdjustBrightness(current, RandomDouble(-50, 50));
         }
             
-        // 对比度调整（50%概率）
+        // 对比度调整 (50%概率) 
         if (RandomDouble(0, 1) > 0.5)
         {
             current = AdjustContrast(current, RandomDouble(0.5, 1.5));
         }
             
-        // 添加噪声（50%概率）
+        // 添加噪声 (50%概率) 
         if (RandomDouble(0, 1) > 0.5)
         {
             current = AddNoise(current);
         }
             
-        // 随机旋转（50%概率）
+        // 随机旋转 (50%概率) 
         if (RandomDouble(0, 1) > 0.5)
         {
             current = RandomRotate(current);
         }
             
-        // 随机翻转（50%概率）
+        // 随机翻转 (50%概率) 
         if (RandomDouble(0, 1) > 0.5)
         {
             current = RandomFlip(current);
         }
             
-        // 随机裁剪（50%概率）
+        // 随机裁剪 (50%概率) 
         if (RandomDouble(0, 1) > 0.5)
         {
             current = RandomCrop(current);

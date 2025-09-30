@@ -46,7 +46,7 @@ public:
     // 批量处理图像
     bool ClassifyBatch(const vector<Mat>& frames, vector<ClassificationResult>& results);
     
-    // 处理单张图像（兼容原接口）
+    // 处理单张图像 (兼容原接口) 
     bool ProcessFrame(const Mat& frame, Mat& output);
     
     // 获取模型信息
@@ -110,7 +110,7 @@ private:
     // 后处理方法 - 二分类
     ClassificationResult PostProcessClassification(const vector<Mat>& outs);
     
-    // 后处理方法（兼容原接口）
+    // 后处理方法 (兼容原接口) 
     void PostProcess(Mat& frame, const vector<Mat>& outs);
     
     // 辅助方法
