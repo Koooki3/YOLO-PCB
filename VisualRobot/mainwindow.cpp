@@ -50,6 +50,16 @@ MainWindow::MainWindow(QWidget *parent) :
     // 初始化UI
     ui->setupUi(this);
 
+    // 自动创建log文件夹
+    QDir logDir("../log");
+    if (!logDir.exists()) {
+        if (logDir.mkpath(".")) {
+            AppendLog("log文件夹创建成功", INFO);
+        } else {
+            AppendLog("log文件夹创建失败", ERROR);
+        }
+    }
+
     // 初始化相机相关变量
     memset(&m_stDevList, 0, sizeof(MV_CC_DEVICE_INFO_LIST));
     m_pcMyCamera = NULL;
@@ -100,6 +110,54 @@ MainWindow::~MainWindow()
         m_sysMonitor->stopMonitoring();
     }
     delete ui;
+}
+
+// 程序关闭事件处理
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    // 变量定义
+    QString logContent;           // 日志内容
+    QString logFileName;          // 日志文件名
+    QString logFilePath;          // 日志文件路径
+    QFile logFile;                // 日志文件对象
+    QTextStream out;              // 文本流
+    QDateTime currentTime;        // 当前时间
+
+    // 获取displayLogMsg中的所有文本内容
+    logContent = ui->displayLogMsg->toPlainText();
+    
+    if (logContent.isEmpty()) {
+        // 如果没有日志内容，直接关闭
+        event->accept();
+        return;
+    }
+
+    // 生成时间戳文件名
+    currentTime = QDateTime::currentDateTime();
+    logFileName = QString("log_%1.txt").arg(currentTime.toString("yyyyMMdd_hhmmss"));
+    logFilePath = QString("../log/%1").arg(logFileName);
+
+    // 打开文件进行写入
+    logFile.setFileName(logFilePath);
+    if (!logFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        AppendLog("无法创建日志文件", ERROR);
+        event->accept();
+        return;
+    }
+
+    // 写入日志内容
+    out.setDevice(&logFile);
+    out << "=== VisualRobot 运行日志 ===\n";
+    out << "生成时间: " << currentTime.toString("yyyy-MM-dd hh:mm:ss") << "\n";
+    out << "=============================\n\n";
+    out << logContent;
+
+    logFile.close();
+
+    AppendLog(QString("日志已保存到文件: %1").arg(logFilePath), INFO);
+    
+    // 接受关闭事件
+    event->accept();
 }
 
 // 显示错误信息
