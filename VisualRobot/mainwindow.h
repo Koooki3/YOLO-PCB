@@ -105,7 +105,7 @@ private slots:
 
 private:
     // 清晰度计算相关
-    double calculateTenengradSharpness(const cv::Mat& image);
+    double CalculateTenengradSharpness(const cv::Mat& image);
 
     // 多边形绘制功能相关
     QVector<QPoint> m_polygonPoints;          // 存储多边形点坐标
@@ -115,14 +115,14 @@ private:
     QPixmap m_croppedPixmap;                  // 裁剪后的图片
     bool m_hasCroppedImage;                   // 标记是否有裁剪图片
     bool eventFilter(QObject* obj, QEvent* event);
-    void setupPolygonDrawing();               // 初始化多边形绘制功能
-    void handleMouseClickOnDisplay2(const QPoint& pos); // 处理鼠标点击
-    void handleEnterKeyPress();               // 处理Enter键按下
-    void drawPolygonOnImage();                // 在图片上绘制多边形
-    QPoint convertToImageCoordinates(const QPoint& widgetPoint); // 坐标转换
-    void cropImageToPolygon();                // 裁剪多边形区域图像
-    void clearPolygonDisplay();               // 清除多边形显示
-    QColor sampleBorderColor(const QImage& image, const QPolygon& polygon); // 取样多边形边缘颜色
+    void SetupPolygonDrawing();               // 初始化多边形绘制功能
+    void HandleMouseClickOnDisplay2(const QPoint& pos); // 处理鼠标点击
+    void HandleEnterKeyPress();               // 处理Enter键按下
+    void DrawPolygonOnImage();                // 在图片上绘制多边形
+    QPoint ConvertToImageCoordinates(const QPoint& widgetPoint); // 坐标转换
+    void CropImageToPolygon();                // 裁剪多边形区域图像
+    void ClearPolygonDisplay();               // 清除多边形显示
+    QColor SampleBorderColor(const QImage& image, const QPolygon& polygon); // 取样多边形边缘颜色
 
     // 矩形拖动选取功能相关
     bool m_isDragging;                        // 标记是否正在拖动
@@ -130,11 +130,11 @@ private:
     QPoint m_dragEndPoint;                    // 拖动结束点
     QRect m_selectedRect;                     // 选中的矩形区域
     bool m_rectCompleted;                     // 标记矩形选择是否完成
-    void handleMousePressOnDisplay2(const QPoint& pos); // 处理鼠标按下
-    void handleMouseMoveOnDisplay2(const QPoint& pos);  // 处理鼠标移动
-    void handleMouseReleaseOnDisplay2(const QPoint& pos); // 处理鼠标释放
-    void drawRectangleOnImage();              // 绘制矩形区域
-    void cropImageToRectangle();              // 裁剪矩形区域图像
+    void HandleMousePressOnDisplay2(const QPoint& pos); // 处理鼠标按下
+    void HandleMouseMoveOnDisplay2(const QPoint& pos);  // 处理鼠标移动
+    void HandleMouseReleaseOnDisplay2(const QPoint& pos); // 处理鼠标释放
+    void DrawRectangleOnImage();              // 绘制矩形区域
+    void CropImageToRectangle();              // 裁剪矩形区域图像
 
 };
 
