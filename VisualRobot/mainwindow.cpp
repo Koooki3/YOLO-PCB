@@ -34,6 +34,7 @@
 #include <string.h>
 #include <QPainterPath>
 #include <QElapsedTimer>
+#include <QTextStream>
 
 #define ERROR 2
 #define WARNNING 1
@@ -147,14 +148,12 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
     // 写入日志内容
     out.setDevice(&logFile);
-    out << "=== VisualRobot 运行日志 ===\n";
-    out << "生成时间: " << currentTime.toString("yyyy-MM-dd hh:mm:ss") << "\n";
+    out << "== VisualRobot Runtime Log ==\n";
+    out << "Execution Time: " << currentTime.toString("yyyy-MM-dd hh:mm:ss") << "\n";
     out << "=============================\n\n";
     out << logContent;
 
     logFile.close();
-
-    AppendLog(QString("日志已保存到文件: %1").arg(logFilePath), INFO);
     
     // 接受关闭事件
     event->accept();
