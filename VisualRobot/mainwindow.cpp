@@ -926,10 +926,13 @@ void MainWindow::on_GetLength_clicked()
     QPixmap scaledPixmap;    // 缩放后的图像
 
     ui->GetLength->setEnabled(false);
-    
+
     // 情况一：如果多边形未完成或没有裁剪图像，清除多边形显示并处理原始图像
     if (!m_polygonCompleted || !m_hasCroppedImage) 
     {
+        QElapsedTimer timer;     // 计时器
+        timer.start();           // 开始计时
+
         ClearPolygonDisplay();
         
         inputPath = "/home/orangepi/Desktop/VisualRobot_Local/Img/capture.jpg";
@@ -975,6 +978,9 @@ void MainWindow::on_GetLength_clicked()
             return;
         }
 
+        qint64 elapsed = timer.elapsed(); // 获取经过的时间（毫秒）
+        AppendLog(QString("图像处理时间（毫秒）：%1").arg(elapsed), INFO);
+
         // 加载图片
         pixmap = QPixmap(output);
         if (pixmap.isNull()) 
@@ -999,6 +1005,9 @@ void MainWindow::on_GetLength_clicked()
     // 情况二：如果多边形已完成且有裁剪图像，处理裁剪后的图像
     else 
     {
+        QElapsedTimer timer;     // 计时器
+        timer.start();           // 开始计时
+
         AppendLog("检测到多边形区域，将处理裁剪后的图像", INFO);
         
         // 保存裁剪后的图像到临时文件
@@ -1047,6 +1056,9 @@ void MainWindow::on_GetLength_clicked()
             cerr << "处理后的图像为空，无法保存" << endl;
             return;
         }
+
+        qint64 elapsed = timer.elapsed(); // 获取经过的时间（毫秒）
+        AppendLog(QString("裁剪区域图像处理时间（毫秒）：%1").arg(elapsed), INFO);
 
         // 加载图片
         pixmap = QPixmap(output);
