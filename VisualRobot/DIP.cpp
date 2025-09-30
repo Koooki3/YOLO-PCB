@@ -118,7 +118,7 @@ bool CreateDirectory(const string& path)
 //            b(row2) = y;
 //        }
 
-//        // 精度优化1: 数据归一化处理（提高数值稳定性）
+//        // 精度优化1: 数据归一化处理 (提高数值稳定性) 
 //        pixel_mean = Vector2d::Zero();
 //        world_mean = Vector2d::Zero();
 
@@ -141,7 +141,7 @@ bool CreateDirectory(const string& path)
 //        world_scale /= pointCount;
 
 //        // 高级精度优化1: 加权最小二乘法
-//        // 根据点的质量分配权重（距离中心越近的点权重越高）
+//        // 根据点的质量分配权重 (距离中心越近的点权重越高) 
 //        weights = VectorXd::Ones(2 * pointCount);
 //        pixel_center = pixel_mean;
 //        for (int i = 0; i < pointCount; ++i)
@@ -182,7 +182,7 @@ bool CreateDirectory(const string& path)
 //            x += correction;
 //        }
 
-//        // 高级精度优化4: RANSAC异常点检测（可选）
+//        // 高级精度优化4: RANSAC异常点检测 (可选) 
 //        // 可以添加RANSAC来检测和移除异常点，进一步提高精度
 
 //        // 计算最终误差并输出
@@ -294,7 +294,7 @@ int GetCoordsOpenCV(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, 
     height = image.rows;
     width = image.cols;
 
-    // 计算参数（基于原始代码中的比例）
+    // 计算参数 (基于原始代码中的比例) 
     r = (height * 316.0) / 2182.0;
     dis_col = (width * 1049.0) / 2734.0;
     dis_row = (height * 774.0) / 2182.0;
@@ -374,7 +374,7 @@ int GetCoordsOpenCV(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, 
     // 亚像素精度优化圆心坐标 - 使用图像矩计算质心
     for (size_t i = 0; i < detectedCenters.size(); i++) 
     {
-        // 根据圆的半径动态定义ROI区域（以检测到的圆心为中心，2r*2r像素区域）
+        // 根据圆的半径动态定义ROI区域 (以检测到的圆心为中心，2r*2r像素区域) 
         radius = static_cast<int>(detectedRadii[i]);
         roi_size = 2 * radius; // ROI大小为2r*2r
         x = max(0, static_cast<int>(detectedCenters[i].x - radius));
@@ -391,11 +391,11 @@ int GetCoordsOpenCV(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, 
             
             if (m.m00 != 0) 
             {
-                // 计算质心（相对于ROI的坐标）
+                // 计算质心 (相对于ROI的坐标) 
                 cx = m.m10 / m.m00;
                 cy = m.m01 / m.m00;
                 
-                // 更新圆心坐标（转换回原图坐标系）
+                // 更新圆心坐标 (转换回原图坐标系) 
                 detectedCenters[i].x = x + cx;
                 detectedCenters[i].y = y + cy;
             }
@@ -549,16 +549,16 @@ int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<dou
     {
         // 按照顺时针顺序排序角点
         vector<Point> orderedPoints = rectContour;
-        // 按y坐标排序（从上到下）
+        // 按y坐标排序 (从上到下) 
         sort(orderedPoints.begin(), orderedPoints.end(), [](const Point& a, const Point& b) { return a.y < b.y; });
         
-        // 上面的两个点按x坐标排序（从左到右）
+        // 上面的两个点按x坐标排序 (从左到右) 
         if(orderedPoints[0].x > orderedPoints[1].x) 
         {
             swap(orderedPoints[0], orderedPoints[1]);
         }
         
-        // 下面的两个点按x坐标排序（从左到右）
+        // 下面的两个点按x坐标排序 (从左到右) 
         if(orderedPoints[2].x > orderedPoints[3].x) 
         {
             swap(orderedPoints[2], orderedPoints[3]);

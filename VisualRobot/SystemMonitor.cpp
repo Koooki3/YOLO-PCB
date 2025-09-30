@@ -123,10 +123,10 @@ float SystemMonitor::GetCpuUsage()
 float SystemMonitor::GetMemoryUsage()
 {
     // 变量定义
-    unsigned long totalMem = 0;    // 总内存大小（KB）
-    unsigned long freeMem = 0;     // 空闲内存大小（KB）
-    unsigned long buffers = 0;     // 缓冲区大小（KB）
-    unsigned long cached = 0;      // 缓存大小（KB）
+    unsigned long totalMem = 0;    // 总内存大小 (KB) 
+    unsigned long freeMem = 0;     // 空闲内存大小 (KB) 
+    unsigned long buffers = 0;     // 缓冲区大小 (KB) 
+    unsigned long cached = 0;      // 缓存大小 (KB) 
     string line;                   // 读取的每行数据
 
     // 尝试从/proc/meminfo读取内存信息
@@ -164,7 +164,7 @@ float SystemMonitor::GetMemoryUsage()
         return 0.0f;
     }
 
-    // 计算实际使用的内存（考虑缓存和缓冲区）
+    // 计算实际使用的内存 (考虑缓存和缓冲区) 
     unsigned long usedMem = totalMem - freeMem - buffers - cached;
     float memUsage = 100.0f * static_cast<float>(usedMem) / totalMem;
     

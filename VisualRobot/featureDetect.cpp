@@ -165,7 +165,7 @@ void FeatureDetector::TestFeatureDetection(const QString& imagePath1, const QStr
         // 计算单应性矩阵
         H = cv::findHomography(points1, points2, cv::RANSAC);
 
-        // 设置对象角点（原始图像的四个角）
+        // 设置对象角点 (原始图像的四个角) 
         objCorners[0] = cv::Point2f(0, 0);
         objCorners[1] = cv::Point2f(image1.cols, 0);
         objCorners[2] = cv::Point2f(image1.cols, image1.rows);
