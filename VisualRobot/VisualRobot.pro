@@ -2,7 +2,7 @@ QT       += core gui
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 TRANSLATIONS = VisualRobot_zh_EN.ts
-CONFIG += c++11
+CONFIG += c++17
 
 CONFIG += precompile_header
 PRECOMPILE_HEADER = qglobal.h

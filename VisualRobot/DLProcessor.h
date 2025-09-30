@@ -58,8 +58,7 @@ public:
     void SetInputSize(const Size& size);
 
     // 设置预处理参数
-    void SetPreprocessParams(const Scalar& mean, const Scalar& std, 
-                           double scaleFactor, bool swapRB);
+    void SetPreprocessParams(const Scalar& mean, const Scalar& std, double scaleFactor, bool swapRB);
     
     // 获取模型参数
     float GetConfidenceThreshold() const;
