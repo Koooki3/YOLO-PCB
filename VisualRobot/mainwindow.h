@@ -123,6 +123,9 @@ private:
     void CropImageToPolygon();                                              // 裁剪多边形区域图像
     void ClearPolygonDisplay();                                             // 清除多边形显示
     QColor SampleBorderColor(const QImage& image, const QPolygon& polygon); // 取样多边形边缘颜色
+
+    // 日志保存
+    void closeEvent(QCloseEvent *event);
 };
 
 #endif // MAINWINDOW_H
