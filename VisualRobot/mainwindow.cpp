@@ -33,6 +33,7 @@
 #include <opencv2/highgui.hpp>
 #include <string.h>
 #include <QPainterPath>
+#include <QElapsedTimer>
 
 #define ERROR 2
 #define WARNNING 1
@@ -1134,7 +1135,7 @@ void MainWindow::on_genMatrix_clicked()
     cout << "==========================" << endl << endl;
 
     // 调用函数计算变换矩阵并保存到文件
-    result = CalculateTransformationMatrix(WorldCoord, PixelCoord, transformationMatrix, "../matrix.bin");
+//    result = CalculateTransformationMatrix(WorldCoord, PixelCoord, transformationMatrix, "../matrix.bin");
 
     if (result == 0)
     {
@@ -1238,7 +1239,7 @@ void MainWindow::DrawOverlayOnDisplay2(double length, double width, double angle
     QPainter p;                     // 绘图对象
     QString text;                   // 显示文本
     QFont font;                     // 字体
-    QFontMetrics fm;                // 字体度量
+    QFontMetrics fm(font);          // 字体度量
     const int margin = 10;          // 边距
     const int pad = 8;              // 内边距
     QRect textRect;                 // 文本矩形区域
@@ -1263,7 +1264,6 @@ void MainWindow::DrawOverlayOnDisplay2(double length, double width, double angle
     font.setBold(true);
     p.setFont(font);
 
-    fm = QFontMetrics(font);
     textRect = fm.boundingRect(QRect(0, 0, annotated.width()/2, annotated.height()), Qt::AlignRight | Qt::AlignTop | Qt::TextWordWrap, text);
 
     boxRect = QRect(annotated.width() - textRect.width() - 2*pad - margin, margin, textRect.width() + 2*pad, textRect.height() + 2*pad);
@@ -1342,16 +1342,12 @@ void MainWindow::SetupPolygonDrawing()
     m_polygonCompleted = false;
     m_hasCroppedImage = false;
     
-    // 初始化矩形拖动选取变量
-    m_isDragging = false;
-    m_rectCompleted = false;
-    
     // 设置widgetDisplay_2接受鼠标和键盘事件
     ui->widgetDisplay_2->setMouseTracking(true);
     ui->widgetDisplay_2->setFocusPolicy(Qt::StrongFocus); // 允许获得焦点
     ui->widgetDisplay_2->installEventFilter(this);
     
-    AppendLog("多边形绘制和矩形拖动功能已初始化", INFO);
+    AppendLog("多边形绘制功能已初始化", INFO);
 }
 
 // 事件过滤器，用于捕获widgetDisplay_2的鼠标点击和键盘事件
@@ -1368,36 +1364,7 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
             mouseEvent = static_cast<QMouseEvent*>(event);
             if (mouseEvent->button() == Qt::LeftButton) 
             {
-                // 根据当前状态选择处理方式
-                if (m_polygonPoints.isEmpty() && !m_isDragging) 
-                {
-                    // 开始矩形拖动
-                    HandleMousePressOnDisplay2(mouseEvent->pos());
-                    return true;
-                } 
-                else 
-                {
-                    // 继续多边形绘制
-                    HandleMouseClickOnDisplay2(mouseEvent->pos());
-                    return true;
-                }
-            }
-        }
-        else if (event->type() == QEvent::MouseMove) 
-        {
-            mouseEvent = static_cast<QMouseEvent*>(event);
-            if (m_isDragging) 
-            {
-                HandleMouseMoveOnDisplay2(mouseEvent->pos());
-                return true;
-            }
-        }
-        else if (event->type() == QEvent::MouseButtonRelease) 
-        {
-            mouseEvent = static_cast<QMouseEvent*>(event);
-            if (mouseEvent->button() == Qt::LeftButton && m_isDragging) 
-            {
-                HandleMouseReleaseOnDisplay2(mouseEvent->pos());
+                HandleMouseClickOnDisplay2(mouseEvent->pos());
                 return true;
             }
         }
@@ -1854,210 +1821,4 @@ void MainWindow::ClearPolygonDisplay()
     m_isImageLoaded = false;
     
     AppendLog("已清除多边形显示", INFO);
-}
-
-// 矩形拖动选取功能实现
-
-// 处理鼠标按下事件（开始矩形拖动）
-void MainWindow::HandleMousePressOnDisplay2(const QPoint& pos)
-{
-    // 检查是否有图片加载
-    if (!ui->widgetDisplay_2->pixmap() || ui->widgetDisplay_2->pixmap()->isNull()) 
-    {
-        AppendLog("请在widgetDisplay_2上显示图片后再进行拖动", WARNNING);
-        return;
-    }
-    
-    // 让widgetDisplay_2获得焦点，以便接收键盘事件
-    ui->widgetDisplay_2->setFocus();
-    
-    // 保存原始图片（如果尚未保存）
-    if (!m_isImageLoaded) 
-    {
-        m_originalPixmap = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue);
-        m_isImageLoaded = true;
-    }
-    
-    // 开始拖动
-    m_isDragging = true;
-    m_dragStartPoint = pos;
-    m_dragEndPoint = pos;
-    
-    AppendLog("开始矩形拖动选取", INFO);
-}
-
-// 处理鼠标移动事件（矩形拖动预览）
-void MainWindow::HandleMouseMoveOnDisplay2(const QPoint& pos)
-{
-    // 变量定义
-    QPixmap currentPixmap;  // 当前图像
-    QPainter painter;       // 绘图对象
-    QRect dragRect;         // 拖动矩形
-    QPoint startImagePoint; // 起始图像坐标
-    QPoint endImagePoint;   // 结束图像坐标
-    QRect imageRect;        // 图像矩形
-    QString sizeText;       // 尺寸文本
-
-    if (!m_isDragging) 
-    {
-        return;
-    }
-    
-    m_dragEndPoint = pos;
-    
-    // 显示矩形预览
-    currentPixmap = m_originalPixmap.copy();
-    painter.begin(&currentPixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    
-    // 计算矩形区域
-    dragRect = QRect(m_dragStartPoint, m_dragEndPoint).normalized();
-    
-    // 绘制半透明矩形
-    painter.setPen(QPen(Qt::red, 2));
-    painter.setBrush(QBrush(QColor(255, 0, 0, 50))); // 半透明红色填充
-    painter.drawRect(dragRect);
-    
-    // 显示矩形尺寸信息
-    painter.setPen(QPen(Qt::white, 2));
-    painter.setFont(QFont("Arial", 12, QFont::Bold));
-    
-    // 将控件坐标转换为图像坐标
-    startImagePoint = ConvertToImageCoordinates(m_dragStartPoint);
-    endImagePoint = ConvertToImageCoordinates(m_dragEndPoint);
-    imageRect = QRect(startImagePoint, endImagePoint).normalized();
-    
-    sizeText = QString("%1 x %2 像素").arg(imageRect.width()).arg(imageRect.height());
-    painter.drawText(dragRect.bottomRight() + QPoint(5, 15), sizeText);
-    
-    painter.end();
-    
-    // 更新显示
-    ui->widgetDisplay_2->setPixmap(currentPixmap);
-}
-
-// 处理鼠标释放事件（完成矩形选择）
-void MainWindow::HandleMouseReleaseOnDisplay2(const QPoint& pos)
-{
-    // 变量定义
-    QPoint startImagePoint;  // 起始图像坐标
-    QPoint endImagePoint;    // 结束图像坐标
-
-    if (!m_isDragging) 
-    {
-        return;
-    }
-    
-    m_dragEndPoint = pos;
-    m_isDragging = false;
-    
-    // 将控件坐标转换为图像坐标
-    startImagePoint = ConvertToImageCoordinates(m_dragStartPoint);
-    endImagePoint = ConvertToImageCoordinates(m_dragEndPoint);
-    
-    // 计算选中的矩形区域
-    m_selectedRect = QRect(startImagePoint, endImagePoint).normalized();
-    
-    // 确保矩形区域有效
-    if (m_selectedRect.width() < 10 || m_selectedRect.height() < 10) 
-    {
-        AppendLog("选择的矩形区域太小，请重新选择", WARNNING);
-        // 恢复原始图片
-        ui->widgetDisplay_2->setPixmap(m_originalPixmap);
-        return;
-    }
-    
-    AppendLog(QString("矩形选择完成，区域: %1x%2 像素").arg(m_selectedRect.width()).arg(m_selectedRect.height()), INFO);
-    
-    // 绘制最终矩形并裁剪图像
-    DrawRectangleOnImage();
-}
-
-// 绘制矩形区域
-void MainWindow::DrawRectangleOnImage()
-{
-    // 变量定义
-    QPixmap currentPixmap;  // 当前图像
-    QPainter painter;       // 绘图对象
-    QString infoText;       // 信息文本
-
-    if (m_selectedRect.isEmpty()) 
-    {
-        AppendLog("无效的矩形区域", WARNNING);
-        return;
-    }
-    
-    // 恢复原始图片
-    currentPixmap = m_originalPixmap.copy();
-    painter.begin(&currentPixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    
-    // 绘制矩形边框
-    painter.setPen(QPen(Qt::blue, 3));
-    painter.setBrush(QBrush(QColor(0, 0, 255, 30))); // 半透明蓝色填充
-    painter.drawRect(m_selectedRect);
-    
-    // 绘制矩形信息
-    painter.setPen(QPen(Qt::white, 2));
-    painter.setFont(QFont("Arial", 12, QFont::Bold));
-    
-    infoText = QString("矩形区域: %1x%2").arg(m_selectedRect.width()).arg(m_selectedRect.height());
-    painter.drawText(m_selectedRect.topLeft() + QPoint(5, -5), infoText);
-    
-    painter.end();
-    
-    // 更新显示
-    ui->widgetDisplay_2->setPixmap(currentPixmap);
-    
-    // 标记矩形完成并裁剪图像
-    m_rectCompleted = true;
-    CropImageToRectangle();
-}
-
-// 裁剪矩形区域图像
-void MainWindow::CropImageToRectangle()
-{
-    // 变量定义
-    QImage originalImage;  // 原始图像
-    QRect validRect;       // 有效矩形区域
-    QImage croppedImage;   // 裁剪后的图像
-    QPixmap scaledPixmap;  // 缩放后的图像
-
-    if (m_selectedRect.isEmpty()) 
-    {
-        AppendLog("无效的矩形区域", WARNNING);
-        return;
-    }
-    
-    // 将QPixmap转换为QImage
-    originalImage = m_originalPixmap.toImage();
-    
-    // 确保矩形区域在图像范围内
-    validRect = m_selectedRect.intersected(QRect(0, 0, originalImage.width(), originalImage.height()));
-    
-    if (validRect.isEmpty()) 
-    {
-        AppendLog("矩形区域超出图像范围", WARNNING);
-        return;
-    }
-    
-    // 裁剪图像
-    croppedImage = originalImage.copy(validRect);
-    
-    // 转换为QPixmap
-    m_croppedPixmap = QPixmap::fromImage(croppedImage);
-    m_hasCroppedImage = true;
-    
-    // 将裁剪后的图像显示到widgetDisplay_2上
-    if (!m_croppedPixmap.isNull()) 
-    {
-        // 缩放图片以适应widgetDisplay_2大小，保持宽高比
-        scaledPixmap = m_croppedPixmap.scaled(ui->widgetDisplay->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        ui->widgetDisplay_2->setPixmap(scaledPixmap);
-        ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
-        AppendLog("裁剪后的矩形区域图像已显示", INFO);
-    }
-    
-    AppendLog(QString("矩形区域图像裁剪完成，尺寸: %1x%2 像素").arg(validRect.width()).arg(validRect.height()), INFO);
-    ui->GetLength->setEnabled(true);
 }

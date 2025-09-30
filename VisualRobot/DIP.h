@@ -40,7 +40,7 @@ struct Result
 
 bool CreateDirectory(const string& path);
 
-int CalculateTransformationMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& PixelCoord, Matrix3d& matrix, const string& filename);
+//int CalculateTransformationMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& PixelCoord, Matrix3d& matrix, const string& filename);
 
 Matrix3d ReadTransformationMatrix(const string& filename);
 

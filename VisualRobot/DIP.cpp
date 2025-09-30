@@ -48,8 +48,9 @@ bool CreateDirectory(const string& path)
 //   filename - 保存矩阵的文件名
 // 返回值:
 //   成功返回0，失败返回非零错误码
-int CalculateTransformationMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& PixelCoord, Matrix3d& matrix, const string& filename = "")
-{
+
+//int CalculateTransformationMatrix(const QVector<QPointF>& WorldCoord, const QVector<QPointF>& PixelCoord, Matrix3d& matrix, const string& filename = "")
+//{
 //    // 变量定义
 //    const int pointCount = WorldCoord.count(); // 坐标点数量
 //    int row1, row2;                            // 矩阵行索引
@@ -252,7 +253,7 @@ int CalculateTransformationMatrix(const QVector<QPointF>& WorldCoord, const QVec
 //        cerr << "错误: " << e.what() << endl;
 //        return 6; // 错误码6: 计算过程中发生异常
 //    }
-}
+//}
 
 
 // OpenCV版本的圆形检测算法
@@ -549,8 +550,7 @@ int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<dou
         // 按照顺时针顺序排序角点
         vector<Point> orderedPoints = rectContour;
         // 按y坐标排序（从上到下）
-        sort(orderedPoints.begin(), orderedPoints.end(), 
-             [](const Point& a, const Point& b) { return a.y < b.y; });
+        sort(orderedPoints.begin(), orderedPoints.end(), [](const Point& a, const Point& b) { return a.y < b.y; });
         
         // 上面的两个点按x坐标排序（从左到右）
         if(orderedPoints[0].x > orderedPoints[1].x) 

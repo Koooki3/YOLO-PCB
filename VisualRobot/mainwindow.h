@@ -74,15 +74,15 @@ private slots:
 private:
     Ui::MainWindow *ui;
 
-    void *m_hWnd;                          // ch:显示窗口句柄 | en:The Handle of Display Window
+    void *m_hWnd;                                  // ch:显示窗口句柄 | en:The Handle of Display Window
 
-    MV_CC_DEVICE_INFO_LIST  m_stDevList;   // ch:设备信息链表 | en:The list of device info
-    CMvCamera*              m_pcMyCamera;  // ch:相机类设备实例 | en:The instance of CMvCamera
-    bool                    m_bGrabbing;   // ch:是否开始抓图 | en:The flag of Grabbing
+    MV_CC_DEVICE_INFO_LIST  m_stDevList;           // ch:设备信息链表 | en:The list of device info
+    CMvCamera*              m_pcMyCamera;          // ch:相机类设备实例 | en:The instance of CMvCamera
+    bool                    m_bGrabbing;           // ch:是否开始抓图 | en:The flag of Grabbing
 
-    vector<unsigned char> m_lastFrame;      // 缓存的原始帧数据
-    MV_FRAME_OUT_INFO_EX       m_lastInfo{};     // 帧信息
-    mutex                 m_frameMtx;       // 互斥锁保护
+    vector<unsigned char> m_lastFrame;             // 缓存的原始帧数据
+    MV_FRAME_OUT_INFO_EX       m_lastInfo{};       // 帧信息
+    mutex                 m_frameMtx;              // 互斥锁保护
     bool                       m_hasFrame = false; // 是否已有可用帧
 
     vector<double> Row, Col;
@@ -108,34 +108,21 @@ private:
     double CalculateTenengradSharpness(const cv::Mat& image);
 
     // 多边形绘制功能相关
-    QVector<QPoint> m_polygonPoints;          // 存储多边形点坐标
-    QPixmap m_originalPixmap;                 // 原始图片
-    bool m_isImageLoaded;                     // 标记是否有图片加载
-    bool m_polygonCompleted;                  // 标记多边形是否完成绘制
-    QPixmap m_croppedPixmap;                  // 裁剪后的图片
-    bool m_hasCroppedImage;                   // 标记是否有裁剪图片
+    QVector<QPoint> m_polygonPoints;                                        // 存储多边形点坐标
+    QPixmap m_originalPixmap;                                               // 原始图片
+    bool m_isImageLoaded;                                                   // 标记是否有图片加载
+    bool m_polygonCompleted;                                                // 标记多边形是否完成绘制
+    QPixmap m_croppedPixmap;                                                // 裁剪后的图片
+    bool m_hasCroppedImage;                                                 // 标记是否有裁剪图片
     bool eventFilter(QObject* obj, QEvent* event);
-    void SetupPolygonDrawing();               // 初始化多边形绘制功能
-    void HandleMouseClickOnDisplay2(const QPoint& pos); // 处理鼠标点击
-    void HandleEnterKeyPress();               // 处理Enter键按下
-    void DrawPolygonOnImage();                // 在图片上绘制多边形
-    QPoint ConvertToImageCoordinates(const QPoint& widgetPoint); // 坐标转换
-    void CropImageToPolygon();                // 裁剪多边形区域图像
-    void ClearPolygonDisplay();               // 清除多边形显示
+    void SetupPolygonDrawing();                                             // 初始化多边形绘制功能
+    void HandleMouseClickOnDisplay2(const QPoint& pos);                     // 处理鼠标点击
+    void HandleEnterKeyPress();                                             // 处理Enter键按下
+    void DrawPolygonOnImage();                                              // 在图片上绘制多边形
+    QPoint ConvertToImageCoordinates(const QPoint& widgetPoint);            // 坐标转换
+    void CropImageToPolygon();                                              // 裁剪多边形区域图像
+    void ClearPolygonDisplay();                                             // 清除多边形显示
     QColor SampleBorderColor(const QImage& image, const QPolygon& polygon); // 取样多边形边缘颜色
-
-    // 矩形拖动选取功能相关
-    bool m_isDragging;                        // 标记是否正在拖动
-    QPoint m_dragStartPoint;                  // 拖动起始点
-    QPoint m_dragEndPoint;                    // 拖动结束点
-    QRect m_selectedRect;                     // 选中的矩形区域
-    bool m_rectCompleted;                     // 标记矩形选择是否完成
-    void HandleMousePressOnDisplay2(const QPoint& pos); // 处理鼠标按下
-    void HandleMouseMoveOnDisplay2(const QPoint& pos);  // 处理鼠标移动
-    void HandleMouseReleaseOnDisplay2(const QPoint& pos); // 处理鼠标释放
-    void DrawRectangleOnImage();              // 绘制矩形区域
-    void CropImageToRectangle();              // 裁剪矩形区域图像
-
 };
 
 #endif // MAINWINDOW_H

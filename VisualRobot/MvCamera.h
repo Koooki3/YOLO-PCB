@@ -120,13 +120,8 @@ public:
     // ch:保存图片 | en:save image
     int SaveImage(MV_SAVE_IMAGE_PARAM_EX3* pstParam);
 
-
-
-
 private:
-
     void*               m_hDevHandle;
-
 };
 
 #endif//_MV_CAMERA_H_
