@@ -156,7 +156,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
     out.setDevice(&logFile);
     out << "== VisualRobot Runtime Log ==\n";
     out << "Execution Time: " << currentTime.toString("yyyy-MM-dd hh:mm:ss") << "\n";
-    out << "=============================\n\n";
+    out << "=============================\n";
     out << logContent;
 
     logFile.close();
