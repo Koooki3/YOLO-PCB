@@ -53,10 +53,14 @@ MainWindow::MainWindow(QWidget *parent) :
 
     // 自动创建log文件夹
     QDir logDir("../log");
-    if (!logDir.exists()) {
-        if (logDir.mkpath(".")) {
+    if (!logDir.exists()) 
+    {
+        if (logDir.mkpath(".")) 
+        {
             AppendLog("log文件夹创建成功", INFO);
-        } else {
+        } 
+        else 
+        {
             AppendLog("log文件夹创建失败", ERROR);
         }
     }
@@ -127,7 +131,8 @@ void MainWindow::closeEvent(QCloseEvent *event)
     // 获取displayLogMsg中的所有文本内容
     logContent = ui->displayLogMsg->toPlainText();
     
-    if (logContent.isEmpty()) {
+    if (logContent.isEmpty()) 
+    {
         // 如果没有日志内容，直接关闭
         event->accept();
         return;
@@ -140,7 +145,8 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
     // 打开文件进行写入
     logFile.setFileName(logFilePath);
-    if (!logFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    if (!logFile.open(QIODevice::WriteOnly | QIODevice::Text)) 
+    {
         AppendLog("无法创建日志文件", ERROR);
         event->accept();
         return;
@@ -201,7 +207,7 @@ void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INF
     if (pUser)
     {
         MainWindow* pMainWindow = static_cast<MainWindow*>(pUser);  // 将 pUser 强制转换为 MainWindow 指针
-        pMainWindow->ImageCallBackInner(pData, pFrameInfo);  // 调用内部处理函数
+        pMainWindow->ImageCallBackInner(pData, pFrameInfo);         // 调用内部处理函数
     }
 
     // 1) 可选: 仍然显示
@@ -1427,10 +1433,15 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
         }
         else if (event->type() == QEvent::KeyPress) 
         {
-            keyEvent = static_cast<QKeyEvent*>(event);
+            QKeyEvent* keyEvent = static_cast<QKeyEvent*>(event);
             if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) 
             {
                 HandleEnterKeyPress();
+                return true;
+            }
+            else if (keyEvent->key() == Qt::Key_Escape) 
+            {
+                HandleEscKeyPress();
                 return true;
             }
         }
@@ -1818,10 +1829,7 @@ QColor MainWindow::SampleBorderColor(const QImage& image, const QPolygon& polygo
             for (j = 0; j <= steps; ++j) 
             {
                 t = (float)j / steps;
-                samplePoint = QPoint(
-                    qRound(p1.x() * (1 - t) + p2.x() * t),
-                    qRound(p1.y() * (1 - t) + p2.y() * t)
-                );
+                samplePoint = QPoint(qRound(p1.x() * (1 - t) + p2.x() * t), qRound(p1.y() * (1 - t) + p2.y() * t));
                 
                 // 确保采样点在图像范围内
                 if (samplePoint.x() >= 0 && samplePoint.x() < image.width() && samplePoint.y() >= 0 && samplePoint.y() < image.height()) 
@@ -1878,4 +1886,31 @@ void MainWindow::ClearPolygonDisplay()
     m_isImageLoaded = false;
     
     AppendLog("已清除多边形显示", INFO);
+}
+
+// 处理ESC键按下事件
+void MainWindow::HandleEscKeyPress()
+{
+    // 检查是否有鼠标点击产生的点
+    if (!m_polygonPoints.isEmpty()) 
+    {
+        // 清空所有点并还原状态
+        m_polygonPoints.clear();
+        m_isImageLoaded = false;
+        m_polygonCompleted = false;
+        m_hasCroppedImage = false;
+        
+        // 恢复原始图片显示
+        if (!m_originalPixmap.isNull()) 
+        {
+            ui->widgetDisplay_2->setPixmap(m_originalPixmap);
+        }
+        
+        AppendLog("已清空所有已选点", INFO);
+    }
+    else 
+    {
+        // 如果没有选点，显示警告信息
+        AppendLog("无ROI选点", WARNNING);
+    }
 }

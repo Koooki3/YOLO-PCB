@@ -80,10 +80,10 @@ private:
     CMvCamera*              m_pcMyCamera;          // ch:相机类设备实例 | en:The instance of CMvCamera
     bool                    m_bGrabbing;           // ch:是否开始抓图 | en:The flag of Grabbing
 
-    vector<unsigned char> m_lastFrame;             // 缓存的原始帧数据
-    MV_FRAME_OUT_INFO_EX       m_lastInfo{};       // 帧信息
-    mutex                 m_frameMtx;              // 互斥锁保护
-    bool                       m_hasFrame = false; // 是否已有可用帧
+    vector<unsigned char>   m_lastFrame;           // 缓存的原始帧数据
+    MV_FRAME_OUT_INFO_EX    m_lastInfo{};          // 帧信息
+    mutex                   m_frameMtx;            // 互斥锁保护
+    bool                    m_hasFrame = false;    // 是否已有可用帧
 
     vector<double> Row, Col;
     //HTuple Row, Col;
@@ -123,6 +123,7 @@ private:
     void CropImageToPolygon();                                              // 裁剪多边形区域图像
     void ClearPolygonDisplay();                                             // 清除多边形显示
     QColor SampleBorderColor(const QImage& image, const QPolygon& polygon); // 取样多边形边缘颜色
+    void HandleEscKeyPress();                                               // 处理ESC键按下
 
     // 日志保存
     void closeEvent(QCloseEvent *event);
