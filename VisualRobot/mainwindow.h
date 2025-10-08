@@ -140,6 +140,9 @@ private:
     void HandleSpaceKeyPress();               // 处理空格键按下
     void SwitchSelectionMode();               // 切换选择模式
 
+    // 键盘事件处理
+    void keyPressEvent(QKeyEvent *event) override;
+
     // 日志保存
     void closeEvent(QCloseEvent *event);
 };

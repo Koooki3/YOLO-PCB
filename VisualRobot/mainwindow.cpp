@@ -1502,6 +1502,22 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
     return QMainWindow::eventFilter(obj, event);
 }
 
+// 主窗口键盘事件处理
+void MainWindow::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Space) 
+    {
+        // 处理空格键，切换选择模式
+        HandleSpaceKeyPress();
+        event->accept(); // 标记事件已处理，阻止传播
+    }
+    else 
+    {
+        // 其他按键交给父类处理
+        QMainWindow::keyPressEvent(event);
+    }
+}
+
 // 处理鼠标点击事件
 void MainWindow::HandleMouseClickOnDisplay2(const QPoint& pos)
 {
