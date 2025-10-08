@@ -1405,12 +1405,17 @@ void MainWindow::SetupPolygonDrawing()
     m_polygonCompleted = false;
     m_hasCroppedImage = false;
     
+    // 初始化矩形拖动选取变量
+    m_isDragging = false;
+    m_rectCompleted = false;
+    m_useRectangleMode = false; // 默认使用多边形模式
+    
     // 设置widgetDisplay_2接受鼠标和键盘事件
     ui->widgetDisplay_2->setMouseTracking(true);
     ui->widgetDisplay_2->setFocusPolicy(Qt::StrongFocus); // 允许获得焦点
     ui->widgetDisplay_2->installEventFilter(this);
     
-    AppendLog("多边形绘制功能已初始化", INFO);
+    AppendLog("多边形绘制和矩形拖动功能已初始化，当前模式：多边形点击模式", INFO);
 }
 
 // 事件过滤器，用于捕获widgetDisplay_2的鼠标点击和键盘事件
@@ -1427,7 +1432,33 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
             mouseEvent = static_cast<QMouseEvent*>(event);
             if (mouseEvent->button() == Qt::LeftButton) 
             {
-                HandleMouseClickOnDisplay2(mouseEvent->pos());
+                // 根据当前模式选择处理方式
+                if (m_useRectangleMode) 
+                {
+                    HandleMousePressOnDisplay2(mouseEvent->pos());
+                }
+                else 
+                {
+                    HandleMouseClickOnDisplay2(mouseEvent->pos());
+                }
+                return true;
+            }
+        }
+        else if (event->type() == QEvent::MouseMove) 
+        {
+            mouseEvent = static_cast<QMouseEvent*>(event);
+            if (m_useRectangleMode && m_isDragging) 
+            {
+                HandleMouseMoveOnDisplay2(mouseEvent->pos());
+                return true;
+            }
+        }
+        else if (event->type() == QEvent::MouseButtonRelease) 
+        {
+            mouseEvent = static_cast<QMouseEvent*>(event);
+            if (m_useRectangleMode && mouseEvent->button() == Qt::LeftButton && m_isDragging) 
+            {
+                HandleMouseReleaseOnDisplay2(mouseEvent->pos());
                 return true;
             }
         }
@@ -1444,6 +1475,11 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
                 HandleEscKeyPress();
                 return true;
             }
+            else if (keyEvent->key() == Qt::Key_Space) 
+            {
+                HandleSpaceKeyPress();
+                return true;
+            }
         }
     }
     
@@ -1454,6 +1490,11 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
         if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) 
         {
             HandleEnterKeyPress();
+            return true;
+        }
+        else if (keyEvent->key() == Qt::Key_Space) 
+        {
+            HandleSpaceKeyPress();
             return true;
         }
     }
@@ -1891,14 +1932,16 @@ void MainWindow::ClearPolygonDisplay()
 // 处理ESC键按下事件
 void MainWindow::HandleEscKeyPress()
 {
-    // 检查是否有鼠标点击产生的点
-    if (!m_polygonPoints.isEmpty()) 
+    // 检查是否有鼠标点击产生的点或矩形框
+    if (!m_polygonPoints.isEmpty() || m_rectCompleted) 
     {
         // 清空所有点并还原状态
         m_polygonPoints.clear();
         m_isImageLoaded = false;
         m_polygonCompleted = false;
         m_hasCroppedImage = false;
+        m_rectCompleted = false;
+        m_isDragging = false;
         
         // 恢复原始图片显示
         if (!m_originalPixmap.isNull()) 
@@ -1906,11 +1949,256 @@ void MainWindow::HandleEscKeyPress()
             ui->widgetDisplay_2->setPixmap(m_originalPixmap);
         }
         
-        AppendLog("已清空所有已选点", INFO);
+        AppendLog("已清空所有已选点和矩形框", INFO);
     }
     else 
     {
         // 如果没有选点，显示警告信息
         AppendLog("无ROI选点", WARNNING);
+    }
+}
+
+// 处理空格键按下事件
+void MainWindow::HandleSpaceKeyPress()
+{
+    SwitchSelectionMode();
+}
+
+// 切换选择模式
+void MainWindow::SwitchSelectionMode()
+{
+    // 切换模式
+    m_useRectangleMode = !m_useRectangleMode;
+    
+    // 清空当前状态
+    m_polygonPoints.clear();
+    m_rectCompleted = false;
+    m_isDragging = false;
+    
+    // 恢复原始图片显示
+    if (!m_originalPixmap.isNull()) 
+    {
+        ui->widgetDisplay_2->setPixmap(m_originalPixmap);
+    }
+    
+    // 记录模式切换
+    if (m_useRectangleMode) 
+    {
+        AppendLog("已切换到矩形拖动模式", INFO);
+    }
+    else 
+    {
+        AppendLog("已切换到多边形点击模式", INFO);
+    }
+}
+
+// 处理鼠标按下事件（开始矩形拖动）
+void MainWindow::HandleMousePressOnDisplay2(const QPoint& pos)
+{
+    // 检查是否有图片加载
+    if (!ui->widgetDisplay_2->pixmap() || ui->widgetDisplay_2->pixmap()->isNull()) 
+    {
+        AppendLog("请在widgetDisplay_2上显示图片后再进行拖动", WARNNING);
+        return;
+    }
+    
+    // 让widgetDisplay_2获得焦点，以便接收键盘事件
+    ui->widgetDisplay_2->setFocus();
+    
+    // 保存原始图片（如果尚未保存）
+    if (!m_isImageLoaded) 
+    {
+        m_originalPixmap = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue);
+        m_isImageLoaded = true;
+    }
+    
+    // 开始拖动
+    m_isDragging = true;
+    m_dragStartPoint = pos;
+    m_dragEndPoint = pos;
+    
+    AppendLog("开始矩形拖动选取", INFO);
+}
+
+// 处理鼠标移动事件（矩形拖动预览）
+void MainWindow::HandleMouseMoveOnDisplay2(const QPoint& pos)
+{
+    if (!m_isDragging) 
+    {
+        return;
+    }
+    
+    m_dragEndPoint = pos;
+    
+    // 显示矩形预览
+    QPixmap currentPixmap = m_originalPixmap.copy();
+    QPainter painter(&currentPixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    
+    // 计算矩形区域
+    QRect dragRect = QRect(m_dragStartPoint, m_dragEndPoint).normalized();
+    
+    // 绘制半透明矩形
+    painter.setPen(QPen(Qt::red, 2));
+    painter.setBrush(QBrush(QColor(255, 0, 0, 50))); // 半透明红色填充
+    painter.drawRect(dragRect);
+    
+    // 显示矩形尺寸信息
+    painter.setPen(QPen(Qt::white, 2));
+    painter.setFont(QFont("Arial", 12, QFont::Bold));
+    
+    // 将控件坐标转换为图像坐标
+    QPoint startImagePoint = ConvertToImageCoordinates(m_dragStartPoint);
+    QPoint endImagePoint = ConvertToImageCoordinates(m_dragEndPoint);
+    QRect imageRect = QRect(startImagePoint, endImagePoint).normalized();
+    
+    QString sizeText = QString("%1 x %2 像素").arg(imageRect.width()).arg(imageRect.height());
+    painter.drawText(dragRect.bottomRight() + QPoint(5, 15), sizeText);
+    
+    painter.end();
+    
+    // 更新显示
+    ui->widgetDisplay_2->setPixmap(currentPixmap);
+}
+
+// 处理鼠标释放事件（完成矩形选择）
+void MainWindow::HandleMouseReleaseOnDisplay2(const QPoint& pos)
+{
+    if (!m_isDragging) 
+    {
+        return;
+    }
+    
+    m_dragEndPoint = pos;
+    m_isDragging = false;
+    
+    // 将控件坐标转换为图像坐标
+    QPoint startImagePoint = ConvertToImageCoordinates(m_dragStartPoint);
+    QPoint endImagePoint = ConvertToImageCoordinates(m_dragEndPoint);
+    
+    // 计算选中的矩形区域
+    m_selectedRect = QRect(startImagePoint, endImagePoint).normalized();
+    
+    // 确保矩形区域有效
+    if (m_selectedRect.width() < 10 || m_selectedRect.height() < 10) 
+    {
+        AppendLog("选择的矩形区域太小，请重新选择", WARNNING);
+        // 恢复原始图片
+        ui->widgetDisplay_2->setPixmap(m_originalPixmap);
+        return;
+    }
+    
+    AppendLog(QString("矩形选择完成，区域: %1x%2 像素").arg(m_selectedRect.width()).arg(m_selectedRect.height()), INFO);
+    
+    // 绘制最终矩形并裁剪图像
+    DrawRectangleOnImage();
+}
+
+// 绘制矩形区域
+void MainWindow::DrawRectangleOnImage()
+{
+    if (m_selectedRect.isEmpty()) 
+    {
+        AppendLog("无效的矩形区域", WARNNING);
+        return;
+    }
+    
+    // 恢复原始图片
+    QPixmap currentPixmap = m_originalPixmap.copy();
+    QPainter painter(&currentPixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    
+    // 绘制矩形边框
+    painter.setPen(QPen(Qt::blue, 3));
+    painter.setBrush(QBrush(QColor(0, 0, 255, 30))); // 半透明蓝色填充
+    painter.drawRect(m_selectedRect);
+    
+    // 绘制矩形信息
+    painter.setPen(QPen(Qt::white, 2));
+    painter.setFont(QFont("Arial", 12, QFont::Bold));
+    
+    QString infoText = QString("矩形区域: %1x%2").arg(m_selectedRect.width()).arg(m_selectedRect.height());
+    painter.drawText(m_selectedRect.topLeft() + QPoint(5, -5), infoText);
+    
+    painter.end();
+    
+    // 更新显示
+    ui->widgetDisplay_2->setPixmap(currentPixmap);
+    
+    // 标记矩形完成
+    m_rectCompleted = true;
+    AppendLog("矩形区域已绘制完成，按Enter键确认裁剪", INFO);
+}
+
+// 裁剪矩形区域图像
+void MainWindow::CropImageToRectangle()
+{
+    if (m_selectedRect.isEmpty()) 
+    {
+        AppendLog("无效的矩形区域", WARNNING);
+        return;
+    }
+    
+    // 将QPixmap转换为QImage
+    QImage originalImage = m_originalPixmap.toImage();
+    
+    // 确保矩形区域在图像范围内
+    QRect validRect = m_selectedRect.intersected(QRect(0, 0, originalImage.width(), originalImage.height()));
+    
+    if (validRect.isEmpty()) 
+    {
+        AppendLog("矩形区域超出图像范围", WARNNING);
+        return;
+    }
+    
+    // 裁剪图像
+    QImage croppedImage = originalImage.copy(validRect);
+    
+    // 转换为QPixmap
+    m_croppedPixmap = QPixmap::fromImage(croppedImage);
+    m_hasCroppedImage = true;
+    
+    // 将裁剪后的图像显示到widgetDisplay_2上
+    if (!m_croppedPixmap.isNull()) 
+    {
+        // 缩放图片以适应widgetDisplay_2大小，保持宽高比
+        QPixmap scaledPixmap = m_croppedPixmap.scaled(ui->widgetDisplay_2->size(),
+                                                     Qt::KeepAspectRatio,
+                                                     Qt::SmoothTransformation);
+        ui->widgetDisplay_2->setPixmap(scaledPixmap);
+        ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
+        AppendLog("裁剪后的矩形区域图像已显示", INFO);
+    }
+    
+    AppendLog(QString("矩形区域图像裁剪完成，尺寸: %1x%2 像素").arg(validRect.width()).arg(validRect.height()), INFO);
+    ui->GetLength->setEnabled(true);
+}
+
+// 修改Enter键处理函数以支持矩形模式
+void MainWindow::HandleEnterKeyPress()
+{
+    if (m_useRectangleMode) 
+    {
+        // 矩形模式处理
+        if (!m_rectCompleted) 
+        {
+            AppendLog("请先完成矩形选择", WARNNING);
+            return;
+        }
+        
+        AppendLog("开始裁剪矩形区域", INFO);
+        CropImageToRectangle();
+    }
+    else 
+    {
+        // 多边形模式处理
+        if (m_polygonPoints.size() < 3) 
+        {
+            AppendLog(QString("需要至少3个点才能绘制多边形，当前只有%1个点").arg(m_polygonPoints.size()), WARNNING);
+            return;
+        }
+        
+        AppendLog(QString("开始绘制多边形，共%1个点").arg(m_polygonPoints.size()), INFO);
+        DrawPolygonOnImage();
     }
 }
