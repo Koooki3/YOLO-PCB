@@ -1572,19 +1572,6 @@ void MainWindow::HandleMouseClickOnDisplay2(const QPoint& pos)
     AppendLog(QString("已添加第%1个点，坐标(%2, %3)").arg(m_polygonPoints.size()).arg(imagePoint.x()).arg(imagePoint.y()), INFO);
 }
 
-// 处理Enter键按下事件
-void MainWindow::HandleEnterKeyPress()
-{
-    if (m_polygonPoints.size() < 3) 
-    {
-        AppendLog(QString("需要至少3个点才能绘制多边形，当前只有%1个点").arg(m_polygonPoints.size()), WARNNING);
-        return;
-    }
-    
-    AppendLog(QString("开始绘制多边形，共%1个点").arg(m_polygonPoints.size()), INFO);
-    DrawPolygonOnImage();
-}
-
 // 坐标转换: 将控件坐标转换为图像坐标
 QPoint MainWindow::ConvertToImageCoordinates(const QPoint& widgetPoint)
 {
