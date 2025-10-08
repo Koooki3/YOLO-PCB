@@ -125,6 +125,21 @@ private:
     QColor SampleBorderColor(const QImage& image, const QPolygon& polygon); // 取样多边形边缘颜色
     void HandleEscKeyPress();                                               // 处理ESC键按下
 
+    // 矩形拖动选取功能相关
+    bool m_isDragging;                        // 标记是否正在拖动
+    QPoint m_dragStartPoint;                  // 拖动起始点
+    QPoint m_dragEndPoint;                    // 拖动结束点
+    QRect m_selectedRect;                     // 选中的矩形区域
+    bool m_rectCompleted;                     // 标记矩形选择是否完成
+    bool m_useRectangleMode;                  // 标记当前使用矩形模式(true)或多边形模式(false)
+    void HandleMousePressOnDisplay2(const QPoint& pos); // 处理鼠标按下
+    void HandleMouseMoveOnDisplay2(const QPoint& pos);  // 处理鼠标移动
+    void HandleMouseReleaseOnDisplay2(const QPoint& pos); // 处理鼠标释放
+    void DrawRectangleOnImage();              // 绘制矩形区域
+    void CropImageToRectangle();              // 裁剪矩形区域图像
+    void HandleSpaceKeyPress();               // 处理空格键按下
+    void SwitchSelectionMode();               // 切换选择模式
+
     // 日志保存
     void closeEvent(QCloseEvent *event);
 };
