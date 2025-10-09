@@ -99,7 +99,7 @@ MainWindow::MainWindow(QWidget *parent) :
     // 启动监控
     m_sysMonitor->startMonitoring(1000); // 每秒更新一次
 
-    ui->genMatrix->setEnabled(false);
+    ui->genMatrix->setEnabled(true);
 
     // 连接清晰度信号
     connect(this, &MainWindow::sharpnessValueUpdated, this, &MainWindow::updateSharpnessDisplay);
