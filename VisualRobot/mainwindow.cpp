@@ -133,7 +133,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
     
     if (logContent.isEmpty()) 
     {
-        // 如果没有日志内容，直接关闭
+        // 如果没有日志内容, 直接关闭
         event->accept();
         return;
     }
@@ -238,7 +238,7 @@ void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INF
         pMainWindow->m_lastInfo = *pFrameInfo;   // 结构体按值拷贝
         pMainWindow->m_hasFrame = true;
 
-        // 拷贝一份到临时变量，用于清晰度计算
+        // 拷贝一份到临时变量, 用于清晰度计算
         tempFrame = pMainWindow->m_lastFrame;
     }
 
@@ -266,7 +266,7 @@ void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INF
                 }
                 break;
             default:
-                // 不支持的格式，跳过清晰度计算
+                // 不支持的格式, 跳过清晰度计算
                 return;
         }
         double sharpness = pMainWindow->CalculateTenengradSharpness(grayImage);
@@ -782,11 +782,11 @@ void MainWindow::on_pushButton_clicked()
         lock_guard<mutex> lk(m_frameMtx);
         if (!m_hasFrame || m_lastFrame.empty())
         {
-            QMessageBox::warning(this, "保存图片", "暂无可用图像，请先开始采集。");
-            AppendLog("暂无可用图像，请先开始采集", WARNNING);
+            QMessageBox::warning(this, "保存图片", "暂无可用图像, 请先开始采集。");
+            AppendLog("暂无可用图像, 请先开始采集", WARNNING);
             return;
         }
-        frame = m_lastFrame;   // 拷贝到本地变量，避免持锁编码
+        frame = m_lastFrame;   // 拷贝到本地变量, 避免持锁编码
         info  = m_lastInfo;
     }
 
@@ -827,19 +827,19 @@ void MainWindow::on_pushButton_clicked()
     if (!f.open(QIODevice::WriteOnly))
     {
         QMessageBox::warning(this, "保存图片", "无法打开文件进行写入！");
-        AppendLog("保存图片，无法打开文件进行写入", ERROR);
+        AppendLog("保存图片, 无法打开文件进行写入", ERROR);
         return;
     }
     f.write(reinterpret_cast<const char*>(pDst.get()), save.nImageLen);
     f.close();
 
     QMessageBox::information(this, "保存图片", QString("保存成功: %1").arg(fpath));
-    AppendLog(QString("保存成功，地址为: %1").arg(fpath), INFO);
+    AppendLog(QString("保存成功, 地址为: %1").arg(fpath), INFO);
     ui->GetLength->setEnabled(true);
     m_hasCroppedImage = false;
     m_polygonCompleted = false;
 
-    // 如果选择了角点检测，才执行检测算法
+    // 如果选择了角点检测, 才执行检测算法
     if (needDetection) 
     {
         //OpenCV版本
@@ -858,12 +858,12 @@ void MainWindow::on_pushButton_clicked()
         cout << "]" << endl;
         if (ProcessedOK)
         {
-            AppendLog("角点检测算法执行失败，请调整曝光或者重选待测物体", ERROR);
+            AppendLog("角点检测算法执行失败, 请调整曝光或者重选待测物体", ERROR);
             return;
         }
         else
         {
-            AppendLog("待检测图像读取成功，角点检测算法执行完毕", INFO);
+            AppendLog("待检测图像读取成功, 角点检测算法执行完毕", INFO);
         }
 
         if (Row.size() != Col.size())
@@ -894,7 +894,7 @@ void MainWindow::on_pushButton_clicked()
             return;
         }
 
-        // 缩放图片以适应QLabel大小，保持宽高比
+        // 缩放图片以适应QLabel大小, 保持宽高比
         scaledPixmap = pixmap.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
         ui->widgetDisplay_2->setPixmap(scaledPixmap);
         ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
@@ -913,7 +913,7 @@ void MainWindow::on_pushButton_clicked()
             return;
         }
 
-        // 缩放图片以适应QLabel大小，保持宽高比
+        // 缩放图片以适应QLabel大小, 保持宽高比
         scaledPixmap = pixmap.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
         ui->widgetDisplay_2->setPixmap(scaledPixmap);
         ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
@@ -936,9 +936,9 @@ void MainWindow::AppendLog(const QString &message, int logType, double value)
     timeStamp = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss : ");
     fullMessage = timeStamp + message;
 
-    // 检查value是否为有效值 (非零或非默认值) ，您可以根据需要调整条件
-    // 这里使用了一个简单的检查: 如果value不是0.0，则追加它
-    // 注意: 这可能不适用于所有情况，您可能需要更精确的检查 (例如与NaN比较) 
+    // 检查value是否为有效值 (非零或非默认值) , 您可以根据需要调整条件
+    // 这里使用了一个简单的检查: 如果value不是0.0, 则追加它
+    // 注意: 这可能不适用于所有情况, 您可能需要更精确的检查 (例如与NaN比较) 
     if (value != 0.0) 
     {
         fullMessage += " " + QString::number(value);
@@ -991,7 +991,7 @@ void MainWindow::on_GetLength_clicked()
 
     ui->GetLength->setEnabled(false);
 
-    // 情况一: 如果多边形未完成或没有裁剪图像，清除多边形显示并处理原始图像
+    // 情况一: 如果多边形未完成或没有裁剪图像, 清除多边形显示并处理原始图像
     if (!m_polygonCompleted || !m_hasCroppedImage) 
     {
         QElapsedTimer timer;     // 计时器
@@ -1038,7 +1038,7 @@ void MainWindow::on_GetLength_clicked()
         } 
         else 
         {
-            cerr << "处理后的图像为空，无法保存" << endl;
+            cerr << "处理后的图像为空, 无法保存" << endl;
             return;
         }
 
@@ -1053,7 +1053,7 @@ void MainWindow::on_GetLength_clicked()
             return;
         }
 
-        // 缩放图片以适应QLabel大小，保持宽高比
+        // 缩放图片以适应QLabel大小, 保持宽高比
         scaledPixmap = pixmap.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
         ui->widgetDisplay_2->setPixmap(scaledPixmap);
         ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
@@ -1066,13 +1066,13 @@ void MainWindow::on_GetLength_clicked()
 
         DrawOverlayOnDisplay2((double)result.heights[0], (double)result.widths[0], (double)result.angles[0]);
     }
-    // 情况二: 如果多边形已完成且有裁剪图像，处理裁剪后的图像
+    // 情况二: 如果多边形已完成且有裁剪图像, 处理裁剪后的图像
     else 
     {
         QElapsedTimer timer;     // 计时器
         timer.start();           // 开始计时
 
-        AppendLog("检测到多边形区域，将处理裁剪后的图像", INFO);
+        AppendLog("检测到多边形区域, 将处理裁剪后的图像", INFO);
         
         // 保存裁剪后的图像到临时文件
         QString tempCroppedPath = "../Img/cropped_polygon.jpg";
@@ -1117,7 +1117,7 @@ void MainWindow::on_GetLength_clicked()
         } 
         else 
         {
-            cerr << "处理后的图像为空，无法保存" << endl;
+            cerr << "处理后的图像为空, 无法保存" << endl;
             return;
         }
 
@@ -1132,7 +1132,7 @@ void MainWindow::on_GetLength_clicked()
             return;
         }
 
-        // 缩放图片以适应QLabel大小，保持宽高比
+        // 缩放图片以适应QLabel大小, 保持宽高比
         scaledPixmap = pixmap.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
         ui->widgetDisplay_2->setPixmap(scaledPixmap);
         ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
@@ -1149,134 +1149,217 @@ void MainWindow::on_GetLength_clicked()
 
 void MainWindow::on_genMatrix_clicked()
 {
+//     // 变量定义
+//     int getCoordsOk;                // 坐标获取结果
+//     Matrix3d transformationMatrix;  // 变换矩阵
+//     int result;                     // 计算结果
+//     QString matrixStr;              // 矩阵字符串
+//     int i;                          // 循环索引
+//     Vector3d pixelHomogeneous;      // 像素齐次坐标
+//     Vector3d worldTransformed;      // 变换后的世界坐标
+//     double x_transformed;           // 变换后的X坐标
+//     double y_transformed;           // 变换后的Y坐标
+//     double error_x;                 // X方向误差
+//     double error_y;                 // Y方向误差
+//     double total_error;             // 总误差
+//     QString message;                // 消息字符串
+
+//     WorldCoord.clear();
+//     PixelCoord.clear();
+//     getCoordsOk = GetCoordsOpenCV(WorldCoord, PixelCoord, 100.0);
+//     if (getCoordsOk != 0)
+//     {
+//         AppendLog("坐标获取错误", ERROR);
+//     }
+
+//     // 在命令行显示坐标结果
+//     cout << "=== 坐标检测结果 ===" << endl;
+//     cout << "检测到的坐标对数量: " << WorldCoord.size() << endl << endl;
+
+//     cout << "世界坐标 (单位:mm):" << endl;
+//     cout << "索引\tX坐标\t\tY坐标" << endl;
+//     cout << "----\t------\t\t------" << endl;
+//     for (i = 0; i < WorldCoord.size(); i++)
+//     {
+//         cout << i << "\t"
+//              << fixed << setprecision(3) << WorldCoord[i].x() << "\t\t"
+//              << fixed << setprecision(3) << WorldCoord[i].y() << endl;
+//     }
+
+//     cout << endl << "像素坐标 (单位:像素):" << endl;
+//     cout << "索引\tX坐标\t\tY坐标" << endl;
+//     cout << "----\t------\t\t------" << endl;
+//     for (i = 0; i < PixelCoord.size(); i++)
+//     {
+//         cout << i << "\t"
+//              << fixed << setprecision(1) << PixelCoord[i].x() << "\t\t"
+//              << fixed << setprecision(1) << PixelCoord[i].y() << endl;
+//     }
+//     cout << "==========================" << endl << endl;
+
+//     // 调用函数计算变换矩阵并保存到文件
+//     result = CalculateTransformationMatrix(WorldCoord, PixelCoord, transformationMatrix, "../matrix.bin");
+
+//     if (result == 0)
+//     {
+//         cout << "变换矩阵计算并保存成功!" << endl;
+//         AppendLog("变换矩阵计算并保存成功", INFO);
+
+//         // 使用变换矩阵将像素坐标转换回世界坐标
+//         cout << endl << "=== 使用变换矩阵转换像素坐标 ===" << endl;
+//         cout << "索引\t原始世界坐标\t\t转换后坐标\t\t误差" << endl;
+//         cout << "----\t------------\t\t------------\t\t------" << endl;
+
+//         for (i = 0; i < PixelCoord.size(); i++)
+//         {
+//             // 将像素坐标转换为齐次坐标 (x, y, 1)
+//             pixelHomogeneous = Vector3d(PixelCoord[i].x(), PixelCoord[i].y(), 1.0);
+
+//             // 应用变换矩阵
+//             worldTransformed = transformationMatrix * pixelHomogeneous;
+
+//             // 转换为非齐次坐标 (除以w分量)
+//             x_transformed = worldTransformed[0] / worldTransformed[2];
+//             y_transformed = worldTransformed[1] / worldTransformed[2];
+
+//             // 计算误差
+//             error_x = fabs(WorldCoord[i].x() - x_transformed);
+//             error_y = fabs(WorldCoord[i].y() - y_transformed);
+//             total_error = sqrt(error_x * error_x + error_y * error_y);
+
+//             // 输出结果
+//             cout << i << "\t"
+//                  << fixed << setprecision(3) << "(" << WorldCoord[i].x() << "," << WorldCoord[i].y() << ")"
+//                  << "\t\t(" << x_transformed << "," << y_transformed << ")"
+//                  << "\t\t" << total_error << " mm" << endl;
+//         }
+//         cout << "=============================================" << endl;
+
+//         // 首先显示变换矩阵
+//         matrixStr = "变换矩阵:\n";
+//         for (int i = 0; i < 3; i++) 
+//         {
+//             matrixStr += "| ";
+//             for (int j = 0; j < 3; j++) 
+//             {
+//                 matrixStr += QString::number(transformationMatrix(i, j), 'g', 15) + " ";
+//             }
+//             matrixStr += "|\n";
+//         }
+//         AppendLog(matrixStr, INFO);
+
+//         // 然后显示误差结果
+//         for (i = 0; i < PixelCoord.size(); i++) 
+//         {
+//             // 将像素坐标转换为齐次坐标 (x, y, 1)
+//             pixelHomogeneous = Vector3d(PixelCoord[i].x(), PixelCoord[i].y(), 1.0);
+
+//             // 应用变换矩阵
+//             worldTransformed = transformationMatrix * pixelHomogeneous;
+
+//             // 转换为非齐次坐标 (除以w分量)
+//             x_transformed = worldTransformed[0] / worldTransformed[2];
+//             y_transformed = worldTransformed[1] / worldTransformed[2];
+
+//             // 计算误差
+//             error_x = fabs(WorldCoord[i].x() - x_transformed);
+//             error_y = fabs(WorldCoord[i].y() - y_transformed);
+//             total_error = sqrt(error_x * error_x + error_y * error_y);
+
+//             // 创建格式化的输出消息
+//             message = QString("点 %1: 理论世界坐标(%2, %3) -> 变换后世界坐标(%4, %5)").arg(i).arg(WorldCoord[i].x(), 0, 'f', 3).arg(WorldCoord[i].y(), 0, 'f', 3).arg(x_transformed, 0, 'f', 3).arg(y_transformed, 0, 'f', 3);
+
+//             // 调用日志函数显示结果
+//             AppendLog(message, INFO, total_error); // 使用信息级别, 并将误差作为value传递
+//         }
+//     }
+//     else
+//     {
+//         cout << "变换矩阵计算失败, 错误码: " << result << endl;
+//         AppendLog(QString("变换矩阵计算失败, 错误码:%1").arg(result), ERROR);
+//     }
+
+    // 新代码: 整合Undistort去畸变模块功能
     // 变量定义
-    int getCoordsOk;                // 坐标获取结果
-    Matrix3d transformationMatrix;  // 变换矩阵
-    int result;                     // 计算结果
-    QString matrixStr;              // 矩阵字符串
-    int i;                          // 循环索引
-    Vector3d pixelHomogeneous;      // 像素齐次坐标
-    Vector3d worldTransformed;      // 变换后的世界坐标
-    double x_transformed;           // 变换后的X坐标
-    double y_transformed;           // 变换后的Y坐标
-    double error_x;                 // X方向误差
-    double error_y;                 // Y方向误差
-    double total_error;             // 总误差
-    QString message;                // 消息字符串
+    Undistort undistortProcessor;                                  // 去畸变处理器
+    cv::Mat cameraMatrix;                                          // 相机内参矩阵
+    cv::Mat distCoeffs;                                            // 畸变系数
+    std::vector<std::vector<cv::Point2f>> imagePoints;             // 图像角点坐标
+    std::vector<std::vector<cv::Point3f>> objectPoints;            // 世界坐标点
+    cv::Size boardSize(9, 6);                                      // 棋盘格尺寸 (内角点数量)
+    float squareSize = 25.0f;                                      // 棋盘格方格尺寸 (mm)
+    std::string imageFolder = "../ImgData";                        // 图像文件夹路径
+    std::string calibrationFile = "../calibration_parameters.yml"; // 标定参数保存路径
+    int calibrationResult;                                         // 标定结果
+    int saveResult;                                                // 保存结果
 
-    WorldCoord.clear();
-    PixelCoord.clear();
-    getCoordsOk = GetCoordsOpenCV(WorldCoord, PixelCoord, 100.0);
-    if (getCoordsOk != 0)
+    // 检查ImgData文件夹是否存在
+    QDir imgDataDir(QString::fromStdString(imageFolder));
+    if (!imgDataDir.exists()) 
     {
-        AppendLog("坐标获取错误", ERROR);
+        AppendLog("ImgData文件夹不存在, 请创建该文件夹并放入标定图像", ERROR);
+        return;
     }
 
-    // 在命令行显示坐标结果
-    cout << "=== 坐标检测结果 ===" << endl;
-    cout << "检测到的坐标对数量: " << WorldCoord.size() << endl << endl;
-
-    cout << "世界坐标 (单位:mm):" << endl;
-    cout << "索引\tX坐标\t\tY坐标" << endl;
-    cout << "----\t------\t\t------" << endl;
-    for (i = 0; i < WorldCoord.size(); i++)
+    // 获取未处理的图像（不包含"processed"后缀的图像）
+    std::vector<std::string> imagePaths = undistortProcessor.getUnprocessedImages(imageFolder);
+    if (imagePaths.empty()) 
     {
-        cout << i << "\t"
-             << fixed << setprecision(3) << WorldCoord[i].x() << "\t\t"
-             << fixed << setprecision(3) << WorldCoord[i].y() << endl;
+        AppendLog("在ImgData文件夹中没有找到可用的标定图像, 或者所有图像都已处理过", WARNNING);
+        AppendLog("请确保图像文件名不包含'processed'后缀", INFO);
+        return;
     }
 
-    cout << endl << "像素坐标 (单位:像素):" << endl;
-    cout << "索引\tX坐标\t\tY坐标" << endl;
-    cout << "----\t------\t\t------" << endl;
-    for (i = 0; i < PixelCoord.size(); i++)
+    AppendLog(QString("找到 %1 张未处理的标定图像").arg(imagePaths.size()), INFO);
+
+    // 进行相机标定
+    calibrationResult = undistortProcessor.calibrateCamera(imageFolder, boardSize, squareSize, 
+                                                          cameraMatrix, distCoeffs, imagePoints, objectPoints);
+
+    if (calibrationResult == 0) 
     {
-        cout << i << "\t"
-             << fixed << setprecision(1) << PixelCoord[i].x() << "\t\t"
-             << fixed << setprecision(1) << PixelCoord[i].y() << endl;
-    }
-    cout << "==========================" << endl << endl;
-
-    // 调用函数计算变换矩阵并保存到文件
-//    result = CalculateTransformationMatrix(WorldCoord, PixelCoord, transformationMatrix, "../matrix.bin");
-
-    if (result == 0)
-    {
-        cout << "变换矩阵计算并保存成功!" << endl;
-        AppendLog("变换矩阵计算并保存成功", INFO);
-
-        // 使用变换矩阵将像素坐标转换回世界坐标
-        cout << endl << "=== 使用变换矩阵转换像素坐标 ===" << endl;
-        cout << "索引\t原始世界坐标\t\t转换后坐标\t\t误差" << endl;
-        cout << "----\t------------\t\t------------\t\t------" << endl;
-
-        for (i = 0; i < PixelCoord.size(); i++)
+        AppendLog("相机标定成功完成", INFO);
+        
+        // 保存标定参数到文件
+        saveResult = undistortProcessor.saveCalibrationParameters(cameraMatrix, distCoeffs, calibrationFile);
+        
+        if (saveResult == 0) 
         {
-            // 将像素坐标转换为齐次坐标 (x, y, 1)
-            pixelHomogeneous = Vector3d(PixelCoord[i].x(), PixelCoord[i].y(), 1.0);
-
-            // 应用变换矩阵
-            worldTransformed = transformationMatrix * pixelHomogeneous;
-
-            // 转换为非齐次坐标 (除以w分量)
-            x_transformed = worldTransformed[0] / worldTransformed[2];
-            y_transformed = worldTransformed[1] / worldTransformed[2];
-
-            // 计算误差
-            error_x = fabs(WorldCoord[i].x() - x_transformed);
-            error_y = fabs(WorldCoord[i].y() - y_transformed);
-            total_error = sqrt(error_x * error_x + error_y * error_y);
-
-            // 输出结果
-            cout << i << "\t"
-                 << fixed << setprecision(3) << "(" << WorldCoord[i].x() << "," << WorldCoord[i].y() << ")"
-                 << "\t\t(" << x_transformed << "," << y_transformed << ")"
-                 << "\t\t" << total_error << " mm" << endl;
-        }
-        cout << "=============================================" << endl;
-
-        // 首先显示变换矩阵
-        matrixStr = "变换矩阵:\n";
-        for (int i = 0; i < 3; i++) 
-        {
-            matrixStr += "| ";
-            for (int j = 0; j < 3; j++) 
+            AppendLog(QString("标定参数已保存到: %1").arg(QString::fromStdString(calibrationFile)), INFO);
+            
+            // 显示标定结果信息
+            QString cameraMatrixStr = "相机内参矩阵:\n";
+            for (int i = 0; i < cameraMatrix.rows; i++) 
             {
-                matrixStr += QString::number(transformationMatrix(i, j), 'g', 15) + " ";
+                cameraMatrixStr += "| ";
+                for (int j = 0; j < cameraMatrix.cols; j++) 
+                {
+                    cameraMatrixStr += QString::number(cameraMatrix.at<double>(i, j), 'g', 6) + " ";
+                }
+                cameraMatrixStr += "|\n";
             }
-            matrixStr += "|\n";
+            AppendLog(cameraMatrixStr, INFO);
+            
+            QString distCoeffsStr = "畸变系数: [";
+            for (int i = 0; i < distCoeffs.cols; i++) 
+            {
+                distCoeffsStr += QString::number(distCoeffs.at<double>(0, i), 'g', 6);
+                if (i < distCoeffs.cols - 1) 
+                {
+                    distCoeffsStr += ", ";
+                }
+            }
+            distCoeffsStr += "]";
+            AppendLog(distCoeffsStr, INFO);
         }
-        AppendLog(matrixStr, INFO);
-
-        // 然后显示误差结果
-        for (i = 0; i < PixelCoord.size(); i++) 
+        else 
         {
-            // 将像素坐标转换为齐次坐标 (x, y, 1)
-            pixelHomogeneous = Vector3d(PixelCoord[i].x(), PixelCoord[i].y(), 1.0);
-
-            // 应用变换矩阵
-            worldTransformed = transformationMatrix * pixelHomogeneous;
-
-            // 转换为非齐次坐标 (除以w分量)
-            x_transformed = worldTransformed[0] / worldTransformed[2];
-            y_transformed = worldTransformed[1] / worldTransformed[2];
-
-            // 计算误差
-            error_x = fabs(WorldCoord[i].x() - x_transformed);
-            error_y = fabs(WorldCoord[i].y() - y_transformed);
-            total_error = sqrt(error_x * error_x + error_y * error_y);
-
-            // 创建格式化的输出消息
-            message = QString("点 %1: 理论世界坐标(%2, %3) -> 变换后世界坐标(%4, %5)").arg(i).arg(WorldCoord[i].x(), 0, 'f', 3).arg(WorldCoord[i].y(), 0, 'f', 3).arg(x_transformed, 0, 'f', 3).arg(y_transformed, 0, 'f', 3);
-
-            // 调用日志函数显示结果
-            AppendLog(message, INFO, total_error); // 使用信息级别，并将误差作为value传递
+            AppendLog("保存标定参数失败", ERROR);
         }
     }
-    else
+    else 
     {
-        cout << "变换矩阵计算失败，错误码: " << result << endl;
-        AppendLog(QString("变换矩阵计算失败，错误码:%1").arg(result), ERROR);
+        AppendLog("相机标定失败, 请检查标定图像和棋盘格设置", ERROR);
     }
 }
 
@@ -1415,10 +1498,10 @@ void MainWindow::SetupPolygonDrawing()
     ui->widgetDisplay_2->setFocusPolicy(Qt::StrongFocus); // 允许获得焦点
     ui->widgetDisplay_2->installEventFilter(this);
     
-    AppendLog("多边形绘制和矩形拖动功能已初始化，当前模式：多边形点击模式", INFO);
+    AppendLog("多边形绘制和矩形拖动功能已初始化, 当前模式: 多边形点击模式", INFO);
 }
 
-// 事件过滤器，用于捕获widgetDisplay_2的鼠标点击和键盘事件
+// 事件过滤器, 用于捕获widgetDisplay_2的鼠标点击和键盘事件
 bool MainWindow::eventFilter(QObject* obj, QEvent* event)
 {
     // 变量定义
@@ -1483,7 +1566,7 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
         }
     }
     
-    // 如果widgetDisplay_2有焦点，也捕获主窗口的Enter键事件
+    // 如果widgetDisplay_2有焦点, 也捕获主窗口的Enter键事件
     if (ui->widgetDisplay_2->hasFocus() && event->type() == QEvent::KeyPress) 
     {
         keyEvent = static_cast<QKeyEvent*>(event);
@@ -1507,9 +1590,9 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
 {
     if (event->key() == Qt::Key_Space) 
     {
-        // 处理空格键，切换选择模式
+        // 处理空格键, 切换选择模式
         HandleSpaceKeyPress();
-        event->accept(); // 标记事件已处理，阻止传播
+        event->accept(); // 标记事件已处理, 阻止传播
     }
     else 
     {
@@ -1534,7 +1617,7 @@ void MainWindow::HandleMouseClickOnDisplay2(const QPoint& pos)
         return;
     }
     
-    // 让widgetDisplay_2获得焦点，以便接收键盘事件
+    // 让widgetDisplay_2获得焦点, 以便接收键盘事件
     ui->widgetDisplay_2->setFocus();
     
     // 保存原始图片 (如果尚未保存) 
@@ -1565,7 +1648,7 @@ void MainWindow::HandleMouseClickOnDisplay2(const QPoint& pos)
     painter.setFont(QFont("Arial", 10, QFont::Bold));
     painter.drawText(imagePoint + QPoint(8, -8), QString::number(m_polygonPoints.size()));
     
-    // 如果已有多个点，绘制连线
+    // 如果已有多个点, 绘制连线
     if (m_polygonPoints.size() > 1) 
     {
         painter.setPen(QPen(Qt::green, 2, Qt::DashLine));
@@ -1573,7 +1656,7 @@ void MainWindow::HandleMouseClickOnDisplay2(const QPoint& pos)
         {
             painter.drawLine(m_polygonPoints[i-1], m_polygonPoints[i]);
         }
-        // 如果是最后一个点，连接到第一个点形成闭合多边形预览
+        // 如果是最后一个点, 连接到第一个点形成闭合多边形预览
         if (m_polygonPoints.size() >= 3) 
         {
             painter.drawLine(m_polygonPoints.last(), m_polygonPoints.first());
@@ -1585,7 +1668,7 @@ void MainWindow::HandleMouseClickOnDisplay2(const QPoint& pos)
     // 更新显示
     ui->widgetDisplay_2->setPixmap(currentPixmap);
     
-    AppendLog(QString("已添加第%1个点，坐标(%2, %3)").arg(m_polygonPoints.size()).arg(imagePoint.x()).arg(imagePoint.y()), INFO);
+    AppendLog(QString("已添加第%1个点, 坐标(%2, %3)").arg(m_polygonPoints.size()).arg(imagePoint.x()).arg(imagePoint.y()), INFO);
 }
 
 // 坐标转换: 将控件坐标转换为图像坐标
@@ -1623,7 +1706,7 @@ QPoint MainWindow::ConvertToImageCoordinates(const QPoint& widgetPoint)
     
     if (widgetAspect > imageAspect) 
     {
-        // 控件更宽，图像在垂直方向填充
+        // 控件更宽, 图像在垂直方向填充
         int displayHeight = widgetSize.height();
         int displayWidth = static_cast<int>(displayHeight * imageAspect);
         int offsetX = (widgetSize.width() - displayWidth) / 2;
@@ -1631,7 +1714,7 @@ QPoint MainWindow::ConvertToImageCoordinates(const QPoint& widgetPoint)
     } 
     else 
     {
-        // 控件更高，图像在水平方向填充
+        // 控件更高, 图像在水平方向填充
         int displayWidth = widgetSize.width();
         int displayHeight = static_cast<int>(displayWidth / imageAspect);
         int offsetY = (widgetSize.height() - displayHeight) / 2;
@@ -1641,7 +1724,7 @@ QPoint MainWindow::ConvertToImageCoordinates(const QPoint& widgetPoint)
     // 检查点击是否在图像显示区域内
     if (!displayRect.contains(widgetPoint)) 
     {
-        // 如果点击在图像区域外，返回无效点
+        // 如果点击在图像区域外, 返回无效点
         return QPoint(-1, -1);
     }
     
@@ -1715,7 +1798,7 @@ void MainWindow::DrawPolygonOnImage()
     ui->widgetDisplay_2->setPixmap(currentPixmap);
     
     // 在日志中显示所有点的坐标
-    AppendLog("多边形绘制完成，顶点坐标: ", INFO);
+    AppendLog("多边形绘制完成, 顶点坐标: ", INFO);
     for (i = 0; i < m_polygonPoints.size(); ++i) 
     {
         AppendLog(QString("顶点%1: (%2, %3)").arg(i+1).arg(m_polygonPoints[i].x()).arg(m_polygonPoints[i].y()), INFO);
@@ -1725,7 +1808,7 @@ void MainWindow::DrawPolygonOnImage()
     m_polygonCompleted = true;
     CropImageToPolygon();
     
-    // 清空点列表，准备下一次绘制
+    // 清空点列表, 准备下一次绘制
     m_polygonPoints.clear();
     m_isImageLoaded = false;
 }
@@ -1771,7 +1854,7 @@ void MainWindow::CropImageToPolygon()
         return;
     }
 
-    // 计算边界框的最大边长，确保为正方形
+    // 计算边界框的最大边长, 确保为正方形
     maxSize = qMax(boundingRect.width(), boundingRect.height());
     squareRect = QRect(boundingRect.x(), boundingRect.y(), maxSize, maxSize);
 
@@ -1828,14 +1911,14 @@ void MainWindow::CropImageToPolygon()
     // 将裁剪后的图像显示到widgetDisplay_2上
     if (!m_croppedPixmap.isNull()) 
     {
-        // 缩放图片以适应widgetDisplay_2大小，保持宽高比
+        // 缩放图片以适应widgetDisplay_2大小, 保持宽高比
         QPixmap scaledPixmap = m_croppedPixmap.scaled(ui->widgetDisplay->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
         ui->widgetDisplay_2->setPixmap(scaledPixmap);
         ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
         AppendLog("裁剪后的图像已显示", INFO);
     }
 
-    AppendLog(QString("多边形区域图像裁剪完成，尺寸: %1x%2 像素").arg(maxSize).arg(maxSize), INFO);
+    AppendLog(QString("多边形区域图像裁剪完成, 尺寸: %1x%2 像素").arg(maxSize).arg(maxSize), INFO);
     AppendLog(QString("背景颜色: RGB(%1, %2, %3)").arg(backgroundColor.red()).arg(backgroundColor.green()).arg(backgroundColor.blue()), INFO);
     ui->GetLength->setEnabled(true);
 }
@@ -1956,7 +2039,7 @@ void MainWindow::HandleEscKeyPress()
     }
     else 
     {
-        // 如果没有选点，显示警告信息
+        // 如果没有选点, 显示警告信息
         AppendLog("无ROI选点", WARNNING);
     }
 }
@@ -2005,7 +2088,7 @@ void MainWindow::HandleMousePressOnDisplay2(const QPoint& pos)
         return;
     }
     
-    // 让widgetDisplay_2获得焦点，以便接收键盘事件
+    // 让widgetDisplay_2获得焦点, 以便接收键盘事件
     ui->widgetDisplay_2->setFocus();
     
     // 保存原始图片（如果尚未保存）
@@ -2085,13 +2168,13 @@ void MainWindow::HandleMouseReleaseOnDisplay2(const QPoint& pos)
     // 确保矩形区域有效
     if (m_selectedRect.width() < 10 || m_selectedRect.height() < 10) 
     {
-        AppendLog("选择的矩形区域太小，请重新选择", WARNNING);
+        AppendLog("选择的矩形区域太小, 请重新选择", WARNNING);
         // 恢复原始图片
         ui->widgetDisplay_2->setPixmap(m_originalPixmap);
         return;
     }
     
-    AppendLog(QString("矩形选择完成，区域: %1x%2 像素").arg(m_selectedRect.width()).arg(m_selectedRect.height()), INFO);
+    AppendLog(QString("矩形选择完成, 区域: %1x%2 像素").arg(m_selectedRect.width()).arg(m_selectedRect.height()), INFO);
     
     // 绘制最终矩形并裁剪图像
     DrawRectangleOnImage();
@@ -2130,7 +2213,7 @@ void MainWindow::DrawRectangleOnImage()
     
     // 标记矩形完成
     m_rectCompleted = true;
-    AppendLog("矩形区域已绘制完成，按Enter键确认裁剪", INFO);
+    AppendLog("矩形区域已绘制完成, 按Enter键确认裁剪", INFO);
 }
 
 // 裁剪矩形区域图像
@@ -2164,7 +2247,7 @@ void MainWindow::CropImageToRectangle()
     // 将裁剪后的图像显示到widgetDisplay_2上
     if (!m_croppedPixmap.isNull()) 
     {
-        // 缩放图片以适应widgetDisplay_2大小，保持宽高比
+        // 缩放图片以适应widgetDisplay_2大小, 保持宽高比
         QPixmap scaledPixmap = m_croppedPixmap.scaled(ui->widgetDisplay_2->size(),
                                                      Qt::KeepAspectRatio,
                                                      Qt::SmoothTransformation);
@@ -2173,7 +2256,7 @@ void MainWindow::CropImageToRectangle()
         AppendLog("裁剪后的矩形区域图像已显示", INFO);
     }
     
-    AppendLog(QString("矩形区域图像裁剪完成，尺寸: %1x%2 像素").arg(validRect.width()).arg(validRect.height()), INFO);
+    AppendLog(QString("矩形区域图像裁剪完成, 尺寸: %1x%2 像素").arg(validRect.width()).arg(validRect.height()), INFO);
     ui->GetLength->setEnabled(true);
 }
 
@@ -2197,11 +2280,11 @@ void MainWindow::HandleEnterKeyPress()
         // 多边形模式处理
         if (m_polygonPoints.size() < 3) 
         {
-            AppendLog(QString("需要至少3个点才能绘制多边形，当前只有%1个点").arg(m_polygonPoints.size()), WARNNING);
+            AppendLog(QString("需要至少3个点才能绘制多边形, 当前只有%1个点").arg(m_polygonPoints.size()), WARNNING);
             return;
         }
         
-        AppendLog(QString("开始绘制多边形，共%1个点").arg(m_polygonPoints.size()), INFO);
+        AppendLog(QString("开始绘制多边形, 共%1个点").arg(m_polygonPoints.size()), INFO);
         DrawPolygonOnImage();
     }
 }

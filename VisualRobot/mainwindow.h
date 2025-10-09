@@ -13,6 +13,7 @@
 #include <QLabel>
 #include "DLExample.h"
 #include "MvCameraControl.h"
+#include "Undistort.h"
 
 using namespace std;
 
