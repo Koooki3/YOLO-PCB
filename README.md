@@ -43,12 +43,14 @@ VisualRobot/
 │   ├── capture.jpg                # 相机采集的原始图像
 │   ├── cat.jpg                    # 猫示例图像
 │   ├── circle_detected.jpg        # 圆形检测的结果图像
+│   ├── cropped_polygon.jpg        # 多边形裁剪结果图像
 │   ├── dog.jpg                    # 狗示例图像
 │   ├── test1.jpg                  # 测试图像1
 │   ├── test2.jpg                  # 测试图像2
 │   ├── test3.jpg                  # 测试图像3
 │   ├── test4.jpg                  # 测试图像4
-│   └── feature_matches.jpg        # 特征匹配结果图像
+│   ├── undistorted_processed.jpg  # 去畸变处理后的图像
+│   └── undistorted.jpg            # 去畸变原始图像
 ├── VisualRobot/                   # 核心源代码目录
 │   ├── DataProcessor.cpp          # 数据处理实现
 │   ├── DataProcessor.h            # 数据处理头文件
@@ -79,7 +81,9 @@ VisualRobot/
 ├── feature_matches.jpg            # 特征匹配结果图像
 ├── matrix.bin                     # 系统配置矩阵文件
 ├── test.jpg                       # 测试图像
-└── README.md                      # 项目说明文档
+├── README.md                      # 项目说明文档
+└── log/                           # 系统日志目录
+    └── log_20250930_153826.txt    # 系统运行日志文件
 ```
 
 ### 目录说明
@@ -302,4 +306,4 @@ cd VisualRobot
 
 ---
 
-最后更新日期：2025年9月26日
+最后更新日期：2025年10月9日
