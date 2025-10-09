@@ -35,6 +35,7 @@
 #include <QPainterPath>
 #include <QElapsedTimer>
 #include <QTextStream>
+#include "Undistort.h"
 
 #define ERROR 2
 #define WARNNING 1
@@ -1281,85 +1282,92 @@ void MainWindow::on_genMatrix_clicked()
 
     // 新代码: 整合Undistort去畸变模块功能
     // 变量定义
-    Undistort undistortProcessor;                                  // 去畸变处理器
-    cv::Mat cameraMatrix;                                          // 相机内参矩阵
-    cv::Mat distCoeffs;                                            // 畸变系数
-    std::vector<std::vector<cv::Point2f>> imagePoints;             // 图像角点坐标
-    std::vector<std::vector<cv::Point3f>> objectPoints;            // 世界坐标点
-    cv::Size boardSize(9, 6);                                      // 棋盘格尺寸 (内角点数量)
-    float squareSize = 25.0f;                                      // 棋盘格方格尺寸 (mm)
-    std::string imageFolder = "../ImgData";                        // 图像文件夹路径
-    std::string calibrationFile = "../calibration_parameters.yml"; // 标定参数保存路径
-    int calibrationResult;                                         // 标定结果
-    int saveResult;                                                // 保存结果
+    Size boardSize(6, 6);                                      // 宽度方向6个内角点，高度方向6个内角点
+    float squareSize = 10.0f;                                  // 棋盘格方格实际大小，单位：毫米
+    CameraCalibrator calibrator(boardSize, squareSize);        // 相机标定器
+    string imageFolder = "../ImgData";                         // 图像文件夹路径
+    string calibrationFile  = "../calibration_parameters.yml"; // 标定参数保存路径
+    int processedCount = 0;                                    // 处理图像数量
+    double reprojectionError  = 0.0;                           // 重投影误差
+    bool saveSuccess = false;                                  // 保存成功标志
 
     // 检查ImgData文件夹是否存在
     QDir imgDataDir(QString::fromStdString(imageFolder));
-    if (!imgDataDir.exists()) 
+    if (!imgDataDir.exists())
     {
         AppendLog("ImgData文件夹不存在, 请创建该文件夹并放入标定图像", ERROR);
         return;
     }
 
-    // 获取未处理的图像（不包含"processed"后缀的图像）
-    std::vector<std::string> imagePaths = undistortProcessor.getUnprocessedImages(imageFolder);
-    if (imagePaths.empty()) 
+    // 处理文件夹中的所有图像
+    processedCount = calibrator.processImagesFromFolder(imageFolder, false);
+    if (processedCount < 10)
     {
-        AppendLog("在ImgData文件夹中没有找到可用的标定图像, 或者所有图像都已处理过", WARNNING);
-        AppendLog("请确保图像文件名不包含'processed'后缀", INFO);
+        AppendLog(QString("需要至少10张有效图像进行校准, 当前只有 %1 张").arg(processedCount), WARNNING);
         return;
     }
 
-    AppendLog(QString("找到 %1 张未处理的标定图像").arg(imagePaths.size()), INFO);
+    AppendLog(QString("成功处理 %1 张标定图像").arg(processedCount), INFO);
 
     // 进行相机标定
-    calibrationResult = undistortProcessor.calibrateCamera(imageFolder, boardSize, squareSize, 
-                                                          cameraMatrix, distCoeffs, imagePoints, objectPoints);
-
-    if (calibrationResult == 0) 
+    reprojectionError = calibrator.calibrate();
+    if (reprojectionError >= 0)
     {
-        AppendLog("相机标定成功完成", INFO);
-        
+        AppendLog("相机去畸变标定成功", INFO);
+
         // 保存标定参数到文件
-        saveResult = undistortProcessor.saveCalibrationParameters(cameraMatrix, distCoeffs, calibrationFile);
-        
-        if (saveResult == 0) 
+        saveSuccess = calibrator.saveCalibration(calibrationFile);
+
+        if (saveSuccess)
         {
-            AppendLog(QString("标定参数已保存到: %1").arg(QString::fromStdString(calibrationFile)), INFO);
-            
+            AppendLog(QString("去畸变标定参数已保存到: %1").arg(QString::fromStdString(calibrationFile)), INFO);
+
+            // 获取相机参数并且显示
+            Mat cameraMatrix = calibrator.getCameraMatrix();
+            Mat distCoeffs = calibrator.getDistCoeffs();
+
             // 显示标定结果信息
             QString cameraMatrixStr = "相机内参矩阵:\n";
-            for (int i = 0; i < cameraMatrix.rows; i++) 
+            for (int i = 0; i < cameraMatrix.rows; i++)
             {
                 cameraMatrixStr += "| ";
-                for (int j = 0; j < cameraMatrix.cols; j++) 
+                for (int j = 0; j < cameraMatrix.cols; j++)
                 {
-                    cameraMatrixStr += QString::number(cameraMatrix.at<double>(i, j), 'g', 6) + " ";
+                    QString numStr = QString::number(cameraMatrix.at<double>(i, j), 'f', 10);
+                    // 调整到固定宽度
+                    numStr = numStr.leftJustified(10, ' ');
+                    cameraMatrixStr += numStr;
+                    if (j < cameraMatrix.cols - 1)
+                    {
+                        cameraMatrixStr += ", ";
+                    }
                 }
-                cameraMatrixStr += "|\n";
+                cameraMatrixStr += " |\n";
             }
             AppendLog(cameraMatrixStr, INFO);
-            
+
             QString distCoeffsStr = "畸变系数: [";
-            for (int i = 0; i < distCoeffs.cols; i++) 
+            for (int i = 0; i < distCoeffs.cols; i++)
             {
-                distCoeffsStr += QString::number(distCoeffs.at<double>(0, i), 'g', 6);
-                if (i < distCoeffs.cols - 1) 
+                distCoeffsStr += QString::number(distCoeffs.at<double>(0,i), 'f', 10);
+                if (i < distCoeffs.cols - 1)
                 {
                     distCoeffsStr += ", ";
                 }
             }
             distCoeffsStr += "]";
+
             AppendLog(distCoeffsStr, INFO);
+            AppendLog(QString("重投影误差: %1").arg(reprojectionError), INFO);
         }
-        else 
+        else
         {
-            AppendLog("保存标定参数失败", ERROR);
+            AppendLog("保存去畸变标定参数失败", ERROR);
         }
     }
-    else 
+    else
     {
-        AppendLog("相机标定失败, 请检查标定图像和棋盘格设置", ERROR);
+        AppendLog("相机去畸变标定失败, 请检查标定图像", ERROR);
     }
 }
 
@@ -1404,7 +1412,7 @@ void MainWindow::DrawOverlayOnDisplay2(double length, double width, double angle
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setRenderHint(QPainter::TextAntialiasing, true);
 
-    text = QString("长: %1 mm\n宽: %2 mm\n角度: %3 °").arg(length,   0, 'f', 3).arg(width,    0, 'f', 3).arg(angle, 0, 'f', 3);
+    text = QString("长: %1 mm\n宽: %2 mm\n角度: %3 °").arg(length, 0, 'f', 3).arg(width, 0, 'f', 3).arg(angle, 0, 'f', 3);
 
     font.setPointSize(12); 
     font.setBold(true);
