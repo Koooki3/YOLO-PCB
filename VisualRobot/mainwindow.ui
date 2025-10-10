@@ -6,280 +6,283 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1630</width>
-    <height>785</height>
+    <width>1786</width>
+    <height>953</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>VisualRobot</string>
   </property>
   <widget class="QWidget" name="centralWidget">
-    <widget class="QFrame" name="groupFrame">
+   <widget class="QFrame" name="groupFrame">
+    <property name="geometry">
+     <rect>
+      <x>570</x>
+      <y>30</y>
+      <width>296</width>
+      <height>771</height>
+     </rect>
+    </property>
+    <property name="frameShape">
+     <enum>QFrame::StyledPanel</enum>
+    </property>
+    <property name="frameShadow">
+     <enum>QFrame::Raised</enum>
+    </property>
+    <widget class="QWidget" name="layoutWidget">
      <property name="geometry">
       <rect>
-        <x>610</x>
-        <y>20</y>
-        <width>296</width>
-        <height>651</height>
+       <x>0</x>
+       <y>0</y>
+       <width>296</width>
+       <height>761</height>
       </rect>
      </property>
-     <property name="frameShape">
-      <enum>QFrame::StyledPanel</enum>
-     </property>
-     <property name="frameShadow">
-      <enum>QFrame::Raised</enum>
-     </property>
-     <widget class="QWidget" name="layoutWidget">
-      <property name="geometry">
-        <rect>
-         <x>0</x>
-         <y>0</y>
-         <width>296</width>
-         <height>651</height>
-        </rect>
+     <layout class="QVBoxLayout" name="verticalLayout" stretch="1,0,0">
+      <property name="spacing">
+       <number>12</number>
       </property>
-      <layout class="QVBoxLayout" name="verticalLayout" stretch="1,0">
-        <property name="spacing">
-         <number>12</number>
+      <property name="leftMargin">
+       <number>12</number>
+      </property>
+      <property name="topMargin">
+       <number>12</number>
+      </property>
+      <property name="rightMargin">
+       <number>12</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="groupTitle">
+        <property name="text">
+         <string>设备控制</string>
         </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="bnEnum">
+        <property name="text">
+         <string>查找设备</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QGridLayout" name="gridLayout">
         <property name="leftMargin">
-         <number>12</number>
+         <number>10</number>
         </property>
         <property name="topMargin">
-         <number>12</number>
+         <number>20</number>
         </property>
         <property name="rightMargin">
-         <number>12</number>
+         <number>10</number>
         </property>
-  <item>
-   <widget class="QLabel" name="groupTitle">
-    <property name="text">
-     <string>设备控制</string>
-    </property>
-    <property name="alignment">
-     <set>Qt::AlignCenter</set>
-    </property>
+        <property name="bottomMargin">
+         <number>20</number>
+        </property>
+        <property name="spacing">
+         <number>20</number>
+        </property>
+        <item row="0" column="1">
+         <widget class="QPushButton" name="bnClose">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>关闭设备</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QRadioButton" name="bnTriggerMode">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>触发模式</string>
+          </property>
+         </widget>
+        </item>
+        <item row="7" column="1">
+         <widget class="QLineEdit" name="tbFrameRate">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="8" column="0">
+         <widget class="QPushButton" name="bnGetParam">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>获取参数</string>
+          </property>
+         </widget>
+        </item>
+        <item row="10" column="0" colspan="2">
+         <widget class="QPushButton" name="GetLength">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>检长</string>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="0">
+         <widget class="QLabel" name="lGain">
+          <property name="text">
+           <string>增益</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QPushButton" name="bnStart">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>开始采集</string>
+          </property>
+         </widget>
+        </item>
+        <item row="11" column="0" colspan="2">
+         <widget class="QPushButton" name="genMatrix">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>标定</string>
+          </property>
+         </widget>
+        </item>
+        <item row="9" column="0" colspan="2">
+         <widget class="QPushButton" name="pushButton">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>拍照</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QPushButton" name="bnStop">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>停止采集</string>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="1">
+         <widget class="QPushButton" name="bnTriggerExec">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>软触发一次</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="0">
+         <widget class="QLabel" name="lExposure">
+          <property name="text">
+           <string>曝光</string>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="0">
+         <widget class="QCheckBox" name="cbSoftTrigger">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>软触发</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="1">
+         <widget class="QLineEdit" name="tbExposure">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="0">
+         <widget class="QPushButton" name="bnOpen">
+          <property name="text">
+           <string>打开设备</string>
+          </property>
+         </widget>
+        </item>
+        <item row="8" column="1">
+         <widget class="QPushButton" name="bnSetParam">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>设置参数</string>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="1">
+         <widget class="QLineEdit" name="tbGain">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="0">
+         <widget class="QRadioButton" name="bnContinuesMode">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>连续模式</string>
+          </property>
+         </widget>
+        </item>
+        <item row="7" column="0">
+         <widget class="QLabel" name="lFrameRate">
+          <property name="text">
+           <string>帧率</string>
+          </property>
+         </widget>
+        </item>
+        <item row="12" column="0" colspan="2">
+         <widget class="QPushButton" name="btnOpenManual">
+          <property name="text">
+           <string>调试信息手册</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
    </widget>
-  </item>
-  <item>
-   <widget class="QPushButton" name="bnEnum">
-       <property name="text">
-        <string>查找设备</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <layout class="QGridLayout" name="gridLayout">
-       <property name="leftMargin">
-        <number>10</number>
-       </property>
-       <property name="rightMargin">
-        <number>10</number>
-       </property>
-       <property name="bottomMargin">
-        <number>0</number>
-       </property>
-       <property name="spacing">
-        <number>10</number>
-       </property>
-       <item row="0" column="1">
-        <widget class="QPushButton" name="bnClose">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-         <property name="text">
-          <string>关闭设备</string>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="1">
-        <widget class="QRadioButton" name="bnTriggerMode">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-         <property name="text">
-          <string>触发模式</string>
-         </property>
-        </widget>
-       </item>
-       <item row="7" column="1">
-        <widget class="QLineEdit" name="tbFrameRate">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-        </widget>
-       </item>
-       <item row="8" column="0">
-        <widget class="QPushButton" name="bnGetParam">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-         <property name="text">
-          <string>获取参数</string>
-         </property>
-        </widget>
-       </item>
-       <item row="10" column="0" colspan="2">
-        <widget class="QPushButton" name="GetLength">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-         <property name="text">
-          <string>检长</string>
-         </property>
-        </widget>
-       </item>
-       <item row="6" column="0">
-        <widget class="QLabel" name="lGain">
-         <property name="text">
-          <string>增益</string>
-         </property>
-        </widget>
-       </item>
-       <item row="2" column="0">
-        <widget class="QPushButton" name="bnStart">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-         <property name="text">
-          <string>开始采集</string>
-         </property>
-        </widget>
-       </item>
-       <item row="11" column="0" colspan="2">
-        <widget class="QPushButton" name="genMatrix">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-         <property name="text">
-          <string>标定</string>
-         </property>
-        </widget>
-       </item>
-       <item row="9" column="0" colspan="2">
-        <widget class="QPushButton" name="pushButton">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-         <property name="text">
-          <string>拍照</string>
-         </property>
-        </widget>
-       </item>
-       <item row="2" column="1">
-        <widget class="QPushButton" name="bnStop">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-         <property name="text">
-          <string>停止采集</string>
-         </property>
-        </widget>
-       </item>
-       <item row="3" column="1">
-        <widget class="QPushButton" name="bnTriggerExec">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-         <property name="text">
-          <string>软触发一次</string>
-         </property>
-        </widget>
-       </item>
-       <item row="4" column="0">
-        <widget class="QLabel" name="lExposure">
-         <property name="text">
-          <string>曝光</string>
-         </property>
-        </widget>
-       </item>
-       <item row="3" column="0">
-        <widget class="QCheckBox" name="cbSoftTrigger">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-         <property name="text">
-          <string>软触发</string>
-         </property>
-        </widget>
-       </item>
-       <item row="4" column="1">
-        <widget class="QLineEdit" name="tbExposure">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="0">
-        <widget class="QPushButton" name="bnOpen">
-         <property name="text">
-          <string>打开设备</string>
-         </property>
-        </widget>
-       </item>
-       <item row="8" column="1">
-        <widget class="QPushButton" name="bnSetParam">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-         <property name="text">
-          <string>设置参数</string>
-         </property>
-        </widget>
-       </item>
-       <item row="6" column="1">
-        <widget class="QLineEdit" name="tbGain">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="0">
-        <widget class="QRadioButton" name="bnContinuesMode">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-         <property name="text">
-          <string>连续模式</string>
-         </property>
-        </widget>
-       </item>
-       <item row="7" column="0">
-        <widget class="QLabel" name="lFrameRate">
-         <property name="text">
-          <string>帧率</string>
-         </property>
-        </widget>
-       </item>
-       <item row="12" column="0" colspan="2">
-        <widget class="QPushButton" name="btnOpenManual">
-         <property name="text">
-          <string>调试信息手册</string>
-         </property>
-        </widget>
-       </item>
-      </layout>
-     </item>
-  </layout>
-   </widget>
-  </widget>
    <widget class="QTextEdit" name="displayLogMsg">
     <property name="geometry">
      <rect>
       <x>30</x>
-      <y>550</y>
-      <width>571</width>
-      <height>111</height>
+      <y>530</y>
+      <width>521</width>
+      <height>271</height>
      </rect>
     </property>
    </widget>
    <widget class="QLabel" name="widgetDisplay_2">
     <property name="geometry">
      <rect>
-      <x>910</x>
+      <x>880</x>
       <y>30</y>
-      <width>711</width>
-      <height>631</height>
+      <width>871</width>
+      <height>771</height>
      </rect>
     </property>
     <property name="text">
@@ -290,9 +293,9 @@
     <property name="geometry">
      <rect>
       <x>30</x>
-      <y>63</y>
-      <width>569</width>
-      <height>481</height>
+      <y>83</y>
+      <width>521</width>
+      <height>431</height>
      </rect>
     </property>
    </widget>
@@ -301,8 +304,8 @@
      <rect>
       <x>31</x>
       <y>31</y>
-      <width>571</width>
-      <height>26</height>
+      <width>521</width>
+      <height>31</height>
      </rect>
     </property>
    </widget>
@@ -310,8 +313,8 @@
     <property name="geometry">
      <rect>
       <x>160</x>
-      <y>690</y>
-      <width>111</width>
+      <y>820</y>
+      <width>121</width>
       <height>41</height>
      </rect>
     </property>
@@ -323,16 +326,28 @@
     <property name="geometry">
      <rect>
       <x>30</x>
-      <y>690</y>
-      <width>91</width>
+      <y>820</y>
+      <width>111</width>
       <height>41</height>
      </rect>
     </property>
     <property name="layoutDirection">
      <enum>Qt::LeftToRight</enum>
     </property>
+    <property name="verticalScrollBarPolicy">
+     <enum>Qt::ScrollBarAlwaysOff</enum>
+    </property>
+    <property name="horizontalScrollBarPolicy">
+     <enum>Qt::ScrollBarAlwaysOff</enum>
+    </property>
+    <property name="readOnly">
+     <bool>false</bool>
+    </property>
     <property name="plainText">
-     <string>新功能测试</string>
+     <string>  新功能测试</string>
+    </property>
+    <property name="centerOnScroll">
+     <bool>false</bool>
     </property>
    </widget>
   </widget>
