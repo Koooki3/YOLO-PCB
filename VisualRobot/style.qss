@@ -1,150 +1,110 @@
-/* VisualRobot modern dark stylesheet - simple, performant, high-contrast
-   Save this file next to the executable (applicationDirPath()).
-   Design goals: dark neutral background, subtle elevation, flat controls,
-   rounded corners, clear focus and disabled states. Keep selectors simple. */
-
-/* Window background */
+/* VisualRobot modern light theme - blue accent, minimal, high performance */
 QMainWindow, QWidget {
-    background-color: #121218; /* near black with slight blue */
-    color: #E6E6E6;
+    background-color: #F6F8FB;
+    color: #222C3A;
     font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
     font-size: 11pt;
 }
-
-/* Status bar */
 QStatusBar {
     background: transparent;
     padding: 4px 8px;
-    color: #CFCFCF;
+    color: #3A4A6B;
 }
-
-/* Buttons: flat, subtle hover */
+QFrame#groupFrame {
+    background-color: #FFFFFF;
+    border: 1px solid #D0E2FF;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(60,120,255,0.08);
+    padding: 10px;
+}
+QWidget#layoutWidget {
+    background: transparent;
+    margin: 0px;
+    padding: 0px;
+}
+QWidget#widgetDisplay, QLabel#widgetDisplay_2 {
+    background-color: #EAF2FF;
+    border-radius: 8px;
+    padding: 8px;
+    border: 1px solid #BFD7FF;
+}
 QPushButton {
-    background-color: #1E1E28;
-    border: 1px solid #2A2A34;
-    color: #E6E6E6;
-    padding: 6px 10px;
-    border-radius: 6px;
+    background-color: #338AF3;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 7px;
+    min-height: 32px;
+    padding: 7px 14px;
+    font-weight: 500;
+    transition: background 0.2s;
 }
 QPushButton:hover {
-    background-color: #2A2A36;
+    background-color: #1976D2;
 }
 QPushButton:pressed {
-    background-color: #16161A;
+    background-color: #1565C0;
 }
 QPushButton:disabled {
-    background-color: #111116;
-    color: #6F6F76;
-    border-color: #1A1A20;
+    background-color: #E3EAF5;
+    color: #A0A8B8;
 }
-
-/* Button sizing and consistency */
-QPushButton {
-    min-height: 30px;
-}
-QPushButton[flat="true"] {
-    background: transparent;
-    border: none;
-}
-
-/* Radio & Check */
 QRadioButton, QCheckBox {
-    color: #E6E6E6;
+    color: #222C3A;
 }
-
-/* Line edits and spin boxes */
 QLineEdit, QPlainTextEdit, QTextEdit, QComboBox {
-    background-color: #0F0F13;
-    border: 1px solid #26262C;
-    color: #E6E6E6;
-    padding: 5px;
-    border-radius: 6px;
+    background-color: #FFFFFF;
+    border: 1px solid #BFD7FF;
+    color: #222C3A;
+    padding: 6px;
+    border-radius: 7px;
 }
 QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus {
-    border: 1px solid #3A7BD5; /* subtle accent blue */
+    border: 1.5px solid #338AF3;
 }
 QLineEdit:disabled, QComboBox:disabled {
-    background-color: #0B0B0E;
-    color: #66666A;
+    background-color: #F2F6FA;
+    color: #A0A8B8;
 }
-
-/* ComboBox drop-down */
 QComboBox QAbstractItemView {
-    background-color: #101018;
-    selection-background-color: #30354A;
-    color: #E6E6E6;
+    background-color: #F6F8FB;
+    selection-background-color: #E3F0FF;
+    color: #222C3A;
     border: none;
 }
-
-/* Labels */
 QLabel {
-    color: #E6E6E6;
+    color: #222C3A;
 }
-
-/* Scrollbars - simple thin */
+QLabel#groupTitle {
+    color: #338AF3;
+    font-size: 13pt;
+    font-weight: 700;
+    padding-bottom: 8px;
+    letter-spacing: 1px;
+}
 QScrollBar:vertical {
     background: transparent;
     width: 10px;
     margin: 0px 0px 0px 0px;
 }
 QScrollBar::handle:vertical {
-    background: #2B2E3A;
+    background: #BFD7FF;
     min-height: 20px;
     border-radius: 5px;
 }
 QScrollBar::add-line, QScrollBar::sub-line { height: 0px; }
-
-/* Tooltips */
 QToolTip {
-    background-color: #30333D;
-    color: #F0F0F0;
-    border: 1px solid #44474F;
-    padding: 6px;
-    border-radius: 4px;
+    background-color: #E3F0FF;
+    color: #222C3A;
+    border: 1px solid #BFD7FF;
+    padding: 7px;
+    border-radius: 5px;
 }
-
-/* Grouping frames: subtle elevation */
-/* Visual grouping: give the left control panel a subtle card look */
-QFrame#groupFrame {
-    background-color: rgba(255,255,255,0.02);
-    border: 1px solid rgba(255,255,255,0.03);
-    border-radius: 8px;
-    padding: 8px;
-}
-
-/* layoutWidget 是 UI 文件中包含控制按钮的容器，增强内边距与间距感 */
-QWidget#layoutWidget {
-    background: transparent;
-    margin: 0px;
-    padding: 0px;
-}
-
-/* 图像显示区保持深色背景并带内边距，避免控件贴边 */
-QWidget#widgetDisplay, QLabel#widgetDisplay_2 {
-    background-color: #0B0B0F;
-    border-radius: 6px;
-    padding: 6px;
-}
-
-/* TableViews or list views (if used) */
 QTableView, QListView {
-    background-color: #0F0F13;
-    gridline-color: #222226;
-    color: #E6E6E6;
+    background-color: #FFFFFF;
+    gridline-color: #BFD7FF;
+    color: #222C3A;
 }
-
-/* Keep performance: avoid gradients, heavy images */
-
-/* Small helper for emphasized text */
 QLabel.emphasis {
-    color: #FFFFFF;
+    color: #338AF3;
     font-weight: 600;
-}
-
-/* Group title at top of control card */
-QLabel#groupTitle {
-    color: #DDE6F3;
-    font-size: 12pt;
-    font-weight: 700;
-    padding-bottom: 6px;
 }
