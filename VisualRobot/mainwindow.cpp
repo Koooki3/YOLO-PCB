@@ -2262,6 +2262,10 @@ void MainWindow::DrawRectangleOnImage()
 // 裁剪矩形区域图像
 void MainWindow::CropImageToRectangle()
 {
+    // 变量定义
+    QString savePath;        // 保存路径
+    bool saveSuccess;        // 保存成功标志
+
     if (m_selectedRect.isEmpty()) 
     {
         AppendLog("无效的矩形区域", WARNNING);
@@ -2286,6 +2290,19 @@ void MainWindow::CropImageToRectangle()
     // 转换为QPixmap
     m_croppedPixmap = QPixmap::fromImage(croppedImage);
     m_hasCroppedImage = true;
+    
+    // 保存裁剪后的图像到Img文件夹
+    savePath = "../Img/cropped_polygon.jpg";
+    saveSuccess = m_croppedPixmap.save(savePath);
+    
+    if (saveSuccess) 
+    {
+        AppendLog(QString("裁剪后的矩形区域图像已保存到: %1").arg(savePath), INFO);
+    } 
+    else 
+    {
+        AppendLog("保存裁剪后的矩形区域图像失败", WARNNING);
+    }
     
     // 将裁剪后的图像显示到widgetDisplay_2上
     if (!m_croppedPixmap.isNull()) 

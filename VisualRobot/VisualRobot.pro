@@ -28,7 +28,8 @@ SOURCES += \
     mainwindow.cpp \
     mainwindow_systemstats.cpp \
     DLExample.cpp \
-    Undistort.cpp
+    Undistort.cpp \
+    DefectDetection.cpp
 
 HEADERS += \
     DIP.h \
@@ -38,7 +39,8 @@ HEADERS += \
     SystemMonitor.h \
     mainwindow.h \
     DLExample.h \
-    Undistort.h
+    Undistort.h \
+    DefectDetection.h
 
 FORMS += \
     mainwindow.ui
