@@ -91,4 +91,7 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 # 添加版本信息
 VERSION = 1.2.0
-DEFINES += APP_VERSION=\\\"$$VERSION\\\"
+DEFINES += APP_VERSION=\\"$$VERSION\\"
+
+# Bundle the UI stylesheet into the application resources so it is available at runtime
+RESOURCES += styles.qrc

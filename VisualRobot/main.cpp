@@ -24,6 +24,29 @@ int main(int argc, char *argv[])
         a.installTranslator(&translator);
     }
 
+    // 优先从资源加载样式表（打包情况），若资源不可用则回退到可执行目录下的 style.qss 文件
+    QString resourcePath = ":/style/style.qss";
+    bool loaded = false;
+    QFile qrcStyle(resourcePath);
+    if (qrcStyle.open(QFile::ReadOnly | QFile::Text)) {
+        a.setStyleSheet(qrcStyle.readAll());
+        qrcStyle.close();
+        qDebug() << "Loaded style from resource:" << resourcePath;
+        loaded = true;
+    }
+    if (!loaded) {
+        QString stylePath = QDir(QCoreApplication::applicationDirPath()).filePath("style.qss");
+        QFile styleFile(stylePath);
+        if (styleFile.open(QFile::ReadOnly | QFile::Text)) {
+            a.setStyleSheet(styleFile.readAll());
+            styleFile.close();
+            qDebug() << "Loaded style from file:" << stylePath;
+            loaded = true;
+        } else {
+            qDebug() << "No custom stylesheet found; using default style.";
+        }
+    }
+
     // 启动主窗口
     MainWindow w;
     w.setWindowFlags(w.windowFlags() &~ Qt::WindowMaximizeButtonHint); //ch:禁止最大化 | en:prohibit maximization
