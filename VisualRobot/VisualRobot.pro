@@ -44,6 +44,8 @@ HEADERS += \
 
 FORMS += \
     mainwindow.ui
+RESOURCES += \
+    iconResources.qrc
 
 INCLUDEPATH += /opt/MVS/include
 

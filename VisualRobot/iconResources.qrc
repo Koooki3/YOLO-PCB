@@ -1,0 +1,7 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource prefix="/icons">
+    <file>icons/open.svg</file>
+    <file>icons/camera.svg</file>
+    <file>icons/calibrate.svg</file>
+</qresource>
+</RCC>
