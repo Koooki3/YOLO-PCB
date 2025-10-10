@@ -1,0 +1,150 @@
+/* VisualRobot modern dark stylesheet - simple, performant, high-contrast
+   Save this file next to the executable (applicationDirPath()).
+   Design goals: dark neutral background, subtle elevation, flat controls,
+   rounded corners, clear focus and disabled states. Keep selectors simple. */
+
+/* Window background */
+QMainWindow, QWidget {
+    background-color: #121218; /* near black with slight blue */
+    color: #E6E6E6;
+    font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+    font-size: 11pt;
+}
+
+/* Status bar */
+QStatusBar {
+    background: transparent;
+    padding: 4px 8px;
+    color: #CFCFCF;
+}
+
+/* Buttons: flat, subtle hover */
+QPushButton {
+    background-color: #1E1E28;
+    border: 1px solid #2A2A34;
+    color: #E6E6E6;
+    padding: 6px 10px;
+    border-radius: 6px;
+}
+QPushButton:hover {
+    background-color: #2A2A36;
+}
+QPushButton:pressed {
+    background-color: #16161A;
+}
+QPushButton:disabled {
+    background-color: #111116;
+    color: #6F6F76;
+    border-color: #1A1A20;
+}
+
+/* Button sizing and consistency */
+QPushButton {
+    min-height: 30px;
+}
+QPushButton[flat="true"] {
+    background: transparent;
+    border: none;
+}
+
+/* Radio & Check */
+QRadioButton, QCheckBox {
+    color: #E6E6E6;
+}
+
+/* Line edits and spin boxes */
+QLineEdit, QPlainTextEdit, QTextEdit, QComboBox {
+    background-color: #0F0F13;
+    border: 1px solid #26262C;
+    color: #E6E6E6;
+    padding: 5px;
+    border-radius: 6px;
+}
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus {
+    border: 1px solid #3A7BD5; /* subtle accent blue */
+}
+QLineEdit:disabled, QComboBox:disabled {
+    background-color: #0B0B0E;
+    color: #66666A;
+}
+
+/* ComboBox drop-down */
+QComboBox QAbstractItemView {
+    background-color: #101018;
+    selection-background-color: #30354A;
+    color: #E6E6E6;
+    border: none;
+}
+
+/* Labels */
+QLabel {
+    color: #E6E6E6;
+}
+
+/* Scrollbars - simple thin */
+QScrollBar:vertical {
+    background: transparent;
+    width: 10px;
+    margin: 0px 0px 0px 0px;
+}
+QScrollBar::handle:vertical {
+    background: #2B2E3A;
+    min-height: 20px;
+    border-radius: 5px;
+}
+QScrollBar::add-line, QScrollBar::sub-line { height: 0px; }
+
+/* Tooltips */
+QToolTip {
+    background-color: #30333D;
+    color: #F0F0F0;
+    border: 1px solid #44474F;
+    padding: 6px;
+    border-radius: 4px;
+}
+
+/* Grouping frames: subtle elevation */
+/* Visual grouping: give the left control panel a subtle card look */
+QFrame#groupFrame {
+    background-color: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.03);
+    border-radius: 8px;
+    padding: 8px;
+}
+
+/* layoutWidget 是 UI 文件中包含控制按钮的容器，增强内边距与间距感 */
+QWidget#layoutWidget {
+    background: transparent;
+    margin: 0px;
+    padding: 0px;
+}
+
+/* 图像显示区保持深色背景并带内边距，避免控件贴边 */
+QWidget#widgetDisplay, QLabel#widgetDisplay_2 {
+    background-color: #0B0B0F;
+    border-radius: 6px;
+    padding: 6px;
+}
+
+/* TableViews or list views (if used) */
+QTableView, QListView {
+    background-color: #0F0F13;
+    gridline-color: #222226;
+    color: #E6E6E6;
+}
+
+/* Keep performance: avoid gradients, heavy images */
+
+/* Small helper for emphasized text */
+QLabel.emphasis {
+    color: #FFFFFF;
+    font-weight: 600;
+}
+
+/* Group title at top of control card */
+QLabel#groupTitle {
+    color: #DDE6F3;
+    font-size: 12pt;
+    font-weight: 700;
+    padding-bottom: 6px;
+}

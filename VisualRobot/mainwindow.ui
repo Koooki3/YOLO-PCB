@@ -14,30 +14,55 @@
    <string>VisualRobot</string>
   </property>
   <widget class="QWidget" name="centralWidget">
-   <widget class="QWidget" name="layoutWidget">
-    <property name="geometry">
-     <rect>
-      <x>610</x>
-      <y>20</y>
-      <width>296</width>
-      <height>651</height>
-     </rect>
+    <widget class="QFrame" name="groupFrame">
+     <property name="geometry">
+      <rect>
+        <x>610</x>
+        <y>20</y>
+        <width>296</width>
+        <height>651</height>
+      </rect>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::StyledPanel</enum>
+     </property>
+     <property name="frameShadow">
+      <enum>QFrame::Raised</enum>
+     </property>
+     <widget class="QWidget" name="layoutWidget">
+      <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>0</y>
+         <width>296</width>
+         <height>651</height>
+        </rect>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout" stretch="1,0">
+        <property name="spacing">
+         <number>12</number>
+        </property>
+        <property name="leftMargin">
+         <number>12</number>
+        </property>
+        <property name="topMargin">
+         <number>12</number>
+        </property>
+        <property name="rightMargin">
+         <number>12</number>
+        </property>
+  <item>
+   <widget class="QLabel" name="groupTitle">
+    <property name="text">
+     <string>设备控制</string>
     </property>
-    <layout class="QVBoxLayout" name="verticalLayout" stretch="1,0">
-     <property name="spacing">
-      <number>10</number>
-     </property>
-     <property name="leftMargin">
-      <number>10</number>
-     </property>
-     <property name="topMargin">
-      <number>10</number>
-     </property>
-     <property name="rightMargin">
-      <number>10</number>
-     </property>
-     <item>
-      <widget class="QPushButton" name="bnEnum">
+    <property name="alignment">
+     <set>Qt::AlignCenter</set>
+    </property>
+   </widget>
+  </item>
+  <item>
+   <widget class="QPushButton" name="bnEnum">
        <property name="text">
         <string>查找设备</string>
        </property>
@@ -235,8 +260,9 @@
        </item>
       </layout>
      </item>
-    </layout>
+  </layout>
    </widget>
+  </widget>
    <widget class="QTextEdit" name="displayLogMsg">
     <property name="geometry">
      <rect>
