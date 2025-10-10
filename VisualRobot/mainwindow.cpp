@@ -247,23 +247,23 @@ void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INF
     if (pUser && !tempFrame.empty())
     {
         MainWindow* pMainWindow = static_cast<MainWindow*>(pUser);
-        cv::Mat grayImage;
+        Mat grayImage;
         // 根据像素类型转换到灰度图
         switch(pFrameInfo->enPixelType) 
         {
             case PixelType_Gvsp_Mono8:
-                grayImage = cv::Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC1, tempFrame.data());
+                grayImage = Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC1, tempFrame.data());
                 break;
             case PixelType_Gvsp_RGB8_Packed:
                 {
-                    cv::Mat colorImage = cv::Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC3, tempFrame.data());
-                    cv::cvtColor(colorImage, grayImage, cv::COLOR_RGB2GRAY);
+                    Mat colorImage = Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC3, tempFrame.data());
+                    cvtColor(colorImage, grayImage, COLOR_RGB2GRAY);
                 }
                 break;
             case PixelType_Gvsp_BGR8_Packed:
                 {
-                    cv::Mat colorImage = cv::Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC3, tempFrame.data());
-                    cv::cvtColor(colorImage, grayImage, cv::COLOR_BGR2GRAY);
+                    Mat colorImage = Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC3, tempFrame.data());
+                    cvtColor(colorImage, grayImage, COLOR_BGR2GRAY);
                 }
                 break;
             default:
@@ -1447,17 +1447,17 @@ void MainWindow::on_CallDLwindow_clicked()
 }
 
 // Tenengrad清晰度计算函数
-double MainWindow::CalculateTenengradSharpness(const cv::Mat& image)
+double MainWindow::CalculateTenengradSharpness(const Mat& image)
 {
     // 变量定义
-    cv::Mat imageGrey;      // 灰度图像
-    cv::Mat imageSobel;     // Sobel梯度图像
+    Mat imageGrey;      // 灰度图像
+    Mat imageSobel;     // Sobel梯度图像
     double meanValue;       // 平均值
 
     // 转换为灰度图
     if (image.channels() == 3) 
     {
-        cv::cvtColor(image, imageGrey, cv::COLOR_BGR2GRAY);
+        cvtColor(image, imageGrey, COLOR_BGR2GRAY);
     } 
     else 
     {
@@ -1465,10 +1465,10 @@ double MainWindow::CalculateTenengradSharpness(const cv::Mat& image)
     }
     
     // 计算Sobel梯度
-    cv::Sobel(imageGrey, imageSobel, CV_16U, 1, 1);
+    Sobel(imageGrey, imageSobel, CV_16U, 1, 1);
     
     // 计算梯度的平方和
-    meanValue = cv::mean(imageSobel)[0];
+    meanValue = mean(imageSobel)[0];
     
     return meanValue;
 }
