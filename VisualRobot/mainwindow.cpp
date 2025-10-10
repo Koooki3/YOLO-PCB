@@ -834,6 +834,41 @@ void MainWindow::on_pushButton_clicked()
     f.write(reinterpret_cast<const char*>(pDst.get()), save.nImageLen);
     f.close();
 
+    // 应用去畸变
+    Mat capture = imread("../Img/capture.jpg");
+    if (!capture.empty())
+    {
+        // 创建校准器
+        // 设置棋盘格参数 (内角点数量)
+        Size boardSize(6, 6);     // 宽度方向9个内角点，高度方向6个内角点
+        float squareSize = 10.0f; // 棋盘格方格实际大小，单位：毫米
+        CameraCalibrator calibrator(boardSize, squareSize);
+        string calibratorFile = "../calibration_parameters.yml";
+        bool loadSuccess = calibrator.loadCalibration(calibratorFile);
+        if (loadSuccess)
+        {
+            AppendLog("去畸变参数载入成功", INFO);
+            Mat undistort = calibrator.undistortImage(capture, true);
+            if (!undistort.empty())
+            {
+                imwrite("../Img/capture.jpg", undistort);
+                AppendLog("去畸变后图像保存完毕", INFO);
+            }
+            else
+            {
+                AppendLog("去畸变后图像为空, 请检查去畸变是否出错", ERROR);
+            }
+        }
+        else
+        {
+            AppendLog("去畸变失败, 请检查去畸变参数文件是否存在", ERROR);
+        }
+    }
+    else
+    {
+        AppendLog("待去畸变图像不存在", ERROR);
+    }
+
     QMessageBox::information(this, "保存图片", QString("保存成功: %1").arg(fpath));
     AppendLog(QString("保存成功, 地址为: %1").arg(fpath), INFO);
     ui->GetLength->setEnabled(true);
@@ -1281,7 +1316,7 @@ void MainWindow::on_genMatrix_clicked()
 //     }
 
     // 新代码: 整合Undistort去畸变模块功能
-    // 变量定义
+    // 设置棋盘格参数 (内角点数量)
     Size boardSize(6, 6);                                      // 宽度方向6个内角点，高度方向6个内角点
     float squareSize = 10.0f;                                  // 棋盘格方格实际大小，单位：毫米
     CameraCalibrator calibrator(boardSize, squareSize);        // 相机标定器
