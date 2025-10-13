@@ -177,7 +177,7 @@ int main(int argc, char *argv[])
             if (!ev.empty()) {
                 cout << "前 20 个主成分的解释方差与累计解释方差：\n";
                 cout << "idx\texplained\tcumulative\n";
-                int limit = (int)min<size_t>(20, ev.size());
+                int limit = (int)std::min<size_t>(20, ev.size());
                 for (int i = 0; i < limit; ++i) cout << (i+1) << "\t" << ev[i].first << "\t" << ev[i].second << "\n";
             }
         return 0;
