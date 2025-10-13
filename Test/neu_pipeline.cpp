@@ -1,60 +1,59 @@
-// neu_pipeline.cpp
-// 使用 Qt5 + OpenCV 的控制台程序，针对 NEU 数据集执行：
-// - train: 从指定训练目录读取图片（结构见下），提取特征，PCA 降维，训练 SVM，并保存模型
-// - eval:  从指定测试目录读取图片，加载模型并预测，输出混淆矩阵与 CSV 预测结果
-// 
+// neu_pipeline_plain.cpp
+// 纯 C++（不依赖 Qt）的 NEU 数据集训练/评估管线
+// 使用方式（位置参数）：
+//   neu_pipeline_plain <mode> <root> <pcaDim> <outCsv>
+// 示例：
+//   neu_pipeline_plain train ../Data/NEU 32 neu_predictions.csv
+//   neu_pipeline_plain eval  ../Data/NEU 32 neu_predictions.csv
+//
 // 目录约定（root 参数指向数据集根目录）：
-//   <root>/train/normal/*.png
-//   <root>/train/defect/*.png
-//   <root>/test/normal/*.png
-//   <root>/test/defect/*.png
-// 
-// 编译说明见 README_NEU.md
+//   <root>/train/<class>/*.png
+//   <root>/test/<class>/*.png
+//
+// 说明：依赖 OpenCV 和项目中的 DefectDetection 类（基于 OpenCV）。
 
-#include <QCoreApplication>
-#include <QCommandLineParser>
-#include <QDir>
-#include <QFile>
-#include <QTextStream>
-#include <QDateTime>
+#include <iostream>
+#include <vector>
+#include <string>
+#include <fstream>
+#include <filesystem>
+#include <algorithm>
 
 #include "DefectDetection.h"
 #include <opencv2/opencv.hpp>
 
-#include <iostream>
-#include <vector>
-#include <map>
-#include <fstream>
-
 using namespace std;
 using namespace cv;
+namespace fs = std::filesystem;
 
-// 多类数据集加载
-// 约定：dirPath 下每个子目录为一个类别（子目录名作为类别名），子目录内为图片文件
-// 返回：feats/labels 填充完成，classNames 按子目录顺序记录类别名称
-static bool loadDatasetMultiClass(const QString &dirPath, DefectDetection &detector,
-                                  std::vector<Mat> &outFeats, std::vector<int> &outLabels,
-                                  std::vector<std::string> &classNames,
-                                  int resizeW = 128, int resizeH = 128)
+static bool isImageExt(const string &name) {
+    string lower = name;
+    transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    return lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg") || lower.ends_with(".bmp") || lower.ends_with(".tif") || lower.ends_with(".tiff");
+}
+
+// load dataset where each subfolder under dirPath is a class
+static bool loadDatasetMultiClass(const string &dirPath, DefectDetection &detector,
+                                  vector<Mat> &outFeats, vector<int> &outLabels,
+                                  vector<string> &classNames, int resizeW = 128, int resizeH = 128)
 {
-    QDir dir(dirPath);
-    if (!dir.exists()) return false;
+    fs::path root(dirPath);
+    if (!fs::exists(root) || !fs::is_directory(root)) return false;
 
-    // 列出子目录（排除 . 和 ..）
-    QStringList subdirs = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-    for (const QString &sub : subdirs) {
-        QString subpath = dir.filePath(sub);
-        QDir d(subpath);
-        if (!d.exists()) continue;
+    // iterate subdirectories, sorted by name
+    vector<fs::directory_entry> subs;
+    for (auto &p : fs::directory_iterator(root)) if (p.is_directory()) subs.push_back(p);
+    sort(subs.begin(), subs.end(), [](const fs::directory_entry &a, const fs::directory_entry &b){ return a.path().filename().string() < b.path().filename().string(); });
 
-        // 记录类别名（子目录名）
-        classNames.push_back(sub.toStdString());
-        int label = static_cast<int>(classNames.size()) - 1;
-
-        QStringList nameFilters; nameFilters << "*.png" << "*.jpg" << "*.bmp" << "*.tif";
-        QFileInfoList files = d.entryInfoList(nameFilters, QDir::Files, QDir::Name);
-        for (auto fi : files) {
-            Mat img = imread(fi.absoluteFilePath().toStdString());
+    for (auto &d : subs) {
+        string cname = d.path().filename().string();
+        classNames.push_back(cname);
+        int label = (int)classNames.size() - 1;
+        for (auto &f : fs::directory_iterator(d.path())) {
+            if (!f.is_regular_file()) continue;
+            string fname = f.path().filename().string();
+            if (!isImageExt(fname)) continue;
+            Mat img = imread(f.path().string());
             if (img.empty()) continue;
             if (img.cols != resizeW || img.rows != resizeH) cv::resize(img, img, Size(resizeW, resizeH));
             Mat pre; detector.Preprocess(img, pre);
@@ -66,49 +65,51 @@ static bool loadDatasetMultiClass(const QString &dirPath, DefectDetection &detec
     return true;
 }
 
-static void savePredictionsCsv(const QString &outCsv, const vector<string> &paths,
+static void savePredictionsCsv(const string &outCsv, const vector<string> &paths,
                                const vector<int> &labels, const vector<int> &preds,
                                const vector<string> &classNames)
 {
-    QFile f(outCsv);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) return;
-    QTextStream out(&f);
-    out << "path,true_label,true_name,pred_label,pred_name\n";
+    ofstream ofs(outCsv);
+    if (!ofs.is_open()) return;
+    ofs << "path,true_label,true_name,pred_label,pred_name\n";
     for (size_t i = 0; i < paths.size(); ++i) {
         string trueName = (labels[i] >= 0 && labels[i] < (int)classNames.size()) ? classNames[labels[i]] : string("");
         string predName = (preds[i] >= 0 && preds[i] < (int)classNames.size()) ? classNames[preds[i]] : string("");
-        out << paths[i].c_str() << "," << labels[i] << "," << trueName.c_str() << "," << preds[i] << "," << predName.c_str() << "\n";
+        ofs << paths[i] << "," << labels[i] << "," << trueName << "," << preds[i] << "," << predName << "\n";
     }
-    f.close();
+    ofs.close();
+}
+
+static vector<string> readClassFile(const string &clsFile) {
+    vector<string> classNames;
+    ifstream ifs(clsFile);
+    if (!ifs.is_open()) return classNames;
+    string line;
+    while (getline(ifs, line)) {
+        if (line.size()) {
+            // trim
+            line.erase(line.find_last_not_of(" \r\n\t") + 1);
+            line.erase(0, line.find_first_not_of(" \r\n\t"));
+            if (!line.empty()) classNames.push_back(line);
+        }
+    }
+    ifs.close();
+    return classNames;
 }
 
 int main(int argc, char *argv[])
 {
-    QCoreApplication app(argc, argv);
-    QCoreApplication::setApplicationName("NEU Pipeline");
+    string mode = "train";
+    string root = "../Data/NEU";
+    int pcaDim = 32;
+    string outCsv = "neu_predictions.csv";
 
-    QCommandLineParser parser;
-    parser.setApplicationDescription("NEU dataset training/evaluation pipeline using DefectDetection");
-    parser.addHelpOption();
-    parser.addVersionOption();
+    if (argc >= 2) mode = argv[1];
+    if (argc >= 3) root = argv[2];
+    if (argc >= 4) pcaDim = stoi(argv[3]);
+    if (argc >= 5) outCsv = argv[4];
 
-    QCommandLineOption modeOption(QStringList() << "m" << "mode", "Mode: train or eval", "mode", "train");
-    QCommandLineOption rootOption(QStringList() << "r" << "root", "Dataset root path", "root", "../Data/NEU");
-    QCommandLineOption pcaOption(QStringList() << "p" << "pca", "PCA dimension (default 32)", "pca", "32");
-    QCommandLineOption outOption(QStringList() << "o" << "out", "Output CSV for predictions", "out", "neu_predictions.csv");
-
-    parser.addOption(modeOption);
-    parser.addOption(rootOption);
-    parser.addOption(pcaOption);
-    parser.addOption(outOption);
-    parser.process(app);
-
-    QString mode = parser.value(modeOption);
-    QString root = parser.value(rootOption);
-    int pcaDim = parser.value(pcaOption).toInt();
-    QString outCsv = parser.value(outOption);
-
-    cout << "Mode: " << mode.toStdString() << " Root: " << root.toStdString() << " PCA: " << pcaDim << "\n";
+    cout << "Mode: " << mode << " Root: " << root << " PCA: " << pcaDim << "\n";
 
     DefectDetection detector;
 
@@ -116,16 +117,14 @@ int main(int argc, char *argv[])
         vector<Mat> feats;
         vector<int> labels;
         vector<string> classNames;
-        QString trainDir = QDir(root).filePath("train");
-        cout << "Loading train folder: " << trainDir.toStdString() << "\n";
+        string trainDir = (fs::path(root) / "train").string();
+        cout << "Loading train folder: " << trainDir << "\n";
         if (!loadDatasetMultiClass(trainDir, detector, feats, labels, classNames)) {
-            cerr << "无法读取训练目录：" << trainDir.toStdString() << "\n";
+            cerr << "无法读取训练目录：" << trainDir << "\n";
             return -1;
         }
-        if (feats.empty()) {
-            cerr << "训练样本为空，请检查数据路径与目录结构" << endl;
-            return -1;
-        }
+        if (feats.empty()) { cerr << "训练样本为空，请检查数据路径与目录结构\n"; return -1; }
+
         Mat sampleMat((int)feats.size(), feats[0].cols, CV_32F);
         for (size_t i = 0; i < feats.size(); ++i) {
             Mat r = feats[i]; if (r.type() != CV_32F) r.convertTo(r, CV_32F);
@@ -136,83 +135,62 @@ int main(int argc, char *argv[])
 
         detector.FitPCA(sampleMat, pcaDim);
         bool ok = detector.TrainSVM(sampleMat, labelMat);
-        if (!ok) {
-            cerr << "SVM 训练失败" << endl;
-            return -1;
-        }
+        if (!ok) { cerr << "SVM 训练失败\n"; return -1; }
         cout << "SVM 训练完成。保存模型...\n";
-        QDir().mkpath("models");
-        if (!detector.SaveModel("models/defect_detector")) {
-            cerr << "模型保存失败" << endl;
-            return -1;
-        }
-        cout << "模型已保存到 models/defect_detector_*" << endl;
+        fs::create_directories("models");
+        if (!detector.SaveModel("models/defect_detector")) { cerr << "模型保存失败\n"; return -1; }
+        cout << "模型已保存到 models/defect_detector_*\n";
 
-        // 保存类名映射（按训练时子目录顺序）
-        QString clsFile = QString::fromStdString("models/defect_detector_classes.txt");
-        QFile cf(clsFile);
-        if (cf.open(QIODevice::WriteOnly | QIODevice::Text)) {
-            QTextStream out(&cf);
-            for (const auto &cn : classNames) out << cn.c_str() << "\n";
-            cf.close();
-            cout << "类别映射已保存到 " << clsFile.toStdString() << "\n";
+        // 保存类名映射
+        string clsFile = string("models/defect_detector_classes.txt");
+        ofstream ofs(clsFile);
+        if (ofs.is_open()) {
+            for (auto &cn : classNames) ofs << cn << "\n";
+            ofs.close();
+            cout << "类别映射已保存到 " << clsFile << "\n";
         } else {
-            cerr << "警告：无法保存类别映射文件：" << clsFile.toStdString() << "\n";
+            cerr << "警告：无法保存类别映射文件：" << clsFile << "\n";
         }
         return 0;
     }
     else if (mode == "eval") {
-        // 评估模式
-        QString testDir = QDir(root).filePath("test");
-        cout << "Loading test folder: " << testDir.toStdString() << "\n";
+        string testDir = (fs::path(root) / "test").string();
+        cout << "Loading test folder: " << testDir << "\n";
         vector<string> imgPaths;
         vector<int> trueLabels;
 
-        // 多类评估：使用训练时保存的类别映射文件来保证 label 对齐
-        QString clsFile = "models/defect_detector_classes.txt";
-        vector<string> classNames;
-        QFile cf(clsFile);
-        if (cf.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            QTextStream in(&cf);
-            while (!in.atEnd()) {
-                QString line = in.readLine().trimmed();
-                if (!line.isEmpty()) classNames.push_back(line.toStdString());
+        string clsFile = "models/defect_detector_classes.txt";
+        vector<string> classNames = readClassFile(clsFile);
+        if (classNames.empty()) {
+            cerr << "无法打开类别映射文件：" << clsFile << "，将按测试目录子文件夹顺序自动推断类别（可能与训练不一致）\n";
+            // fallback
+            fs::path td(testDir);
+            if (fs::exists(td) && fs::is_directory(td)) {
+                vector<fs::directory_entry> subs;
+                for (auto &p : fs::directory_iterator(td)) if (p.is_directory()) subs.push_back(p);
+                sort(subs.begin(), subs.end(), [](const fs::directory_entry &a, const fs::directory_entry &b){ return a.path().filename().string() < b.path().filename().string(); });
+                for (auto &d : subs) classNames.push_back(d.path().filename().string());
             }
-            cf.close();
-        } else {
-            cerr << "无法打开类别映射文件：" << clsFile.toStdString() << "，将按测试目录子文件夹顺序自动推断类别（可能与训练不一致）\n";
-            // fallback: list subdirs under testDir
-            QDir td(testDir);
-            QStringList subs = td.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-            for (const QString &s : subs) classNames.push_back(s.toStdString());
         }
 
-        // 收集测试样本，按照 classNames 的顺序遍历目录
         for (size_t lbl = 0; lbl < classNames.size(); ++lbl) {
-            QString sub = QString::fromStdString(classNames[lbl]);
-            QString subdir = QDir(testDir).filePath(sub);
-            QDir d(subdir);
-            if (!d.exists()) continue;
-            QStringList nameFilters; nameFilters << "*.png" << "*.jpg" << "*.bmp" << "*.tif";
-            QFileInfoList files = d.entryInfoList(nameFilters, QDir::Files, QDir::Name);
-            for (auto fi : files) { imgPaths.push_back(fi.absoluteFilePath().toStdString()); trueLabels.push_back(static_cast<int>(lbl)); }
+            string sub = classNames[lbl];
+            fs::path subdir = fs::path(testDir) / sub;
+            if (!fs::exists(subdir) || !fs::is_directory(subdir)) continue;
+            for (auto &f : fs::directory_iterator(subdir)) {
+                if (!f.is_regular_file()) continue;
+                if (!isImageExt(f.path().filename().string())) continue;
+                imgPaths.push_back(f.path().string()); trueLabels.push_back((int)lbl);
+            }
         }
 
-        if (imgPaths.empty()) {
-            cerr << "测试集为空，请检查路径" << endl;
-            return -1;
-        }
+        if (imgPaths.empty()) { cerr << "测试集为空，请检查路径\n"; return -1; }
 
-        // 加载模型
-        if (!detector.LoadModel("models/defect_detector")) {
-            cerr << "加载模型失败，请先运行 train 模式或检查 models 路径" << endl;
-            return -1;
-        }
+        if (!detector.LoadModel("models/defect_detector")) { cerr << "加载模型失败，请先运行 train 模式或检查 models 路径\n"; return -1; }
 
         vector<int> preds; preds.reserve(imgPaths.size());
-
         int numClasses = (int)classNames.size();
-        vector<vector<int>> confMat(numClasses, vector<int>(numClasses, 0)); // [gt][pred]
+        vector<vector<int>> confMat(numClasses, vector<int>(numClasses, 0));
 
         for (size_t i = 0; i < imgPaths.size(); ++i) {
             Mat img = imread(imgPaths[i]);
@@ -225,7 +203,6 @@ int main(int argc, char *argv[])
             if (gt >= 0 && gt < numClasses && p >= 0 && p < numClasses) confMat[gt][p]++;
         }
 
-        // 计算 per-class 指标
         vector<int> gtTotals(numClasses,0), predTotals(numClasses,0), correct(numClasses,0);
         int totalSamples = 0; int totalCorrect = 0;
         for (int i = 0; i < numClasses; ++i) {
@@ -238,7 +215,6 @@ int main(int argc, char *argv[])
         }
 
         cout << "混淆矩阵 (行=真实, 列=预测):\n";
-        // header
         cout << "\t";
         for (int j = 0; j < numClasses; ++j) cout << classNames[j] << "\t";
         cout << "\n";
@@ -251,8 +227,6 @@ int main(int argc, char *argv[])
         cout << "\nPer-class metrics:\n";
         cout << "Class\tPrecision\tRecall\tF1\tSupport\n";
         for (int i = 0; i < numClasses; ++i) {
-            double prec = (predTotals[i] > 0) ? double(confMat[i][i]) / double(predTotals[i]) : 0.0; // note: this is not standard; better compute per-class differently
-            // standard: precision = TP / (TP+FP) => TP = confMat[i][i], FP = sum over gt!=i confMat[gt][i]
             int TP = confMat[i][i];
             int FP = 0; for (int g = 0; g < numClasses; ++g) if (g!=i) FP += confMat[g][i];
             int FN = 0; for (int p = 0; p < numClasses; ++p) if (p!=i) FN += confMat[i][p];
@@ -265,13 +239,12 @@ int main(int argc, char *argv[])
         double acc = (totalSamples>0) ? double(totalCorrect) / double(totalSamples) : 0.0;
         cout << "\nOverall Accuracy=" << acc << " (" << totalCorrect << "/" << totalSamples << ")\n";
 
-        // 保存预测结果 CSV（包含类名）
         savePredictionsCsv(outCsv, imgPaths, trueLabels, preds, classNames);
-        cout << "预测结果已保存到 " << outCsv.toStdString() << "\n";
+        cout << "预测结果已保存到 " << outCsv << "\n";
         return 0;
     }
     else {
-        cerr << "未知模式：" << mode.toStdString() << "（支持 train 或 eval）" << endl;
+        cerr << "未知模式：" << mode << "（支持 train 或 eval）\n";
         return -1;
     }
 
