@@ -26,10 +26,22 @@ using namespace std;
 using namespace cv;
 namespace fs = std::filesystem;
 
+static bool hasSuffixIgnoreCase(const string &s, const string &suf) {
+    if (s.size() < suf.size()) return false;
+    size_t off = s.size() - suf.size();
+    for (size_t i = 0; i < suf.size(); ++i) {
+        char a = s[off + i];
+        char b = suf[i];
+        if (std::tolower(static_cast<unsigned char>(a)) != std::tolower(static_cast<unsigned char>(b))) return false;
+    }
+    return true;
+}
+
 static bool isImageExt(const string &name) {
-    string lower = name;
-    transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-    return lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg") || lower.ends_with(".bmp") || lower.ends_with(".tif") || lower.ends_with(".tiff");
+    if (name.empty()) return false;
+    static const vector<string> exts = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"};
+    for (const auto &e : exts) if (hasSuffixIgnoreCase(name, e)) return true;
+    return false;
 }
 
 // load dataset where each subfolder under dirPath is a class
@@ -103,11 +115,13 @@ int main(int argc, char *argv[])
     string root = "../Data/NEU";
     int pcaDim = 32;
     string outCsv = "neu_predictions.csv";
+    double varianceThreshold = 0.95;
 
     if (argc >= 2) mode = argv[1];
     if (argc >= 3) root = argv[2];
     if (argc >= 4) pcaDim = stoi(argv[3]);
     if (argc >= 5) outCsv = argv[4];
+    if (argc >= 6) varianceThreshold = stod(argv[5]);
 
     cout << "Mode: " << mode << " Root: " << root << " PCA: " << pcaDim << "\n";
 
@@ -133,7 +147,13 @@ int main(int argc, char *argv[])
         Mat labelMat((int)labels.size(), 1, CV_32S);
         for (size_t i = 0; i < labels.size(); ++i) labelMat.at<int>((int)i, 0) = labels[i];
 
-        detector.FitPCA(sampleMat, pcaDim);
+        if (pcaDim == 0) {
+            cout << "PCA 自动选择模式：按累计方差 " << varianceThreshold << " 选择主成分..." << endl;
+            detector.FitPCAByVariance(sampleMat, varianceThreshold);
+            cout << "自动选择 PCA 维度=" << detector.GetPCADim() << "" << endl;
+        } else {
+            detector.FitPCA(sampleMat, pcaDim);
+        }
         bool ok = detector.TrainSVM(sampleMat, labelMat);
         if (!ok) { cerr << "SVM 训练失败\n"; return -1; }
         cout << "SVM 训练完成。保存模型...\n";
@@ -151,6 +171,14 @@ int main(int argc, char *argv[])
         } else {
             cerr << "警告：无法保存类别映射文件：" << clsFile << "\n";
         }
+            // 打印前 20 个主成分的 explained / cumulative 比例
+            auto ev = detector.GetPCAExplainedVariance();
+            if (!ev.empty()) {
+                cout << "前 20 个主成分的解释方差与累计解释方差：\n";
+                cout << "idx\texplained\tcumulative\n";
+                int limit = (int)min<size_t>(20, ev.size());
+                for (int i = 0; i < limit; ++i) cout << (i+1) << "\t" << ev[i].first << "\t" << ev[i].second << "\n";
+            }
         return 0;
     }
     else if (mode == "eval") {

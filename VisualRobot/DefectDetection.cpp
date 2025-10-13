@@ -1,5 +1,7 @@
 #include "DefectDetection.h"
 #include <numeric>
+#include <fstream>
+#include <filesystem>
 
 using namespace cv;
 using namespace cv::ml;
@@ -190,6 +192,81 @@ void DefectDetection::FitPCA(const Mat& samples, int retainedComponents)
 	m_pca = PCA(samples, Mat(), PCA::DATA_AS_ROW, m_pcaDim);
 }
 
+// 基于累计解释方差自动选择主成分并训练 PCA
+void DefectDetection::FitPCAByVariance(const Mat& samples, double varianceThreshold)
+{
+	CV_Assert(samples.type() == CV_32F);
+	CV_Assert(varianceThreshold > 0.0 && varianceThreshold <= 1.0);
+
+	// 首先做完整版的 PCA（不截断）以获得所有特征的特征值
+	PCA fullPca(samples, Mat(), PCA::DATA_AS_ROW, 0);
+	Mat eigvals = fullPca.eigenvalues; // may be CV_32F or CV_64F and shape Nx1 or 1xN
+
+	// 将 eigenvalues 转为 double 向量，做稳健读取
+	size_t n = static_cast<size_t>(eigvals.total());
+	vector<double> vals(n, 0.0);
+	if (n > 0) {
+		if (eigvals.type() == CV_64F) {
+			const double* p = eigvals.ptr<double>();
+			for (size_t i = 0; i < n; ++i) vals[i] = std::isfinite(p[i]) && p[i] > 0.0 ? p[i] : 0.0;
+		} else if (eigvals.type() == CV_32F) {
+			const float* p = eigvals.ptr<float>();
+			for (size_t i = 0; i < n; ++i) vals[i] = std::isfinite(p[i]) && p[i] > 0.0f ? static_cast<double>(p[i]) : 0.0;
+		} else {
+			// Fallback generic read
+			for (size_t i = 0; i < n; ++i) {
+				double v = 0.0;
+				try { v = eigvals.at<double>((int)i, 0); } catch (...) {
+					try { v = eigvals.at<float>((int)i, 0); } catch (...) { v = 0.0; }
+				}
+				vals[i] = std::isfinite(v) && v > 0.0 ? v : 0.0;
+			}
+		}
+	}
+
+	double total = 0.0; for (double v : vals) total += v;
+	if (total <= 0.0) {
+		// fallback: use original FitPCA with default dim
+		FitPCA(samples, m_pcaDim);
+		return;
+	}
+
+	// 计算累计解释方差并将其写入 CSV 便于可视化
+	vector<double> cumRatio; cumRatio.reserve(n);
+	double cum = 0.0;
+	for (size_t i = 0; i < n; ++i) {
+		cum += vals[i];
+		cumRatio.push_back(cum / total);
+	}
+
+	// 确保 models 目录存在，然后写文件
+	try {
+		std::filesystem::create_directories("models");
+		std::ofstream ofs("models/pca_explained_variance.csv");
+		if (ofs.is_open()) {
+			ofs << "component,explained_variance,cumulative_variance\n";
+			for (size_t i = 0; i < n; ++i) {
+				double explained = vals[i] / total;
+				ofs << (i+1) << "," << explained << "," << cumRatio[i] << "\n";
+			}
+			ofs.close();
+		}
+	} catch (...) {
+		// 忽略文件写入错误（非致命）
+	}
+
+	int k = 0;
+	for (size_t i = 0; i < cumRatio.size(); ++i) {
+		if (cumRatio[i] >= varianceThreshold) { k = static_cast<int>(i) + 1; break; }
+	}
+	if (k <= 0) k = 1;
+	k = std::min(k, samples.cols);
+
+	// 重新生成 PCA 并截断到 k 个分量
+	m_pcaDim = k;
+	m_pca = PCA(samples, Mat(), PCA::DATA_AS_ROW, m_pcaDim);
+}
+
 
 // ---------------------------------------------------------------------------
 // ProjectPCA
@@ -286,5 +363,42 @@ bool DefectDetection::LoadModel(const string& basePath)
 		fs.release();
 	} catch (...) { return false; }
 	return true;
+}
+
+std::vector<std::pair<double,double>> DefectDetection::GetPCAExplainedVariance() const
+{
+	std::vector<std::pair<double,double>> res;
+	if (m_pca.eigenvalues.empty()) return res;
+
+	Mat eigvals = m_pca.eigenvalues;
+	size_t n = static_cast<size_t>(eigvals.total());
+	vector<double> vals(n, 0.0);
+	if (n > 0) {
+		if (eigvals.type() == CV_64F) {
+			const double* p = eigvals.ptr<double>();
+			for (size_t i = 0; i < n; ++i) vals[i] = std::isfinite(p[i]) && p[i] > 0.0 ? p[i] : 0.0;
+		} else if (eigvals.type() == CV_32F) {
+			const float* p = eigvals.ptr<float>();
+			for (size_t i = 0; i < n; ++i) vals[i] = std::isfinite(p[i]) && p[i] > 0.0f ? static_cast<double>(p[i]) : 0.0;
+		} else {
+			for (size_t i = 0; i < n; ++i) {
+				double v = 0.0;
+				try { v = eigvals.at<double>((int)i, 0); } catch (...) {
+					try { v = eigvals.at<float>((int)i, 0); } catch (...) { v = 0.0; }
+				}
+				vals[i] = std::isfinite(v) && v > 0.0 ? v : 0.0;
+			}
+		}
+	}
+	double total = 0.0; for (double v : vals) total += v;
+	if (total <= 0.0) return res;
+	double cum = 0.0;
+	for (size_t i = 0; i < n; ++i) {
+		double explained = vals[i] / total;
+		cum += vals[i];
+		double cumul = cum / total;
+		res.emplace_back(explained, cumul);
+	}
+	return res;
 }
 

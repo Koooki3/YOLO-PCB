@@ -59,6 +59,10 @@ public:
 	// retainedComponents：保留的主成分数量，默认 32
 	void FitPCA(const Mat& samples, int retainedComponents = 32);
 
+	// 基于方差阈值自动选择主成分数并训练 PCA
+	// varianceThreshold: [0,1]，例如 0.95 表示选择最小主成分数以覆盖 >=95% 的方差
+	void FitPCAByVariance(const Mat& samples, double varianceThreshold = 0.95);
+
 	// 将单样本投影到已训练的 PCA 子空间（如果未训练 PCA 则返回原始样本）
 	Mat ProjectPCA(const Mat& sample) const;
 
@@ -76,6 +80,10 @@ public:
 	// PCA 维度访问器
 	int GetPCADim() const { return m_pcaDim; }
 	void SetPCADim(int d) { m_pcaDim = d; }
+
+	// 返回每个主成分的 (explained_variance, cumulative_variance)
+	// 返回向量长度等于当前 PCA 的分量数（若未训练 PCA 返回空向量）
+	std::vector<std::pair<double,double>> GetPCAExplainedVariance() const;
 
 private:
 	// 内部帮助函数：计算通道均值/标准差以及直方图
