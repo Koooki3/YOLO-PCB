@@ -2,6 +2,8 @@
 #include <numeric>
 #include <fstream>
 #include <filesystem>
+#include <algorithm>
+#include <cmath>
 
 using namespace cv;
 using namespace cv::ml;
@@ -167,8 +169,13 @@ Mat DefectDetection::ExtractFeatures(const Mat& src) const
 	// LBP 纹理直方图（灰度）
 	Mat gray; cvtColor(bgr, gray, COLOR_BGR2GRAY);
 	Mat lbpHist = ComputeLBPHist(gray); // 1x256 CV_32F
-	// 将 lbpHist 数据追加到 feats
-	feats.insert(feats.end(), (float*)lbpHist.datastart, (float*)lbpHist.dataend);
+	// 将 lbpHist 数据追加到 feats（使用安全的 ptr 访问）
+	{
+		CV_Assert(lbpHist.isContinuous());
+		const float* p = lbpHist.ptr<float>(0);
+		int len = lbpHist.cols * lbpHist.rows;
+		feats.insert(feats.end(), p, p + len);
+	}
 
 	// 转为 CV_32F 单行 Mat
 	Mat featMat(1, static_cast<int>(feats.size()), CV_32F);
@@ -187,7 +194,7 @@ Mat DefectDetection::ExtractFeatures(const Mat& src) const
 void DefectDetection::FitPCA(const Mat& samples, int retainedComponents)
 {
 	CV_Assert(samples.type() == CV_32F);
-	int dims = min(retainedComponents, samples.cols);
+	int dims = std::min(retainedComponents, samples.cols);
 	m_pcaDim = dims;
 	m_pca = PCA(samples, Mat(), PCA::DATA_AS_ROW, m_pcaDim);
 }
@@ -278,6 +285,10 @@ Mat DefectDetection::ProjectPCA(const Mat& sample) const
 {
 	Mat input = sample;
 	if (input.type() != CV_32F) input.convertTo(input, CV_32F);
+	// Apply standardization if available
+	if (!m_featMean.empty() && !m_featStd.empty()) {
+		input = applyStandardize(input, m_featMean, m_featStd);
+	}
 	if (m_pca.eigenvectors.empty()) return input.clone();
 	Mat projected; m_pca.project(input, projected); return projected;
 }
@@ -298,7 +309,16 @@ bool DefectDetection::TrainSVM(const Mat& samples, const Mat& labels)
 	Mat trainData = samples;
 	if (trainData.type() != CV_32F) trainData.convertTo(trainData, CV_32F);
 
-	if (!m_pca.eigenvectors.empty()) { Mat proj; m_pca.project(trainData, proj); trainData = proj; }
+	// Ensure feature standardization params exist; compute if absent
+	if (m_featMean.empty() || m_featStd.empty()) {
+		Mat sampF = trainData;
+		computeMeanStd(sampF, m_featMean, m_featStd);
+	}
+	// Apply standardization
+	Mat trainStd = applyStandardize(trainData, m_featMean, m_featStd);
+
+	if (!m_pca.eigenvectors.empty()) { Mat proj; m_pca.project(trainStd, proj); trainData = proj; }
+	else trainData = trainStd;
 
 	Ptr<TrainData> td = TrainData::create(trainData, ROW_SAMPLE, labels);
 	return m_svm->train(td);
@@ -315,6 +335,10 @@ int DefectDetection::Predict(const Mat& sample) const
 {
 	Mat x = sample;
 	if (x.type() != CV_32F) x.convertTo(x, CV_32F);
+	// Apply standardization if available, then PCA projection
+	if (!m_featMean.empty() && !m_featStd.empty()) {
+		x = applyStandardize(x, m_featMean, m_featStd);
+	}
 	if (!m_pca.eigenvectors.empty()) { Mat proj; m_pca.project(x, proj); x = proj; }
 	return static_cast<int>(m_svm->predict(x));
 }
@@ -338,6 +362,9 @@ bool DefectDetection::SaveModel(const string& basePath) const
 		fs << "mean" << m_pca.mean;
 		fs << "eigenvectors" << m_pca.eigenvectors;
 		fs << "eigenvalues" << m_pca.eigenvalues;
+		// 保存特征标准化参数（若存在）
+		if (!m_featMean.empty()) fs << "feat_mean" << m_featMean;
+		if (!m_featStd.empty()) fs << "feat_std" << m_featStd;
 		fs.release();
 	} catch (...) { return false; }
 	return true;
@@ -360,9 +387,69 @@ bool DefectDetection::LoadModel(const string& basePath)
 		fs["mean"] >> m_pca.mean;
 		fs["eigenvectors"] >> m_pca.eigenvectors;
 		fs["eigenvalues"] >> m_pca.eigenvalues;
+		// 读取特征标准化参数（可选）
+		fs["feat_mean"] >> m_featMean;
+		fs["feat_std"] >> m_featStd;
 		fs.release();
 	} catch (...) { return false; }
 	return true;
+}
+
+// 计算特征矩阵的列均值和标准差（double 精度），并保存到成员变量
+static void computeMeanStd(const Mat& samples, Mat& meanOut, Mat& stdOut) {
+	CV_Assert(samples.type() == CV_32F || samples.type() == CV_64F);
+	Mat tmp;
+	if (samples.type() == CV_32F) samples.convertTo(tmp, CV_64F); else tmp = samples;
+	int cols = tmp.cols;
+	meanOut = Mat::zeros(1, cols, CV_64F);
+	stdOut = Mat::zeros(1, cols, CV_64F);
+	for (int j = 0; j < cols; ++j) {
+		Scalar mu, sd;
+		meanStdDev(tmp.col(j), mu, sd);
+		meanOut.at<double>(0,j) = mu[0];
+		stdOut.at<double>(0,j) = sd[0] > 1e-12 ? sd[0] : 1.0; // 防止除零
+	}
+}
+
+// 对样本做列向量标准化（(x-mean)/std），返回 CV_32F
+static Mat applyStandardize(const Mat& samples, const Mat& mean, const Mat& stdv) {
+	// Convert input to CV_64F for stable arithmetic, then apply (x-mean)/std per column
+	Mat tmp;
+	samples.convertTo(tmp, CV_64F);
+	int rows = tmp.rows, cols = tmp.cols;
+	Mat out(rows, cols, CV_32F);
+	for (int j = 0; j < cols; ++j) {
+		double m = mean.at<double>(0,j);
+		double s = stdv.at<double>(0,j);
+		for (int i = 0; i < rows; ++i) {
+			double v = tmp.at<double>(i,j);
+			out.at<float>(i,j) = static_cast<float>((v - m) / s);
+		}
+	}
+	return out;
+}
+
+bool DefectDetection::TrainSVMAuto(const Mat& samples, const Mat& labels)
+{
+	CV_Assert(!samples.empty());
+	CV_Assert(samples.rows == labels.rows);
+
+	// 先标准化特征并保存均值/方差
+	Mat sampF;
+	if (samples.type() != CV_32F) samples.convertTo(sampF, CV_32F); else sampF = samples;
+	computeMeanStd(sampF, m_featMean, m_featStd);
+	Mat trainStd = applyStandardize(sampF, m_featMean, m_featStd);
+
+	// 若已有 PCA，则投影到 PCA 子空间
+	Mat trainData = trainStd;
+	if (!m_pca.eigenvectors.empty()) { Mat proj; m_pca.project(trainStd, proj); trainData = proj; }
+
+	Ptr<TrainData> td = TrainData::create(trainData, ROW_SAMPLE, labels);
+
+	// 使用 OpenCV 的 trainAuto 搜索参数（使用默认的参数网格）
+	// 注意：trainAuto 内部会做自动参数搜索并训练最终模型
+	bool ok = m_svm->trainAuto(td);
+	return ok;
 }
 
 std::vector<std::pair<double,double>> DefectDetection::GetPCAExplainedVariance() const

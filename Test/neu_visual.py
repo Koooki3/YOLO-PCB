@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-df = pd.read_csv('models/pca_explained_variance.csv')
+df = pd.read_csv('D:\VisualRobot-Git\VisualRobot\models\pca_explained_variance.csv')
 plt.plot(df['component'], df['cumulative_variance'], marker='o')
 plt.xlabel('Principal component')
 plt.ylabel('Cumulative explained variance')
