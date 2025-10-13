@@ -93,6 +93,14 @@ private:
     Ptr<SVM> m_svm;
     PCA m_pca;
 	int m_pcaDim;
+	// 特征标准化参数（训练时计算并保存）
+	Mat m_featMean; // 1 x D CV_64F
+	Mat m_featStd;  // 1 x D CV_64F
+
+public:
+	// 使用 OpenCV 的 trainAuto 自动搜索 SVM 超参数并训练（内部使用交叉验证）
+	// 返回训练成功与否
+	bool TrainSVMAuto(const Mat& samples, const Mat& labels);
 };
 
 #endif // DEFECTDETECTION_H

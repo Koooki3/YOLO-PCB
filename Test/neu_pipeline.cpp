@@ -154,7 +154,8 @@ int main(int argc, char *argv[])
         } else {
             detector.FitPCA(sampleMat, pcaDim);
         }
-        bool ok = detector.TrainSVM(sampleMat, labelMat);
+    // 使用自动超参数搜索并训练 SVM（trainAuto）以提高准确率
+    bool ok = detector.TrainSVMAuto(sampleMat, labelMat);
         if (!ok) { cerr << "SVM 训练失败\n"; return -1; }
         cout << "SVM 训练完成。保存模型...\n";
         fs::create_directories("models");
