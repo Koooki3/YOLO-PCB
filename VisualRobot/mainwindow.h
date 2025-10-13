@@ -103,6 +103,9 @@ private slots:
     void on_btnOpenManual_clicked();
     void updateSharpnessDisplay(double sharpness);
 
+    void on_setTemplate_clicked();   // 可选：从当前帧设模板（或弹框选择文件）
+    void on_detect_clicked();        // 你要的检测按钮
+
 private:
     // 清晰度计算相关
     double CalculateTenengradSharpness(const cv::Mat& image);
@@ -145,6 +148,29 @@ private:
 
     // 日志保存
     void closeEvent(QCloseEvent *event);
+
+private:
+    cv::Mat m_templateGray;          // 模板灰度图
+    bool    m_hasTemplate = false;   // 是否已有模板
+    double  m_diffThresh = 25.0;     // 差异二值阈值（配准后的 absdiff 后再高斯平滑）
+    double  m_minDefectArea = 1200;  // 过滤小区域（像素），按你的分辨率可调
+    int     m_orbFeatures = 1500;    // ORB特征点数量（配准用）
+
+    // 将缓存的最新一帧转为BGR Mat（经SDK内存编码为JPEG后imdecode，稳妥）
+    bool grabLastFrameBGR(cv::Mat& outBGR);
+
+    // Mat 转 QPixmap（显示用）
+    static QPixmap matToQPixmap(const cv::Mat& bgr);
+
+    // 把当前帧设为模板（从当前帧或文件）
+    bool setTemplateFromCurrent();
+    bool setTemplateFromFile(const QString& path);
+
+    // 配准：计算 H（模板 <- 当前）
+    bool computeHomography(const cv::Mat& curGray, cv::Mat& H, std::vector<cv::DMatch>* dbgMatches=nullptr);
+
+    // 检测：根据配准后差异，得到在“当前图像坐标系”的缺陷外接框
+    std::vector<cv::Rect> detectDefects(const cv::Mat& curBGR, const cv::Mat& H, cv::Mat* dbgMask=nullptr);
 };
 
 #endif // MAINWINDOW_H
