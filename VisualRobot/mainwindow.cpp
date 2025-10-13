@@ -2591,13 +2591,20 @@ void MainWindow::on_setTemplate_clicked()
 
     msg.exec();
     QAbstractButton* clicked = msg.clickedButton();
-    if (clicked == btnCur) {
+    if (clicked == btnCur) 
+    {
         if (setTemplateFromCurrent())
+        {
             AppendLog("模板已更新（来自当前帧）", INFO);
-    } else if (clicked == btnFile) {
+        }
+    }
+    else if (clicked == btnFile) 
+    {
         QString path = QFileDialog::getOpenFileName(this, "选择模板图像", ".", "Images (*.png *.jpg *.jpeg *.bmp)");
         if (!path.isEmpty() && setTemplateFromFile(path))
+        {
             AppendLog("模板已更新（来自文件）", INFO);
+        }
     }
 }
 
