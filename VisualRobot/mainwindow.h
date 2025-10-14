@@ -13,8 +13,10 @@
 #include <QLabel>
 #include "DLExample.h"
 #include "MvCameraControl.h"
+#include <opencv2/opencv.hpp>
 
 using namespace std;
+using namespace cv;
 
 namespace Ui {
 class MainWindow;
@@ -108,7 +110,7 @@ private slots:
 
 private:
     // 清晰度计算相关
-    double CalculateTenengradSharpness(const cv::Mat& image);
+    double CalculateTenengradSharpness(const Mat& image);
 
     // 多边形绘制功能相关
     QVector<QPoint> m_polygonPoints;                                        // 存储多边形点坐标
@@ -129,19 +131,19 @@ private:
     void HandleEscKeyPress();                                               // 处理ESC键按下
 
     // 矩形拖动选取功能相关
-    bool m_isDragging;                        // 标记是否正在拖动
-    QPoint m_dragStartPoint;                  // 拖动起始点
-    QPoint m_dragEndPoint;                    // 拖动结束点
-    QRect m_selectedRect;                     // 选中的矩形区域
-    bool m_rectCompleted;                     // 标记矩形选择是否完成
-    bool m_useRectangleMode;                  // 标记当前使用矩形模式(true)或多边形模式(false)
-    void HandleMousePressOnDisplay2(const QPoint& pos); // 处理鼠标按下
-    void HandleMouseMoveOnDisplay2(const QPoint& pos);  // 处理鼠标移动
+    bool m_isDragging;                                    // 标记是否正在拖动
+    QPoint m_dragStartPoint;                              // 拖动起始点
+    QPoint m_dragEndPoint;                                // 拖动结束点
+    QRect m_selectedRect;                                 // 选中的矩形区域
+    bool m_rectCompleted;                                 // 标记矩形选择是否完成
+    bool m_useRectangleMode;                              // 标记当前使用矩形模式(true)或多边形模式(false)
+    void HandleMousePressOnDisplay2(const QPoint& pos);   // 处理鼠标按下
+    void HandleMouseMoveOnDisplay2(const QPoint& pos);    // 处理鼠标移动
     void HandleMouseReleaseOnDisplay2(const QPoint& pos); // 处理鼠标释放
-    void DrawRectangleOnImage();              // 绘制矩形区域
-    void CropImageToRectangle();              // 裁剪矩形区域图像
-    void HandleSpaceKeyPress();               // 处理空格键按下
-    void SwitchSelectionMode();               // 切换选择模式
+    void DrawRectangleOnImage();                          // 绘制矩形区域
+    void CropImageToRectangle();                          // 裁剪矩形区域图像
+    void HandleSpaceKeyPress();                           // 处理空格键按下
+    void SwitchSelectionMode();                           // 切换选择模式
 
     // 键盘事件处理
     void keyPressEvent(QKeyEvent *event) override;
@@ -150,27 +152,27 @@ private:
     void closeEvent(QCloseEvent *event);
 
 private:
-    cv::Mat m_templateGray;          // 模板灰度图
+    Mat m_templateGray;              // 模板灰度图
     bool    m_hasTemplate = false;   // 是否已有模板
     double  m_diffThresh = 25.0;     // 差异二值阈值（配准后的 absdiff 后再高斯平滑）
     double  m_minDefectArea = 1200;  // 过滤小区域（像素），按你的分辨率可调
     int     m_orbFeatures = 1500;    // ORB特征点数量（配准用）
 
     // 将缓存的最新一帧转为BGR Mat（经SDK内存编码为JPEG后imdecode，稳妥）
-    bool grabLastFrameBGR(cv::Mat& outBGR);
+    bool GrabLastFrameBGR(Mat& outBGR);
 
     // Mat 转 QPixmap（显示用）
-    static QPixmap matToQPixmap(const cv::Mat& bgr);
+    static QPixmap MatToQPixmap(const Mat& bgr);
 
     // 把当前帧设为模板（从当前帧或文件）
-    bool setTemplateFromCurrent();
-    bool setTemplateFromFile(const QString& path);
+    bool SetTemplateFromCurrent();
+    bool SetTemplateFromFile(const QString& path);
 
     // 配准：计算 H（模板 <- 当前）
-    bool computeHomography(const cv::Mat& curGray, cv::Mat& H, std::vector<cv::DMatch>* dbgMatches=nullptr);
+    bool ComputeHomography(const Mat& curGray, Mat& H, vector<DMatch>* dbgMatches=nullptr);
 
     // 检测：根据配准后差异，得到在“当前图像坐标系”的缺陷外接框
-    std::vector<cv::Rect> detectDefects(const cv::Mat& curBGR, const cv::Mat& H, cv::Mat* dbgMask=nullptr);
+    vector<Rect> DetectDefects(const Mat& curBGR, const Mat& H, Mat* dbgMask=nullptr);
 };
 
 #endif // MAINWINDOW_H
