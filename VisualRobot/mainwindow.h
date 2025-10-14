@@ -158,41 +158,21 @@ private:
     double  m_minDefectArea = 1200;  // 过滤小区域（像素），按你的分辨率可调
     int     m_orbFeatures = 1500;    // ORB特征点数量（配准用）
 
-    double m_adaptiveThresholdBlockSize = 31;  // 自适应阈值块大小
-    double m_adaptiveThresholdC = 5.0;         // 自适应阈值常数
-    bool m_useAdaptiveThreshold = true;        // 是否使用自适应阈值
-
-    bool m_useYChannel = true;  // 是否使用Y通道
-
     // 将缓存的最新一帧转为BGR Mat（经SDK内存编码为JPEG后imdecode，稳妥）
     bool GrabLastFrameBGR(Mat& outBGR);
+
     // Mat 转 QPixmap（显示用）
     static QPixmap MatToQPixmap(const Mat& bgr);
+
     // 把当前帧设为模板（从当前帧或文件）
     bool SetTemplateFromCurrent();
     bool SetTemplateFromFile(const QString& path);
+
     // 配准：计算 H（模板 <- 当前）
     bool ComputeHomography(const Mat& curGray, Mat& H, vector<DMatch>* dbgMatches=nullptr);
+
     // 检测：根据配准后差异，得到在“当前图像坐标系”的缺陷外接框
     vector<Rect> DetectDefects(const Mat& curBGR, const Mat& H, Mat* dbgMask=nullptr);
-
-    // 自适应阈值方法
-    Mat ApplyAdaptiveThreshold(const Mat& diff);
-    // 局部对比度增强
-    Mat EnhanceLocalContrast(const Mat& gray);
-    // 多尺度差分
-    vector<Rect> MultiScaleDefectDetection(const Mat& curBGR, const Mat& H);
-
-    // 亮度匹配方法
-    void MatchBrightness(Mat& currentY, const Mat& templateY);
-    Mat ConvertToYCrCbAndProcess(const Mat& bgr);
-
-    // 高通滤波增强
-    Mat ApplyHighPassFilter(const Mat& gray);
-    // 边缘增强
-    Mat EnhanceEdges(const Mat& gray);
-    // 小目标专用检测
-    vector<Rect> DetectSmallDefects(const Mat& curBGR, const Mat& H);
 };
 
 #endif // MAINWINDOW_H
