@@ -2308,9 +2308,7 @@ void MainWindow::CropImageToRectangle()
     if (!m_croppedPixmap.isNull()) 
     {
         // 缩放图片以适应widgetDisplay_2大小, 保持宽高比
-        QPixmap scaledPixmap = m_croppedPixmap.scaled(ui->widgetDisplay_2->size(),
-                                                     Qt::KeepAspectRatio,
-                                                     Qt::SmoothTransformation);
+        QPixmap scaledPixmap = m_croppedPixmap.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
         ui->widgetDisplay_2->setPixmap(scaledPixmap);
         ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
         AppendLog("裁剪后的矩形区域图像已显示", INFO);
@@ -2349,24 +2347,28 @@ void MainWindow::HandleEnterKeyPress()
     }
 }
 
-// ====== Mat 转 QPixmap ======
-QPixmap MainWindow::matToQPixmap(const cv::Mat& bgr)
+// Mat 转 QPixmap
+QPixmap MainWindow::MatToQPixmap(const Mat& bgr)
 {
-    if (bgr.empty()) return QPixmap();
-    cv::Mat rgb;
-    cv::cvtColor(bgr, rgb, cv::COLOR_BGR2RGB);
+    if (bgr.empty()) 
+    {
+        return QPixmap();
+    }
+    Mat rgb;
+    cvtColor(bgr, rgb, COLOR_BGR2RGB);
     QImage img(rgb.data, rgb.cols, rgb.rows, rgb.step, QImage::Format_RGB888);
     return QPixmap::fromImage(img.copy());
 }
 
-// ====== 从缓存的最后一帧取图：BGR ======
-bool MainWindow::grabLastFrameBGR(cv::Mat& outBGR)
+// 从缓存的最后一帧取图：BGR
+bool MainWindow::GrabLastFrameBGR(Mat& outBGR)
 {
     vector<unsigned char> frameCopy;
     MV_FRAME_OUT_INFO_EX info{};
     {
-        std::lock_guard<std::mutex> lk(m_frameMtx);
-        if (!m_hasFrame || m_lastFrame.empty()) {
+        lock_guard<mutex> lk(m_frameMtx);
+        if (!m_hasFrame || m_lastFrame.empty()) 
+        {
             AppendLog("暂无可用图像，请先开始采集。", WARNNING);
             return false;
         }
@@ -2376,8 +2378,9 @@ bool MainWindow::grabLastFrameBGR(cv::Mat& outBGR)
 
     // 用 SDK 把原始帧编码成 JPEG，然后用 OpenCV 解码得到BGR
     unsigned int dstMax = info.nWidth * info.nHeight * 3 + 4096;
-    std::unique_ptr<unsigned char[]> pDst(new (std::nothrow) unsigned char[dstMax]);
-    if (!pDst) {
+    unique_ptr<unsigned char[]> pDst(new (nothrow) unsigned char[dstMax]);
+    if (!pDst) 
+    {
         AppendLog("抓帧转换：内存不足（编码缓冲）", ERROR);
         return false;
     }
@@ -2394,15 +2397,17 @@ bool MainWindow::grabLastFrameBGR(cv::Mat& outBGR)
     save.nJpgQuality   = 90;
 
     int nRet = m_pcMyCamera ? m_pcMyCamera->SaveImage(&save) : MV_E_HANDLE;
-    if (MV_OK != nRet || save.nImageLen == 0) {
+    if (MV_OK != nRet || save.nImageLen == 0) 
+    {
         AppendLog("抓帧转换失败（编码阶段）", ERROR);
         return false;
     }
 
     // OpenCV 解码
-    cv::Mat encoded(1, static_cast<int>(save.nImageLen), CV_8U, pDst.get());
-    cv::Mat bgr = cv::imdecode(encoded, cv::IMREAD_COLOR);
-    if (bgr.empty()) {
+    Mat encoded(1, static_cast<int>(save.nImageLen), CV_8U, pDst.get());
+    Mat bgr = imdecode(encoded, IMREAD_COLOR);
+    if (bgr.empty()) 
+    {
         AppendLog("imdecode 失败", ERROR);
         return false;
     }
@@ -2410,175 +2415,215 @@ bool MainWindow::grabLastFrameBGR(cv::Mat& outBGR)
     return true;
 }
 
-// ====== 将当前帧设为模板 ======
-bool MainWindow::setTemplateFromCurrent()
+// 将当前帧设为模板
+bool MainWindow::SetTemplateFromCurrent()
 {
-    cv::Mat bgr;
-    if (!grabLastFrameBGR(bgr)) return false;
+    Mat bgr;
+    if (!grabLastFrameBGR(bgr)) 
+    {
+        return false;
+    }
 
-    cv::Mat gray;
-    cv::cvtColor(bgr, gray, cv::COLOR_BGR2GRAY);
-    cv::GaussianBlur(gray, gray, cv::Size(3,3), 0);
+    Mat gray;
+    cvtColor(bgr, gray, COLOR_BGR2GRAY);
+    GaussianBlur(gray, gray, cv::Size(3,3), 0);
     m_templateGray = gray.clone();
     m_hasTemplate  = true;
 
-    AppendLog(QString("已将当前帧设为模板，尺寸：%1x%2")
-              .arg(m_templateGray.cols).arg(m_templateGray.rows), INFO);
+    AppendLog(QString("已将当前帧设为模板，尺寸：%1x%2").arg(m_templateGray.cols).arg(m_templateGray.rows), INFO);
     return true;
 }
 
-bool MainWindow::setTemplateFromFile(const QString& path)
+bool MainWindow::SetTemplateFromFile(const QString& path)
 {
-    cv::Mat bgr = cv::imread(path.toStdString(), cv::IMREAD_COLOR);
-    if (bgr.empty()) {
+    Mat bgr = imread(path.toStdString(), IMREAD_COLOR);
+    if (bgr.empty()) 
+    {
         AppendLog("读取模板文件失败：" + path, ERROR);
         return false;
     }
-    cv::Mat gray;
-    cv::cvtColor(bgr, gray, cv::COLOR_BGR2GRAY);
-    cv::GaussianBlur(gray, gray, cv::Size(3,3), 0);
+    Mat gray;
+    cvtColor(bgr, gray, COLOR_BGR2GRAY);
+    GaussianBlur(gray, gray, cv::Size(3,3), 0);
     m_templateGray = gray.clone();
     m_hasTemplate  = true;
 
-    AppendLog(QString("已从文件加载模板：%1（%2x%3）")
-              .arg(path).arg(m_templateGray.cols).arg(m_templateGray.rows), INFO);
+    AppendLog(QString("已从文件加载模板：%1 (%2x%3)").arg(path).arg(m_templateGray.cols).arg(m_templateGray.rows), INFO);
     return true;
 }
 
-// ====== 计算单应性（模板 <- 当前） ======
-bool MainWindow::computeHomography(const cv::Mat& curGray, cv::Mat& H, std::vector<cv::DMatch>* dbgMatches)
+// 计算单应性（模板 <- 当前）
+bool MainWindow::ComputeHomography(const Mat& curGray, Mat& H, vector<DMatch>* dbgMatches)
 {
-    if (!m_hasTemplate || m_templateGray.empty()) return false;
+    if (!m_hasTemplate || m_templateGray.empty()) 
+    {
+        return false;
+    }
 
     // ORB 特征
-    cv::Ptr<cv::ORB> orb = cv::ORB::create(m_orbFeatures);
-    std::vector<cv::KeyPoint> kptT, kptC;
-    cv::Mat desT, desC;
-    orb->detectAndCompute(m_templateGray, cv::noArray(), kptT, desT);
-    orb->detectAndCompute(curGray,       cv::noArray(), kptC, desC);
+    Ptr<ORB> orb = ORB::create(m_orbFeatures);
+    vector<KeyPoint> kptT, kptC;
+    Mat desT, desC;
+    orb->detectAndCompute(m_templateGray, noArray(), kptT, desT);
+    orb->detectAndCompute(curGray, noArray(), kptC, desC);
 
-    if (desT.empty() || desC.empty()) {
+    if (desT.empty() || desC.empty()) 
+    {
         AppendLog("配准失败：未检测到足够特征。", ERROR);
         return false;
     }
 
     // 暴力匹配 + 交叉检验
-    cv::BFMatcher matcher(cv::NORM_HAMMING, true);
-    std::vector<cv::DMatch> matches;
+    BFMatcher matcher(NORM_HAMMING, true);
+    vector<DMatch> matches;
     matcher.match(desT, desC, matches);
-    if (matches.size() < 8) {
+    if (matches.size() < 8) 
+    {
         AppendLog("配准失败：匹配对过少。", ERROR);
         return false;
     }
 
     // 根据距离剔除离群
     double maxDist = 0, minDist = 1e9;
-    for (auto& m : matches) {
+    for (auto& m : matches) 
+    {
         double d = m.distance;
         maxDist = std::max(maxDist, d);
         minDist = std::min(minDist, d);
     }
-    std::vector<cv::DMatch> good;
+    vector<DMatch> good;
     double thr = std::max(2.0*minDist, 30.0); // 经验阈值
-    for (auto& m : matches) if (m.distance <= thr) good.push_back(m);
-    if (good.size() < 8) good = matches; // 兜底
+    for (auto& m : matches) 
+    {
+        if (m.distance <= thr) 
+        {
+            good.push_back(m);
+        }
+    }
+    if (good.size() < 8) 
+    {
+        good = matches; // 兜底
+    }
 
-    if (dbgMatches) *dbgMatches = good;
+    if (dbgMatches) 
+    {
+        *dbgMatches = good;
+    }
 
-    std::vector<cv::Point2f> ptsT, ptsC;
+    vector<Point2f> ptsT, ptsC;
     ptsT.reserve(good.size());
     ptsC.reserve(good.size());
-    for (auto& m : good) {
+    for (auto& m : good) 
+    {
         ptsT.push_back(kptT[m.queryIdx].pt);
         ptsC.push_back(kptC[m.trainIdx].pt);
     }
 
     // RANSAC 求 H（模板 <- 当前）
-    std::vector<unsigned char> inliers;
-    H = cv::findHomography(ptsC, ptsT, cv::RANSAC, 3.0, inliers);
-    if (H.empty()) {
+    vector<unsigned char> inliers;
+    H = findHomography(ptsC, ptsT, RANSAC, 3.0, inliers);
+    if (H.empty()) 
+    {
         AppendLog("配准失败：单应矩阵为空。", ERROR);
         return false;
     }
-    AppendLog(QString("配准成功：内点数 %1 / %2").arg(std::count(inliers.begin(), inliers.end(), 1)).arg((int)ptsT.size()), INFO);
+    AppendLog(QString("配准成功：内点数 %1 / %2").arg(count(inliers.begin(), inliers.end(), 1)).arg((int)ptsT.size()), INFO);
     return true;
 }
 
-// ====== 检测核心：返回在“当前图像坐标系”的外接框 ======
-std::vector<cv::Rect> MainWindow::detectDefects(const cv::Mat& curBGR, const cv::Mat& H, cv::Mat* dbgMask)
+// 检测核心：返回在“当前图像坐标系”的外接框
+vector<Rect> MainWindow::DetectDefects(const Mat& curBGR, const Mat& H, Mat* dbgMask)
 {
-    std::vector<cv::Rect> boxes;
+    vector<Rect> boxes;
 
     // 统一到模板坐标系做差异
-    cv::Mat curGray;
-    cv::cvtColor(curBGR, curGray, cv::COLOR_BGR2GRAY);
-    cv::GaussianBlur(curGray, curGray, cv::Size(3,3), 0);
+    Mat curGray;
+    cvtColor(curBGR, curGray, COLOR_BGR2GRAY);
+    GaussianBlur(curGray, curGray, cv::Size(3,3), 0);
 
-    cv::Mat warped;
-    cv::warpPerspective(curGray, warped, H, m_templateGray.size(), cv::INTER_LINEAR);
+    Mat warped;
+    warpPerspective(curGray, warped, H, m_templateGray.size(), INTER_LINEAR);
 
     // 差异图
-    cv::Mat diff;
-    cv::absdiff(m_templateGray, warped, diff);
-    cv::GaussianBlur(diff, diff, cv::Size(5,5), 0);
+    Mat diff;
+    absdiff(m_templateGray, warped, diff);
+    GaussianBlur(diff, diff, cv::Size(5,5), 0);
 
     // 二值化（可改Otsu）
-    cv::Mat bin;
-    if (m_diffThresh <= 0) {
-        cv::threshold(diff, bin, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
-    } else {
-        cv::threshold(diff, bin, m_diffThresh, 255, cv::THRESH_BINARY);
+    Mat bin;
+    if (m_diffThresh <= 0) 
+    {
+        threshold(diff, bin, 0, 255, THRESH_BINARY | THRESH_OTSU);
+    } 
+    else 
+    {
+        threshold(diff, bin, m_diffThresh, 255, THRESH_BINARY);
     }
 
     // 形态学净化
-    cv::morphologyEx(bin, bin, cv::MORPH_OPEN, cv::getStructuringElement(cv::MORPH_RECT, {5,5}));
-    cv::morphologyEx(bin, bin, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_RECT, {9,9}));
+    morphologyEx(bin, bin, MORPH_OPEN, getStructuringElement(MORPH_RECT, {5,5}));
+    morphologyEx(bin, bin, MORPH_CLOSE, getStructuringElement(MORPH_RECT, {9,9}));
 
-    if (dbgMask) *dbgMask = bin.clone();
+    if (dbgMask) 
+    {
+        *dbgMask = bin.clone();
+    }
 
     // 找轮廓（在模板坐标系）
-    std::vector<std::vector<cv::Point>> contours;
-    cv::findContours(bin, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+    vector<vector<Point>> contours;
+    findContours(bin, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
 
-    if (contours.empty()) return boxes;
+    if (contours.empty()) 
+    {
+        return boxes;
+    }
 
     // 将模板坐标系下的外接框四角回投影到“当前图像坐标系”
-    cv::Mat Hinv;
-    if (!cv::invert(H, Hinv)) {
+    Mat Hinv;
+    if (!invert(H, Hinv)) 
+    {
         AppendLog("单应矩阵不可逆，无法回投影。", ERROR);
         return boxes;
     }
 
-    for (auto& c : contours) {
-        double area = cv::contourArea(c);
-        if (area < m_minDefectArea) continue;
+    for (auto& c : contours) 
+    {
+        double area = contourArea(c);
+        if (area < m_minDefectArea) 
+        {
+            continue;
+        }
 
-        cv::Rect r = cv::boundingRect(c); // 模板系下
+        Rect r = boundingRect(c); // 模板系下
         // 四角
-        std::vector<cv::Point2f> srcPts = {
+        vector<Point2f> srcPts = {
             { (float)r.x, (float)r.y },
             { (float)(r.x + r.width), (float)r.y },
             { (float)(r.x + r.width), (float)(r.y + r.height) },
             { (float)r.x, (float)(r.y + r.height) }
         };
-        std::vector<cv::Point2f> dstPts;
-        cv::perspectiveTransform(srcPts, dstPts, Hinv);
+        vector<Point2f> dstPts;
+        perspectiveTransform(srcPts, dstPts, Hinv);
 
         // 用回投影后的四角做外接框（当前图像坐标系）
         float minx = curBGR.cols, miny = curBGR.rows, maxx = 0, maxy = 0;
-        for (auto& p : dstPts) {
+        for (auto& p : dstPts) 
+        {
             minx = std::min(minx, p.x); miny = std::min(miny, p.y);
             maxx = std::max(maxx, p.x); maxy = std::max(maxy, p.y);
         }
-        cv::Rect box(cv::Point2f(minx, miny), cv::Point2f(maxx, maxy));
-        box &= cv::Rect(0,0, curBGR.cols, curBGR.rows); // 裁边
-        if (box.area() > 0) boxes.push_back(box);
+        Rect box(Point2f(minx, miny), Point2f(maxx, maxy));
+        box &= Rect(0,0, curBGR.cols, curBGR.rows); // 裁边
+        if (box.area() > 0) 
+        {
+            boxes.push_back(box);
+        }
     }
 
     return boxes;
 }
 
-// ====== 可选：设置模板按钮 ======
+// 可选：设置模板按钮
 void MainWindow::on_setTemplate_clicked()
 {
     // 弹窗选择：当前帧 / 从文件
@@ -2608,59 +2653,72 @@ void MainWindow::on_setTemplate_clicked()
     }
 }
 
-// ====== 你要的：缺陷检测按钮 ======
+// 缺陷检测按钮
 void MainWindow::on_detect_clicked()
 {
-    if (!m_hasTemplate) {
+    if (!m_hasTemplate) 
+    {
         AppendLog("尚未设置模板，请先设置模板。", WARNNING);
         // 尝试直接用当前帧设模板，继续流程（也可直接 return）
-        if (!setTemplateFromCurrent()) return;
+        if (!setTemplateFromCurrent()) 
+        {
+            return;
+        }
     }
 
     // 取当前帧
-    cv::Mat curBGR;
-    if (!grabLastFrameBGR(curBGR)) return;
+    Mat curBGR;
+    if (!grabLastFrameBGR(curBGR)) 
+    {
+        return;
+    }
 
     // 计算配准 H（模板 <- 当前）
-    cv::Mat curGray;
-    cv::cvtColor(curBGR, curGray, cv::COLOR_BGR2GRAY);
-    cv::GaussianBlur(curGray, curGray, cv::Size(3,3), 0);
+    Mat curGray;
+    cvtColor(curBGR, curGray, COLOR_BGR2GRAY);
+    GaussianBlur(curGray, curGray, cv::Size(3,3), 0);
 
-    cv::Mat H;
-    if (!computeHomography(curGray, H)) return;
+    Mat H;
+    if (!computeHomography(curGray, H)) 
+    {
+        return;
+    }
 
     // 检测
     QElapsedTimer t; t.start();
-    cv::Mat dbgMask;
+    Mat dbgMask;
     auto boxes = detectDefects(curBGR, H, &dbgMask);
-    AppendLog(QString("模板检测耗时: %1 ms，候选缺陷框数: %2")
-              .arg(t.elapsed()).arg((int)boxes.size()), INFO);
+    AppendLog(QString("模板检测耗时: %1 ms, 候选缺陷框数: %2").arg(t.elapsed()).arg((int)boxes.size()), INFO);
 
     // 绘制结果
-    cv::Mat draw = curBGR.clone();
-    for (auto& b : boxes) {
-        cv::rectangle(draw, b, cv::Scalar(0,0,255), 2); // 红框
+    Mat draw = curBGR.clone();
+    for (auto& b : boxes) 
+    {
+        rectangle(draw, b, Scalar(0,0,255), 2); // 红框
     }
 
     // 展示到 widgetDisplay_2
     QPixmap pm = matToQPixmap(draw);
-    if (!pm.isNull()) {
+    if (!pm.isNull()) 
+    {
         // 自适应显示
-        QPixmap scaled = pm.scaled(ui->widgetDisplay_2->size(),
-                                   Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        QPixmap scaled = pm.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
         ui->widgetDisplay_2->setPixmap(scaled);
         ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
         AppendLog("缺陷结果已显示。", INFO);
-    } else {
-        AppendLog("显示失败：QPixmap 为空。", ERROR);
+    } 
+    else 
+    {
+        AppendLog("显示失败: QPixmap 为空。", ERROR);
     }
 
     // 日志每个框
-    for (size_t i=0; i<boxes.size(); ++i) {
+    for (size_t i=0; i<boxes.size(); ++i) 
+    {
         AppendLog(QString("缺陷框 %1: (x=%2, y=%3, w=%4, h=%5)")
                   .arg(i+1).arg(boxes[i].x).arg(boxes[i].y)
                   .arg(boxes[i].width).arg(boxes[i].height), INFO);
     }
 
-    // 如需同时叠加尺寸/角度的浮窗，可复用你已有的 drawOverlayOnDisplay2()
+    // 如需同时叠加尺寸/角度的浮窗，可复用已有的 drawOverlayOnDisplay2()
 }
