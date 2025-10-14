@@ -635,7 +635,8 @@ int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<dou
 //   bias - 比例偏差
 // 返回值:
 //   包含宽度、高度、角度和图像的结果结构体
-Result CalculateLength(const Mat& input, const Params& params, double bias) {
+Result CalculateLength(const Mat& input, const Params& params, double bias)
+{
     // 变量定义
     Result result;                            // 结果结构体
     Mat source, binary, colorImage;           // 图像处理变量
@@ -735,11 +736,7 @@ Result CalculateLength(const Mat& input, const Params& params, double bias) {
 
         for (int i = 0; i < 4; i++) 
         {
-            line(colorImage,
-                 vertices[i],
-                 vertices[(i+1)%4],
-                 Scalar(0, 255, 0),  // 绿色
-                 thickBorder);
+            line(colorImage, vertices[i], vertices[(i+1)%4], Scalar(0, 255, 0),  thickBorder);
         }
 
         cout << "物件长度: " << spring_length*bias << ", 物件宽度: " << spring_width*bias << endl;

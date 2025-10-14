@@ -28,21 +28,26 @@ int main(int argc, char *argv[])
     QString resourcePath = ":/style/style.qss";
     bool loaded = false;
     QFile qrcStyle(resourcePath);
-    if (qrcStyle.open(QFile::ReadOnly | QFile::Text)) {
+    if (qrcStyle.open(QFile::ReadOnly | QFile::Text))
+    {
         a.setStyleSheet(qrcStyle.readAll());
         qrcStyle.close();
         qDebug() << "Loaded style from resource:" << resourcePath;
         loaded = true;
     }
-    if (!loaded) {
+    if (!loaded)
+    {
         QString stylePath = QDir(QCoreApplication::applicationDirPath()).filePath("style.qss");
         QFile styleFile(stylePath);
-        if (styleFile.open(QFile::ReadOnly | QFile::Text)) {
+        if (styleFile.open(QFile::ReadOnly | QFile::Text))
+        {
             a.setStyleSheet(styleFile.readAll());
             styleFile.close();
             qDebug() << "Loaded style from file:" << stylePath;
             loaded = true;
-        } else {
+        }
+        else
+        {
             qDebug() << "No custom stylesheet found; using default style.";
         }
     }

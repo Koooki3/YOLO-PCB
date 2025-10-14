@@ -73,8 +73,7 @@ float SystemMonitor::GetCpuUsage()
         iss.str(line);
         
         // 尝试读取所有CPU时间值
-        if (!(iss >> cpu >> totalUser >> totalUserLow >> totalSys >> totalIdle 
-              >> iowait >> irq >> softirq >> steal)) 
+        if (!(iss >> cpu >> totalUser >> totalUserLow >> totalSys >> totalIdle >> iowait >> irq >> softirq >> steal))
         {
             qDebug() << "Failed to read CPU data: " << QString::fromStdString(line);
             return 0.0f;
