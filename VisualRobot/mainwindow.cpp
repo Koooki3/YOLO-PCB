@@ -2462,28 +2462,15 @@ bool MainWindow::ComputeHomography(const Mat& curGray, Mat& H, vector<DMatch>* d
 {
     if (!m_hasTemplate || m_templateGray.empty()) 
     {
-        AppendLog("配准失败：无有效模板。", ERROR);
         return false;
-    }
-
-    // 如果图像太大，先降采样用于快速配准
-    Mat templateForMatching = m_templateGray;
-    Mat currentForMatching = curGray;
-    double scale = 1.0;
-    
-    if (m_templateGray.cols > 5000 || m_templateGray.rows > 5000) {
-        scale = 0.5;
-        resize(m_templateGray, templateForMatching, Size(), scale, scale, INTER_AREA);
-        resize(curGray, currentForMatching, Size(), scale, scale, INTER_AREA);
-        AppendLog(QString("图像降采样配准，缩放因子：%1").arg(scale), INFO);
     }
 
     // ORB 特征
     Ptr<ORB> orb = ORB::create(m_orbFeatures);
     vector<KeyPoint> kptT, kptC;
     Mat desT, desC;
-    orb->detectAndCompute(templateForMatching, noArray(), kptT, desT);
-    orb->detectAndCompute(currentForMatching, noArray(), kptC, desC);
+    orb->detectAndCompute(m_templateGray, noArray(), kptT, desT);
+    orb->detectAndCompute(curGray, noArray(), kptC, desC);
 
     if (desT.empty() || desC.empty()) 
     {
@@ -2491,67 +2478,50 @@ bool MainWindow::ComputeHomography(const Mat& curGray, Mat& H, vector<DMatch>* d
         return false;
     }
 
-    // 暴力匹配 + Lowe ratio test
-    BFMatcher matcher(NORM_HAMMING);
-    vector<vector<DMatch>> knnMatches;
-    matcher.knnMatch(desT, desC, knnMatches, 2);
-
-    // 应用Lowe ratio test
-    vector<DMatch> goodMatches;
-    const float ratio_thresh = 0.7f;
-    for (size_t i = 0; i < knnMatches.size(); i++)
+    // 暴力匹配 + 交叉检验
+    BFMatcher matcher(NORM_HAMMING, true);
+    vector<DMatch> matches;
+    matcher.match(desT, desC, matches);
+    if (matches.size() < 8) 
     {
-        if (knnMatches[i].size() == 2 && 
-            knnMatches[i][0].distance < ratio_thresh * knnMatches[i][1].distance)
-        {
-            goodMatches.push_back(knnMatches[i][0]);
-        }
-    }
-
-    // 双向匹配验证
-    vector<DMatch> crossCheckedMatches;
-    vector<vector<DMatch>> knnMatchesReverse;
-    matcher.knnMatch(desC, desT, knnMatchesReverse, 2);
-    
-    for (auto& match : goodMatches) {
-        int trainIdx = match.trainIdx;
-        int queryIdx = match.queryIdx;
-        
-        if (trainIdx < knnMatchesReverse.size() && 
-            knnMatchesReverse[trainIdx].size() == 2 &&
-            knnMatchesReverse[trainIdx][0].trainIdx == queryIdx &&
-            knnMatchesReverse[trainIdx][0].distance < ratio_thresh * knnMatchesReverse[trainIdx][1].distance) {
-            crossCheckedMatches.push_back(match);
-        }
-    }
-
-    if (crossCheckedMatches.size() < 10) 
-    {
-        AppendLog(QString("配准失败：交叉验证后匹配对过少 (%1 < 10)").arg(crossCheckedMatches.size()), ERROR);
+        AppendLog("配准失败：匹配对过少。", ERROR);
         return false;
+    }
+
+    // 根据距离剔除离群
+    double maxDist = 0, minDist = 1e9;
+    for (auto& m : matches) 
+    {
+        double d = m.distance;
+        maxDist = std::max(maxDist, d);
+        minDist = std::min(minDist, d);
+    }
+    vector<DMatch> good;
+    double thr = std::max(2.0*minDist, 30.0); // 经验阈值
+    for (auto& m : matches) 
+    {
+        if (m.distance <= thr) 
+        {
+            good.push_back(m);
+        }
+    }
+    if (good.size() < 8) 
+    {
+        good = matches; // 兜底
     }
 
     if (dbgMatches) 
     {
-        *dbgMatches = crossCheckedMatches;
+        *dbgMatches = good;
     }
 
     vector<Point2f> ptsT, ptsC;
-    ptsT.reserve(crossCheckedMatches.size());
-    ptsC.reserve(crossCheckedMatches.size());
-    for (auto& m : crossCheckedMatches) 
+    ptsT.reserve(good.size());
+    ptsC.reserve(good.size());
+    for (auto& m : good) 
     {
-        // 如果使用了降采样，需要缩放关键点坐标
-        Point2f ptT = kptT[m.queryIdx].pt;
-        Point2f ptC = kptC[m.trainIdx].pt;
-        if (scale != 1.0) {
-            ptT.x /= scale;
-            ptT.y /= scale;
-            ptC.x /= scale;
-            ptC.y /= scale;
-        }
-        ptsT.push_back(ptT);
-        ptsC.push_back(ptC);
+        ptsT.push_back(kptT[m.queryIdx].pt);
+        ptsC.push_back(kptC[m.trainIdx].pt);
     }
 
     // RANSAC 求 H（模板 <- 当前）
@@ -2562,16 +2532,7 @@ bool MainWindow::ComputeHomography(const Mat& curGray, Mat& H, vector<DMatch>* d
         AppendLog("配准失败：单应矩阵为空。", ERROR);
         return false;
     }
-    
-    int inlierCount = count(inliers.begin(), inliers.end(), 1);
-    AppendLog(QString("配准成功：内点数 %1 / %2").arg(inlierCount).arg((int)ptsT.size()), INFO);
-    
-    // 检查内点比例是否足够
-    double inlierRatio = static_cast<double>(inlierCount) / ptsT.size();
-    if (inlierRatio < 0.3) {
-        AppendLog(QString("配准警告：内点比例过低 (%1%)").arg(inlierRatio * 100, 0, 'f', 1), WARNNING);
-    }
-    
+    AppendLog(QString("配准成功：内点数 %1 / %2").arg(count(inliers.begin(), inliers.end(), 1)).arg((int)ptsT.size()), INFO);
     return true;
 }
 
@@ -2580,76 +2541,90 @@ vector<Rect> MainWindow::DetectDefects(const Mat& curBGR, const Mat& H, Mat* dbg
 {
     vector<Rect> boxes;
 
-    // 使用YCrCb颜色空间的Y通道
-    Mat curProcessed = ConvertToYCrCbAndProcess(curBGR);
-    
+    // 统一到模板坐标系做差异
+    Mat curGray;
+    cvtColor(curBGR, curGray, COLOR_BGR2GRAY);
+    GaussianBlur(curGray, curGray, cv::Size(3,3), 0);
+
     Mat warped;
-    warpPerspective(curProcessed, warped, H, m_templateGray.size(), INTER_LINEAR);
-    
-    // 如果使用Y通道且需要亮度匹配
-    if (m_useYChannel) {
-        MatchBrightness(warped, m_templateGray);
-    }
-    
+    warpPerspective(curGray, warped, H, m_templateGray.size(), INTER_LINEAR);
+
     // 差异图
     Mat diff;
     absdiff(m_templateGray, warped, diff);
     GaussianBlur(diff, diff, cv::Size(5,5), 0);
-    
-    // 使用多尺度检测
-    if (m_useAdaptiveThreshold) {
-        boxes = MultiScaleDefectDetection(curBGR, H);
-    } else {
-        // 原有检测逻辑
-        Mat bin;
+
+    // 二值化（可改Otsu）
+    Mat bin;
+    if (m_diffThresh <= 0) 
+    {
+        threshold(diff, bin, 0, 255, THRESH_BINARY | THRESH_OTSU);
+    } 
+    else 
+    {
         threshold(diff, bin, m_diffThresh, 255, THRESH_BINARY);
-        
-        morphologyEx(bin, bin, MORPH_OPEN, getStructuringElement(MORPH_RECT, {5,5}));
-        morphologyEx(bin, bin, MORPH_CLOSE, getStructuringElement(MORPH_RECT, {9,9}));
-        
-        if (dbgMask) {
-            *dbgMask = bin.clone();
+    }
+
+    // 形态学净化
+    morphologyEx(bin, bin, MORPH_OPEN, getStructuringElement(MORPH_RECT, {5,5}));
+    morphologyEx(bin, bin, MORPH_CLOSE, getStructuringElement(MORPH_RECT, {9,9}));
+
+    if (dbgMask) 
+    {
+        *dbgMask = bin.clone();
+    }
+
+    // 找轮廓（在模板坐标系）
+    vector<vector<Point>> contours;
+    findContours(bin, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+
+    if (contours.empty()) 
+    {
+        return boxes;
+    }
+
+    // 将模板坐标系下的外接框四角回投影到“当前图像坐标系”
+    Mat Hinv;
+    if (!invert(H, Hinv)) 
+    {
+        AppendLog("单应矩阵不可逆，无法回投影。", ERROR);
+        return boxes;
+    }
+
+    for (auto& c : contours) 
+    {
+        double area = contourArea(c);
+        if (area < m_minDefectArea) 
+        {
+            continue;
         }
-        
-        // 轮廓检测和回投影（原有逻辑）
-        vector<vector<Point>> contours;
-        findContours(bin, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
-        
-        Mat Hinv;
-        if (!invert(H, Hinv)) {
-            AppendLog("单应矩阵不可逆，无法回投影。", ERROR);
-            return boxes;
+
+        Rect r = boundingRect(c); // 模板系下
+        // 四角
+        vector<Point2f> srcPts = {
+            { (float)r.x, (float)r.y },
+            { (float)(r.x + r.width), (float)r.y },
+            { (float)(r.x + r.width), (float)(r.y + r.height) },
+            { (float)r.x, (float)(r.y + r.height) }
+        };
+        vector<Point2f> dstPts;
+        perspectiveTransform(srcPts, dstPts, Hinv);
+
+        // 用回投影后的四角做外接框（当前图像坐标系）
+        float minx = curBGR.cols, miny = curBGR.rows, maxx = 0, maxy = 0;
+        for (auto& p : dstPts) 
+        {
+            minx = std::min(minx, p.x); miny = std::min(miny, p.y);
+            maxx = std::max(maxx, p.x); maxy = std::max(maxy, p.y);
         }
-        
-        for (auto& c : contours) {
-            double area = contourArea(c);
-            if (area < m_minDefectArea) {
-                continue;
-            }
-            
-            Rect r = boundingRect(c);
-            vector<Point2f> srcPts = {
-                { (float)r.x, (float)r.y },
-                { (float)(r.x + r.width), (float)r.y },
-                { (float)(r.x + r.width), (float)(r.y + r.height) },
-                { (float)r.x, (float)(r.y + r.height) }
-            };
-            vector<Point2f> dstPts;
-            perspectiveTransform(srcPts, dstPts, Hinv);
-            
-            float minx = curBGR.cols, miny = curBGR.rows, maxx = 0, maxy = 0;
-            for (auto& p : dstPts) {
-                minx = std::min(minx, p.x); miny = std::min(miny, p.y);
-                maxx = std::max(maxx, p.x); maxy = std::max(maxy, p.y);
-            }
-            Rect box(Point2f(minx, miny), Point2f(maxx, maxy));
-            box &= Rect(0,0, curBGR.cols, curBGR.rows);
-            if (box.area() > 0) {
-                boxes.push_back(box);
-            }
+        Rect box(Point2f(minx, miny), Point2f(maxx, maxy));
+        box &= Rect(0,0, curBGR.cols, curBGR.rows); // 裁边
+        if (box.area() > 0) 
+        {
+            boxes.push_back(box);
         }
     }
-    
+
     return boxes;
 }
 
@@ -2686,409 +2661,69 @@ void MainWindow::on_setTemplate_clicked()
 // 缺陷检测按钮
 void MainWindow::on_detect_clicked()
 {
-    if (!m_hasTemplate) {
+    if (!m_hasTemplate) 
+    {
         AppendLog("尚未设置模板，请先设置模板。", WARNNING);
-        if (!SetTemplateFromCurrent()) {
+        // 尝试直接用当前帧设模板，继续流程（也可直接 return）
+        if (!setTemplateFromCurrent()) 
+        {
             return;
         }
     }
 
+    // 取当前帧
     Mat curBGR;
-    if (!GrabLastFrameBGR(curBGR)) {
+    if (!grabLastFrameBGR(curBGR)) 
+    {
         return;
     }
 
-    Mat curGray = ConvertToYCrCbAndProcess(curBGR);
+    // 计算配准 H（模板 <- 当前）
+    Mat curGray;
+    cvtColor(curBGR, curGray, COLOR_BGR2GRAY);
     GaussianBlur(curGray, curGray, cv::Size(3,3), 0);
 
     Mat H;
-    if (!ComputeHomography(curGray, H)) {
+    if (!computeHomography(curGray, H)) 
+    {
         return;
     }
 
+    // 检测
     QElapsedTimer t; t.start();
-    
-    // 综合检测：常规检测 + 小目标检测
-    vector<Rect> boxes = DetectDefects(curBGR, H);
-    vector<Rect> smallBoxes = DetectSmallDefects(curBGR, H);
-    
-    // 合并结果，避免重复
-    boxes.insert(boxes.end(), smallBoxes.begin(), smallBoxes.end());
-    
-    // 非极大值抑制，避免重叠框
-    vector<Rect> mergedBoxes;
-    for (size_t i = 0; i < boxes.size(); i++) {
-        bool keep = true;
-        for (size_t j = 0; j < boxes.size(); j++) {
-            if (i != j) {
-                Rect intersection = boxes[i] & boxes[j];
-                double overlap = intersection.area() / (double)boxes[i].area();
-                if (overlap > 0.3) {  // 重叠度超过30%，保留较大的框
-                    if (boxes[j].area() > boxes[i].area()) {
-                        keep = false;
-                        break;
-                    }
-                }
-            }
-        }
-        if (keep) {
-            mergedBoxes.push_back(boxes[i]);
-        }
-    }
-
-    AppendLog(QString("模板检测耗时: %1 ms, 候选缺陷框数: %2 (合并后: %3)")
-              .arg(t.elapsed()).arg((int)boxes.size()).arg((int)mergedBoxes.size()), INFO);
+    Mat dbgMask;
+    auto boxes = detectDefects(curBGR, H, &dbgMask);
+    AppendLog(QString("模板检测耗时: %1 ms, 候选缺陷框数: %2").arg(t.elapsed()).arg((int)boxes.size()), INFO);
 
     // 绘制结果
     Mat draw = curBGR.clone();
-    for (auto& b : mergedBoxes) {
-        rectangle(draw, b, Scalar(0,0,255), 2);
-        // 标注框大小
-        string label = "Defect: " + to_string(b.width) + "x" + to_string(b.height);
-        putText(draw, label, Point(b.x, b.y-5), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0,0,255), 1);
+    for (auto& b : boxes) 
+    {
+        rectangle(draw, b, Scalar(0,0,255), 2); // 红框
     }
 
-    QPixmap pm = MatToQPixmap(draw);
-    if (!pm.isNull()) {
+    // 展示到 widgetDisplay_2
+    QPixmap pm = matToQPixmap(draw);
+    if (!pm.isNull()) 
+    {
+        // 自适应显示
         QPixmap scaled = pm.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
         ui->widgetDisplay_2->setPixmap(scaled);
         ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
         AppendLog("缺陷结果已显示。", INFO);
+    } 
+    else 
+    {
+        AppendLog("显示失败: QPixmap 为空。", ERROR);
     }
 
-    for (size_t i=0; i<mergedBoxes.size(); ++i) {
-        AppendLog(QString("缺陷框 %1: (x=%2, y=%3, w=%4, h=%5, area=%6)")
-                  .arg(i+1).arg(mergedBoxes[i].x).arg(mergedBoxes[i].y)
-                  .arg(mergedBoxes[i].width).arg(mergedBoxes[i].height)
-                  .arg(mergedBoxes[i].area()), INFO);
+    // 日志每个框
+    for (size_t i=0; i<boxes.size(); ++i) 
+    {
+        AppendLog(QString("缺陷框 %1: (x=%2, y=%3, w=%4, h=%5)")
+                  .arg(i+1).arg(boxes[i].x).arg(boxes[i].y)
+                  .arg(boxes[i].width).arg(boxes[i].height), INFO);
     }
-}
 
-// 局部对比度增强（CLAHE）
-Mat MainWindow::EnhanceLocalContrast(const Mat& gray)
-{
-    if (gray.empty()) return gray;
-    
-    Mat enhanced;
-    Ptr<CLAHE> clahe = createCLAHE();
-    clahe->setClipLimit(2.0);      // 对比度限制
-    clahe->setTilesGridSize(cv::Size(8, 8));  // 网格大小
-    clahe->apply(gray, enhanced);
-    
-    return enhanced;
-}
-
-// 自适应阈值
-Mat MainWindow::ApplyAdaptiveThreshold(const Mat& diff)
-{
-    Mat bin;
-    
-    if (m_useAdaptiveThreshold) {
-        // 自适应高斯阈值
-        adaptiveThreshold(diff, bin, 255, ADAPTIVE_THRESH_GAUSSIAN_C, 
-                         THRESH_BINARY, m_adaptiveThresholdBlockSize, m_adaptiveThresholdC);
-        
-        // 可选：结合全局阈值作为后备
-        Mat globalBin;
-        threshold(diff, globalBin, m_diffThresh, 255, THRESH_BINARY);
-        
-        // 如果自适应阈值检测到的区域过少，使用全局阈值
-        int adaptiveCount = countNonZero(bin);
-        int globalCount = countNonZero(globalBin);
-        
-        if (adaptiveCount < globalCount * 0.1) {
-            AppendLog("自适应阈值检测区域过少，使用全局阈值", WARNNING);
-            bin = globalBin;
-        }
-    } else {
-        // 使用固定阈值
-        threshold(diff, bin, m_diffThresh, 255, THRESH_BINARY);
-    }
-    
-    return bin;
-}
-
-// 多尺度缺陷检测
-vector<Rect> MainWindow::MultiScaleDefectDetection(const Mat& curBGR, const Mat& H)
-{
-    vector<Rect> allBoxes;
-    
-    // 原始尺度
-    Mat curGray;
-    cvtColor(curBGR, curGray, COLOR_BGR2GRAY);
-    GaussianBlur(curGray, curGray, cv::Size(3,3), 0);
-    
-    Mat warped;
-    warpPerspective(curGray, warped, H, m_templateGray.size(), INTER_LINEAR);
-    
-    // 应用局部对比度增强
-    Mat enhancedTemplate = EnhanceLocalContrast(m_templateGray);
-    Mat enhancedWarped = EnhanceLocalContrast(warped);
-    
-    Mat diff;
-    absdiff(enhancedTemplate, enhancedWarped, diff);
-    GaussianBlur(diff, diff, cv::Size(5,5), 0);
-    
-    // 自适应阈值
-    Mat bin = ApplyAdaptiveThreshold(diff);
-    
-    // 多尺度分析：在缩小图像上检测小目标
-    vector<double> scales = {1.0, 0.5, 0.25};  // 多尺度
-    vector<Mat> scaleMasks;
-    
-    for (double scale : scales) {
-        if (scale == 1.0) {
-            scaleMasks.push_back(bin.clone());
-            continue;
-        }
-        
-        // 缩放图像
-        Mat smallTemplate, smallWarped;
-        resize(enhancedTemplate, smallTemplate, Size(), scale, scale, INTER_AREA);
-        resize(enhancedWarped, smallWarped, Size(), scale, scale, INTER_AREA);
-        
-        // 小尺度差分
-        Mat smallDiff;
-        absdiff(smallTemplate, smallWarped, smallDiff);
-        GaussianBlur(smallDiff, smallDiff, cv::Size(3,3), 0);
-        
-        // 小尺度使用更敏感的参数
-        Mat smallBin;
-        if (m_useAdaptiveThreshold) {
-            int blockSize = max(3, static_cast<int>(m_adaptiveThresholdBlockSize * scale));
-            adaptiveThreshold(smallDiff, smallBin, 255, ADAPTIVE_THRESH_GAUSSIAN_C, 
-                             THRESH_BINARY, blockSize, m_adaptiveThresholdC);
-        } else {
-            threshold(smallDiff, smallBin, m_diffThresh * 0.8, 255, THRESH_BINARY);
-        }
-        
-        // 放大回原尺寸
-        Mat resizedBin;
-        resize(smallBin, resizedBin, m_templateGray.size(), 0, 0, INTER_LINEAR);
-        threshold(resizedBin, resizedBin, 128, 255, THRESH_BINARY);
-        
-        scaleMasks.push_back(resizedBin);
-    }
-    
-    // 合并多尺度结果
-    Mat combinedBin = Mat::zeros(bin.size(), bin.type());
-    for (const auto& mask : scaleMasks) {
-        bitwise_or(combinedBin, mask, combinedBin);
-    }
-    
-    // 形态学操作净化
-    morphologyEx(combinedBin, combinedBin, MORPH_OPEN, getStructuringElement(MORPH_RECT, {3,3}));
-    morphologyEx(combinedBin, combinedBin, MORPH_CLOSE, getStructuringElement(MORPH_RECT, {7,7}));
-    
-    // 后续轮廓检测逻辑保持不变...
-    vector<vector<Point>> contours;
-    findContours(combinedBin, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
-    
-    // 回投影到当前图像坐标系（与原来相同的逻辑）
-    Mat Hinv;
-    if (!invert(H, Hinv)) {
-        AppendLog("单应矩阵不可逆，无法回投影。", ERROR);
-        return allBoxes;
-    }
-    
-    for (auto& c : contours) {
-        double area = contourArea(c);
-        if (area < m_minDefectArea * 0.5) {  // 多尺度检测可以降低面积阈值
-            continue;
-        }
-        
-        Rect r = boundingRect(c);
-        vector<Point2f> srcPts = {
-            { (float)r.x, (float)r.y },
-            { (float)(r.x + r.width), (float)r.y },
-            { (float)(r.x + r.width), (float)(r.y + r.height) },
-            { (float)r.x, (float)(r.y + r.height) }
-        };
-        vector<Point2f> dstPts;
-        perspectiveTransform(srcPts, dstPts, Hinv);
-        
-        float minx = curBGR.cols, miny = curBGR.rows, maxx = 0, maxy = 0;
-        for (auto& p : dstPts) {
-            minx = std::min(minx, p.x); miny = std::min(miny, p.y);
-            maxx = std::max(maxx, p.x); maxy = std::max(maxy, p.y);
-        }
-        Rect box(Point2f(minx, miny), Point2f(maxx, maxy));
-        box &= Rect(0,0, curBGR.cols, curBGR.rows);
-        if (box.area() > 0) {
-            allBoxes.push_back(box);
-        }
-    }
-    
-    return allBoxes;
-}
-
-// 亮度匹配（直方图匹配）
-void MainWindow::MatchBrightness(Mat& currentY, const Mat& templateY)
-{
-    // 计算模板和当前图像的直方图
-    Mat templHist, currHist;
-    int histSize = 256;
-    float range[] = {0, 256};
-    const float* histRange = {range};
-    
-    calcHist(&templateY, 1, 0, Mat(), templHist, 1, &histSize, &histRange);
-    calcHist(&currentY, 1, 0, Mat(), currHist, 1, &histSize, &histRange);
-    
-    // 计算累积分布函数
-    Mat templCDF = templHist.clone();
-    Mat currCDF = currHist.clone();
-    for (int i = 1; i < histSize; i++) {
-        templCDF.at<float>(i) += templCDF.at<float>(i-1);
-        currCDF.at<float>(i) += currCDF.at<float>(i-1);
-    }
-    
-    // 归一化
-    templCDF /= templCDF.at<float>(histSize-1);
-    currCDF /= currCDF.at<float>(histSize-1);
-    
-    // 构建查找表
-    Mat lookupTable(1, 256, CV_8U);
-    uchar* lut = lookupTable.ptr();
-    for (int i = 0; i < histSize; i++) {
-        float cdfValue = currCDF.at<float>(i);
-        // 找到模板CDF中最接近的值
-        int j = histSize - 1;
-        while (j >= 0 && templCDF.at<float>(j) > cdfValue) j--;
-        lut[i] = j;
-    }
-    
-    // 应用查找表
-    LUT(currentY, lookupTable, currentY);
-}
-
-Mat MainWindow::ConvertToYCrCbAndProcess(const Mat& bgr)
-{
-    if (!m_useYChannel) {
-        Mat gray;
-        cvtColor(bgr, gray, COLOR_BGR2GRAY);
-        GaussianBlur(gray, gray, cv::Size(3,3), 0);
-        return gray;
-    }
-    
-    // 转换到YCrCb颜色空间
-    Mat ycrcb;
-    cvtColor(bgr, ycrcb, COLOR_BGR2YCrCb);
-    
-    vector<Mat> channels;
-    split(ycrcb, channels);
-    
-    // 仅使用Y通道（亮度）
-    Mat yChannel = channels[0];
-    GaussianBlur(yChannel, yChannel, cv::Size(3,3), 0);
-    
-    return yChannel;
-}
-
-// 高通滤波（拉普拉斯算子）
-Mat MainWindow::ApplyHighPassFilter(const Mat& gray)
-{
-    Mat laplacian;
-    Laplacian(gray, laplacian, CV_32F);
-    
-    // 转换为绝对值并归一化
-    Mat absLaplacian;
-    convertScaleAbs(laplacian, absLaplacian);
-    
-    return absLaplacian;
-}
-
-// 边缘增强
-Mat MainWindow::EnhanceEdges(const Mat& gray)
-{
-    // Sobel边缘检测
-    Mat gradX, gradY;
-    Mat absGradX, absGradY;
-    
-    Sobel(gray, gradX, CV_16S, 1, 0, 3);
-    Sobel(gray, gradY, CV_16S, 1, 0, 3);
-    convertScaleAbs(gradX, absGradX);
-    convertScaleAbs(gradY, absGradY);
-    
-    // 合并梯度
-    Mat enhanced;
-    addWeighted(absGradX, 0.5, absGradY, 0.5, 0, enhanced);
-    
-    return enhanced;
-}
-
-// 小目标专用检测
-vector<Rect> MainWindow::DetectSmallDefects(const Mat& curBGR, const Mat& H)
-{
-    vector<Rect> smallBoxes;
-    
-    Mat curGray;
-    cvtColor(curBGR, curGray, COLOR_BGR2GRAY);
-    
-    // 应用边缘增强
-    Mat enhancedCur = EnhanceEdges(curGray);
-    Mat enhancedTemplate = EnhanceEdges(m_templateGray);
-    
-    Mat warped;
-    warpPerspective(enhancedCur, warped, H, enhancedTemplate.size(), INTER_LINEAR);
-    
-    // 对增强后的图像进行差分
-    Mat diff;
-    absdiff(enhancedTemplate, warped, diff);
-    
-    // 使用更敏感的自适应阈值
-    Mat bin;
-    adaptiveThreshold(diff, bin, 255, ADAPTIVE_THRESH_GAUSSIAN_C, 
-                     THRESH_BINARY, 15, 3);  // 更小的块大小，更敏感的常数
-    
-    // 轻微的形态学操作，避免破坏小目标
-    morphologyEx(bin, bin, MORPH_OPEN, getStructuringElement(MORPH_RECT, {2,2}));
-    
-    // 查找小轮廓
-    vector<vector<Point>> contours;
-    findContours(bin, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
-    
-    Mat Hinv;
-    if (!invert(H, Hinv)) {
-        return smallBoxes;
-    }
-    
-    // 使用更小的面积阈值
-    double smallAreaThreshold = m_minDefectArea * 0.3;
-    
-    for (auto& c : contours) {
-        double area = contourArea(c);
-        if (area < smallAreaThreshold || area > m_minDefectArea * 2) {
-            continue;  // 只关注小目标
-        }
-        
-        // 计算轮廓的圆度，过滤线状噪声
-        double perimeter = arcLength(c, true);
-        if (perimeter == 0) continue;
-        
-        double circularity = 4 * CV_PI * area / (perimeter * perimeter);
-        if (circularity < 0.1) continue;  // 过滤过于细长的轮廓
-        
-        Rect r = boundingRect(c);
-        vector<Point2f> srcPts = {
-            { (float)r.x, (float)r.y },
-            { (float)(r.x + r.width), (float)r.y },
-            { (float)(r.x + r.width), (float)(r.y + r.height) },
-            { (float)r.x, (float)(r.y + r.height) }
-        };
-        vector<Point2f> dstPts;
-        perspectiveTransform(srcPts, dstPts, Hinv);
-        
-        float minx = curBGR.cols, miny = curBGR.rows, maxx = 0, maxy = 0;
-        for (auto& p : dstPts) {
-            minx = std::min(minx, p.x); miny = std::min(miny, p.y);
-            maxx = std::max(maxx, p.x); maxy = std::max(maxy, p.y);
-        }
-        Rect box(Point2f(minx, miny), Point2f(maxx, maxy));
-        box &= Rect(0,0, curBGR.cols, curBGR.rows);
-        if (box.area() > 0) {
-            smallBoxes.push_back(box);
-        }
-    }
-    
-    return smallBoxes;
+    // 如需同时叠加尺寸/角度的浮窗，可复用已有的 drawOverlayOnDisplay2()
 }
