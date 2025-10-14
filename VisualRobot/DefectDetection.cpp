@@ -10,14 +10,23 @@ using namespace cv::ml;
 using namespace std;
 
 // 计算特征矩阵的列均值和标准差（double 精度），并保存到成员变量
-static void computeMeanStd(const Mat& samples, Mat& meanOut, Mat& stdOut) {
+static void computeMeanStd(const Mat& samples, Mat& meanOut, Mat& stdOut)
+{
     CV_Assert(samples.type() == CV_32F || samples.type() == CV_64F);
     Mat tmp;
-    if (samples.type() == CV_32F) samples.convertTo(tmp, CV_64F); else tmp = samples;
+    if (samples.type() == CV_32F)
+    {
+        samples.convertTo(tmp, CV_64F);
+    }
+    else
+    {
+        tmp = samples;
+    }
     int cols = tmp.cols;
     meanOut = Mat::zeros(1, cols, CV_64F);
     stdOut = Mat::zeros(1, cols, CV_64F);
-    for (int j = 0; j < cols; ++j) {
+    for (int j = 0; j < cols; ++j)
+    {
         Scalar mu, sd;
         meanStdDev(tmp.col(j), mu, sd);
         meanOut.at<double>(0,j) = mu[0];
@@ -26,16 +35,19 @@ static void computeMeanStd(const Mat& samples, Mat& meanOut, Mat& stdOut) {
 }
 
 // 对样本做列向量标准化（(x-mean)/std），返回 CV_32F
-static Mat applyStandardize(const Mat& samples, const Mat& mean, const Mat& stdv) {
+static Mat applyStandardize(const Mat& samples, const Mat& mean, const Mat& stdv)
+{
     // Convert input to CV_64F for stable arithmetic, then apply (x-mean)/std per column
     Mat tmp;
     samples.convertTo(tmp, CV_64F);
     int rows = tmp.rows, cols = tmp.cols;
     Mat out(rows, cols, CV_32F);
-    for (int j = 0; j < cols; ++j) {
+    for (int j = 0; j < cols; ++j)
+    {
         double m = mean.at<double>(0,j);
         double s = stdv.at<double>(0,j);
-        for (int i = 0; i < rows; ++i) {
+        for (int i = 0; i < rows; ++i)
+        {
             double v = tmp.at<double>(i,j);
             out.at<float>(i,j) = static_cast<float>((v - m) / s);
         }
@@ -164,7 +176,10 @@ Mat DefectDetection::ComputeLBPHist(const Mat& gray) const
     hist = hist.reshape(1,1);
     hist.convertTo(hist, CV_32F);
     double s = sum(hist)[0];
-    if (s > 0) hist /= static_cast<float>(s);
+    if (s > 0)
+    {
+        hist /= static_cast<float>(s);
+    }
     return hist;
 }
 
@@ -183,7 +198,10 @@ Mat DefectDetection::ExtractFeatures(const Mat& src) const
     CV_Assert(!src.empty());
     Mat img;
     src.copyTo(img);
-    if (img.type() != CV_8UC3) img.convertTo(img, CV_8UC3);
+    if (img.type() != CV_8UC3)
+    {
+        img.convertTo(img, CV_8UC3);
+    }
 
     Mat bgr = img, hsv, lab;
     cvtColor(bgr, hsv, COLOR_BGR2HSV);
@@ -196,24 +214,34 @@ Mat DefectDetection::ExtractFeatures(const Mat& src) const
 
     vector<float> feats;
     // 在每个通道上加入 均值/方差 + 直方图（16 bins）
-    for (int i = 0; i < 3; ++i) ChannelStatsAndHist(bgrCh[i], feats, 16);
-    for (int i = 0; i < 3; ++i) ChannelStatsAndHist(hsvCh[i], feats, 16);
-    for (int i = 0; i < 3; ++i) ChannelStatsAndHist(labCh[i], feats, 16);
+    for (int i = 0; i < 3; ++i)
+    {
+        ChannelStatsAndHist(bgrCh[i], feats, 16);
+    }
+    for (int i = 0; i < 3; ++i)
+    {
+        ChannelStatsAndHist(hsvCh[i], feats, 16);
+    }
+    for (int i = 0; i < 3; ++i)
+    {
+        ChannelStatsAndHist(labCh[i], feats, 16);
+    }
 
     // LBP 纹理直方图（灰度）
     Mat gray; cvtColor(bgr, gray, COLOR_BGR2GRAY);
     Mat lbpHist = ComputeLBPHist(gray); // 1x256 CV_32F
     // 将 lbpHist 数据追加到 feats（使用安全的 ptr 访问）
-    {
-        CV_Assert(lbpHist.isContinuous());
-        const float* p = lbpHist.ptr<float>(0);
-        int len = lbpHist.cols * lbpHist.rows;
-        feats.insert(feats.end(), p, p + len);
-    }
+    CV_Assert(lbpHist.isContinuous());
+    const float* p = lbpHist.ptr<float>(0);
+    int len = lbpHist.cols * lbpHist.rows;
+    feats.insert(feats.end(), p, p + len);
 
     // 转为 CV_32F 单行 Mat
     Mat featMat(1, static_cast<int>(feats.size()), CV_32F);
-    for (size_t i = 0; i < feats.size(); ++i) featMat.at<float>(0, static_cast<int>(i)) = feats[i];
+    for (size_t i = 0; i < feats.size(); ++i)
+    {
+        featMat.at<float>(0, static_cast<int>(i)) = feats[i];
+    }
     return featMat;
 }
 
@@ -246,27 +274,57 @@ void DefectDetection::FitPCAByVariance(const Mat& samples, double varianceThresh
     // 将 eigenvalues 转为 double 向量，做稳健读取
     size_t n = static_cast<size_t>(eigvals.total());
     vector<double> vals(n, 0.0);
-    if (n > 0) {
-        if (eigvals.type() == CV_64F) {
+    if (n > 0)
+    {
+        if (eigvals.type() == CV_64F)
+        {
             const double* p = eigvals.ptr<double>();
-            for (size_t i = 0; i < n; ++i) vals[i] = std::isfinite(p[i]) && p[i] > 0.0 ? p[i] : 0.0;
-        } else if (eigvals.type() == CV_32F) {
+            for (size_t i = 0; i < n; ++i)
+            {
+                vals[i] = std::isfinite(p[i]) && p[i] > 0.0 ? p[i] : 0.0;
+            }
+        }
+        else if (eigvals.type() == CV_32F)
+        {
             const float* p = eigvals.ptr<float>();
-            for (size_t i = 0; i < n; ++i) vals[i] = std::isfinite(p[i]) && p[i] > 0.0f ? static_cast<double>(p[i]) : 0.0;
-        } else {
+            for (size_t i = 0; i < n; ++i)
+            {
+                vals[i] = std::isfinite(p[i]) && p[i] > 0.0f ? static_cast<double>(p[i]) : 0.0;
+            }
+        }
+        else
+        {
             // Fallback generic read
-            for (size_t i = 0; i < n; ++i) {
+            for (size_t i = 0; i < n; ++i)
+            {
                 double v = 0.0;
-                try { v = eigvals.at<double>((int)i, 0); } catch (...) {
-                    try { v = eigvals.at<float>((int)i, 0); } catch (...) { v = 0.0; }
+                try
+                {
+                    v = eigvals.at<double>((int)i, 0);
+                }
+                catch (...)
+                {
+                    try
+                    {
+                        v = eigvals.at<float>((int)i, 0);
+                    }
+                    catch (...)
+                    {
+                        v = 0.0;
+                    }
                 }
                 vals[i] = std::isfinite(v) && v > 0.0 ? v : 0.0;
             }
         }
     }
 
-    double total = 0.0; for (double v : vals) total += v;
-    if (total <= 0.0) {
+    double total = 0.0;
+    for (double v : vals)
+    {
+        total += v;
+    }
+    if (total <= 0.0)
+    {
         // fallback: use original FitPCA with default dim
         FitPCA(samples, m_pcaDim);
         return;
@@ -275,32 +333,46 @@ void DefectDetection::FitPCAByVariance(const Mat& samples, double varianceThresh
     // 计算累计解释方差并将其写入 CSV 便于可视化
     vector<double> cumRatio; cumRatio.reserve(n);
     double cum = 0.0;
-    for (size_t i = 0; i < n; ++i) {
+    for (size_t i = 0; i < n; ++i)
+    {
         cum += vals[i];
         cumRatio.push_back(cum / total);
     }
 
     // 确保 models 目录存在，然后写文件
-    try {
+    try
+    {
         std::filesystem::create_directories("models");
         std::ofstream ofs("models/pca_explained_variance.csv");
-        if (ofs.is_open()) {
+        if (ofs.is_open())
+        {
             ofs << "component,explained_variance,cumulative_variance\n";
-            for (size_t i = 0; i < n; ++i) {
+            for (size_t i = 0; i < n; ++i)
+            {
                 double explained = vals[i] / total;
                 ofs << (i+1) << "," << explained << "," << cumRatio[i] << "\n";
             }
             ofs.close();
         }
-    } catch (...) {
+    }
+    catch (...)
+    {
         // 忽略文件写入错误（非致命）
     }
 
     int k = 0;
-    for (size_t i = 0; i < cumRatio.size(); ++i) {
-        if (cumRatio[i] >= varianceThreshold) { k = static_cast<int>(i) + 1; break; }
+    for (size_t i = 0; i < cumRatio.size(); ++i)
+    {
+        if (cumRatio[i] >= varianceThreshold)
+        {
+            k = static_cast<int>(i) + 1;
+            break;
+        }
     }
-    if (k <= 0) k = 1;
+    if (k <= 0)
+    {
+        k = 1;
+    }
     k = std::min(k, samples.cols);
 
     // 重新生成 PCA 并截断到 k 个分量
@@ -318,12 +390,19 @@ void DefectDetection::FitPCAByVariance(const Mat& samples, double varianceThresh
 Mat DefectDetection::ProjectPCA(const Mat& sample) const
 {
     Mat input = sample;
-    if (input.type() != CV_32F) input.convertTo(input, CV_32F);
+    if (input.type() != CV_32F)
+    {
+        input.convertTo(input, CV_32F);
+    }
     // Apply standardization if available
-    if (!m_featMean.empty() && !m_featStd.empty()) {
+    if (!m_featMean.empty() && !m_featStd.empty())
+    {
         input = applyStandardize(input, m_featMean, m_featStd);
     }
-    if (m_pca.eigenvectors.empty()) return input.clone();
+    if (m_pca.eigenvectors.empty())
+    {
+        return input.clone();
+    }
     Mat projected; m_pca.project(input, projected); return projected;
 }
 
@@ -341,18 +420,29 @@ bool DefectDetection::TrainSVM(const Mat& samples, const Mat& labels)
     CV_Assert(samples.rows == labels.rows);
 
     Mat trainData = samples;
-    if (trainData.type() != CV_32F) trainData.convertTo(trainData, CV_32F);
+    if (trainData.type() != CV_32F)
+    {
+        trainData.convertTo(trainData, CV_32F);
+    }
 
     // Ensure feature standardization params exist; compute if absent
-    if (m_featMean.empty() || m_featStd.empty()) {
+    if (m_featMean.empty() || m_featStd.empty())
+    {
         Mat sampF = trainData;
         computeMeanStd(sampF, m_featMean, m_featStd);
     }
     // Apply standardization
     Mat trainStd = applyStandardize(trainData, m_featMean, m_featStd);
 
-    if (!m_pca.eigenvectors.empty()) { Mat proj; m_pca.project(trainStd, proj); trainData = proj; }
-    else trainData = trainStd;
+    if (!m_pca.eigenvectors.empty())
+    {
+        Mat proj; m_pca.project(trainStd, proj);
+        trainData = proj;
+    }
+    else
+    {
+        trainData = trainStd;
+    }
 
     Ptr<TrainData> td = TrainData::create(trainData, ROW_SAMPLE, labels);
     return m_svm->train(td);
@@ -368,12 +458,20 @@ bool DefectDetection::TrainSVM(const Mat& samples, const Mat& labels)
 int DefectDetection::Predict(const Mat& sample) const
 {
     Mat x = sample;
-    if (x.type() != CV_32F) x.convertTo(x, CV_32F);
+    if (x.type() != CV_32F)
+    {
+        x.convertTo(x, CV_32F);
+    }
     // Apply standardization if available, then PCA projection
-    if (!m_featMean.empty() && !m_featStd.empty()) {
+    if (!m_featMean.empty() && !m_featStd.empty())
+    {
         x = applyStandardize(x, m_featMean, m_featStd);
     }
-    if (!m_pca.eigenvectors.empty()) { Mat proj; m_pca.project(x, proj); x = proj; }
+    if (!m_pca.eigenvectors.empty())
+    {
+        Mat proj; m_pca.project(x, proj);
+        x = proj;
+    }
     return static_cast<int>(m_svm->predict(x));
 }
 
@@ -389,18 +487,32 @@ bool DefectDetection::SaveModel(const string& basePath) const
 {
     string svmFile = basePath + "_svm.yml";
     string pcaFile = basePath + "_pca.yml";
-    try {
+    try
+    {
         m_svm->save(svmFile);
         FileStorage fs(pcaFile, FileStorage::WRITE);
-        if (!fs.isOpened()) return false;
+        if (!fs.isOpened())
+        {
+            return false;
+        }
         fs << "mean" << m_pca.mean;
         fs << "eigenvectors" << m_pca.eigenvectors;
         fs << "eigenvalues" << m_pca.eigenvalues;
         // 保存特征标准化参数（若存在）
-        if (!m_featMean.empty()) fs << "feat_mean" << m_featMean;
-        if (!m_featStd.empty()) fs << "feat_std" << m_featStd;
+        if (!m_featMean.empty())
+        {
+            fs << "feat_mean" << m_featMean;
+        }
+        if (!m_featStd.empty())
+        {
+            fs << "feat_std" << m_featStd;
+        }
         fs.release();
-    } catch (...) { return false; }
+    }
+    catch (...)
+    {
+        return false;
+    }
     return true;
 }
 
@@ -414,10 +526,14 @@ bool DefectDetection::LoadModel(const string& basePath)
 {
     string svmFile = basePath + "_svm.yml";
     string pcaFile = basePath + "_pca.yml";
-    try {
+    try
+    {
         m_svm = Algorithm::load<SVM>(svmFile);
         FileStorage fs(pcaFile, FileStorage::READ);
-        if (!fs.isOpened()) return false;
+        if (!fs.isOpened())
+        {
+            return false;
+        }
         fs["mean"] >> m_pca.mean;
         fs["eigenvectors"] >> m_pca.eigenvectors;
         fs["eigenvalues"] >> m_pca.eigenvalues;
@@ -425,7 +541,11 @@ bool DefectDetection::LoadModel(const string& basePath)
         fs["feat_mean"] >> m_featMean;
         fs["feat_std"] >> m_featStd;
         fs.release();
-    } catch (...) { return false; }
+    }
+    catch (...)
+    {
+        return false;
+    }
     return true;
 }
 
@@ -436,13 +556,23 @@ bool DefectDetection::TrainSVMAuto(const Mat& samples, const Mat& labels)
 
     // 先标准化特征并保存均值/方差
     Mat sampF;
-    if (samples.type() != CV_32F) samples.convertTo(sampF, CV_32F); else sampF = samples;
+    if (samples.type() != CV_32F)
+    {
+        samples.convertTo(sampF, CV_32F);
+    }
+    else
+    {
+        sampF = samples;
+    }
     computeMeanStd(sampF, m_featMean, m_featStd);
     Mat trainStd = applyStandardize(sampF, m_featMean, m_featStd);
 
     // 若已有 PCA，则投影到 PCA 子空间
     Mat trainData = trainStd;
-    if (!m_pca.eigenvectors.empty()) { Mat proj; m_pca.project(trainStd, proj); trainData = proj; }
+    if (!m_pca.eigenvectors.empty())
+    {
+        Mat proj; m_pca.project(trainStd, proj); trainData = proj;
+    }
 
     Ptr<TrainData> td = TrainData::create(trainData, ROW_SAMPLE, labels);
 
@@ -455,32 +585,69 @@ bool DefectDetection::TrainSVMAuto(const Mat& samples, const Mat& labels)
 std::vector<std::pair<double,double>> DefectDetection::GetPCAExplainedVariance() const
 {
     std::vector<std::pair<double,double>> res;
-    if (m_pca.eigenvalues.empty()) return res;
+    if (m_pca.eigenvalues.empty())
+    {
+        return res;
+    }
 
     Mat eigvals = m_pca.eigenvalues;
     size_t n = static_cast<size_t>(eigvals.total());
     vector<double> vals(n, 0.0);
-    if (n > 0) {
-        if (eigvals.type() == CV_64F) {
+    if (n > 0)
+    {
+        if (eigvals.type() == CV_64F)
+        {
             const double* p = eigvals.ptr<double>();
-            for (size_t i = 0; i < n; ++i) vals[i] = std::isfinite(p[i]) && p[i] > 0.0 ? p[i] : 0.0;
-        } else if (eigvals.type() == CV_32F) {
+            for (size_t i = 0; i < n; ++i)
+            {
+                vals[i] = std::isfinite(p[i]) && p[i] > 0.0 ? p[i] : 0.0;
+            }
+        }
+        else if (eigvals.type() == CV_32F)
+        {
             const float* p = eigvals.ptr<float>();
-            for (size_t i = 0; i < n; ++i) vals[i] = std::isfinite(p[i]) && p[i] > 0.0f ? static_cast<double>(p[i]) : 0.0;
-        } else {
-            for (size_t i = 0; i < n; ++i) {
+            for (size_t i = 0; i < n; ++i)
+            {
+                vals[i] = std::isfinite(p[i]) && p[i] > 0.0f ? static_cast<double>(p[i]) : 0.0;
+            }
+        }
+        else
+        {
+            for (size_t i = 0; i < n; ++i)
+            {
                 double v = 0.0;
-                try { v = eigvals.at<double>((int)i, 0); } catch (...) {
-                    try { v = eigvals.at<float>((int)i, 0); } catch (...) { v = 0.0; }
+                try
+                {
+                    v = eigvals.at<double>((int)i, 0);
+                }
+                catch (...)
+                {
+                    try
+                    {
+                        v = eigvals.at<float>((int)i, 0);
+                    }
+                    catch (...)
+                    {
+                        v = 0.0;
+                    }
                 }
                 vals[i] = std::isfinite(v) && v > 0.0 ? v : 0.0;
             }
         }
     }
-    double total = 0.0; for (double v : vals) total += v;
-    if (total <= 0.0) return res;
+    double total = 0.0;
+    for (double v : vals)
+    {
+        total += v;
+    }
+
+    if (total <= 0.0)
+    {
+        return res;
+    }
     double cum = 0.0;
-    for (size_t i = 0; i < n; ++i) {
+    for (size_t i = 0; i < n; ++i)
+    {
         double explained = vals[i] / total;
         cum += vals[i];
         double cumul = cum / total;

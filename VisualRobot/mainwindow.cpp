@@ -181,23 +181,23 @@ void MainWindow::ShowErrorMsg(QString csMessage, unsigned int nErrorNum)
 
     switch(nErrorNum)
     {
-    case MV_E_HANDLE:           errorMsg += "Error or invalid handle ";                                         break;
-    case MV_E_SUPPORT:          errorMsg += "Not supported function ";                                          break;
-    case MV_E_BUFOVER:          errorMsg += "Cache is full ";                                                   break;
-    case MV_E_CALLORDER:        errorMsg += "Function calling order error ";                                    break;
-    case MV_E_PARAMETER:        errorMsg += "Incorrect parameter ";                                             break;
-    case MV_E_RESOURCE:         errorMsg += "Applying resource failed ";                                        break;
-    case MV_E_NODATA:           errorMsg += "No data ";                                                         break;
-    case MV_E_PRECONDITION:     errorMsg += "Precondition error, or running environment changed ";              break;
-    case MV_E_VERSION:          errorMsg += "Version mismatches ";                                              break;
-    case MV_E_NOENOUGH_BUF:     errorMsg += "Insufficient memory ";                                             break;
-    case MV_E_ABNORMAL_IMAGE:   errorMsg += "Abnormal image, maybe incomplete image because of lost packet ";   break;
-    case MV_E_UNKNOW:           errorMsg += "Unknown error ";                                                   break;
-    case MV_E_GC_GENERIC:       errorMsg += "General error ";                                                   break;
-    case MV_E_GC_ACCESS:        errorMsg += "Node accessing condition error ";                                  break;
-    case MV_E_ACCESS_DENIED:	errorMsg += "No permission ";                                                   break;
-    case MV_E_BUSY:             errorMsg += "Device is busy, or network disconnected ";                         break;
-    case MV_E_NETER:            errorMsg += "Network error ";                                                   break;
+        case MV_E_HANDLE:           errorMsg += "Error or invalid handle ";                                         break;
+        case MV_E_SUPPORT:          errorMsg += "Not supported function ";                                          break;
+        case MV_E_BUFOVER:          errorMsg += "Cache is full ";                                                   break;
+        case MV_E_CALLORDER:        errorMsg += "Function calling order error ";                                    break;
+        case MV_E_PARAMETER:        errorMsg += "Incorrect parameter ";                                             break;
+        case MV_E_RESOURCE:         errorMsg += "Applying resource failed ";                                        break;
+        case MV_E_NODATA:           errorMsg += "No data ";                                                         break;
+        case MV_E_PRECONDITION:     errorMsg += "Precondition error, or running environment changed ";              break;
+        case MV_E_VERSION:          errorMsg += "Version mismatches ";                                              break;
+        case MV_E_NOENOUGH_BUF:     errorMsg += "Insufficient memory ";                                             break;
+        case MV_E_ABNORMAL_IMAGE:   errorMsg += "Abnormal image, maybe incomplete image because of lost packet ";   break;
+        case MV_E_UNKNOW:           errorMsg += "Unknown error ";                                                   break;
+        case MV_E_GC_GENERIC:       errorMsg += "General error ";                                                   break;
+        case MV_E_GC_ACCESS:        errorMsg += "Node accessing condition error ";                                  break;
+        case MV_E_ACCESS_DENIED:	errorMsg += "No permission ";                                                   break;
+        case MV_E_BUSY:             errorMsg += "Device is busy, or network disconnected ";                         break;
+        case MV_E_NETER:            errorMsg += "Network error ";                                                   break;
     }
 
     QMessageBox::information(NULL, "PROMPT", errorMsg);
@@ -252,23 +252,23 @@ void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INF
         switch(pFrameInfo->enPixelType) 
         {
             case PixelType_Gvsp_Mono8:
+            {
                 grayImage = Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC1, tempFrame.data());
                 break;
+            }
             case PixelType_Gvsp_RGB8_Packed:
-                {
-                    Mat colorImage = Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC3, tempFrame.data());
-                    cvtColor(colorImage, grayImage, COLOR_RGB2GRAY);
-                }
+            {
+                Mat colorImage = Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC3, tempFrame.data());
+                cvtColor(colorImage, grayImage, COLOR_RGB2GRAY);
                 break;
+            }
             case PixelType_Gvsp_BGR8_Packed:
-                {
-                    Mat colorImage = Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC3, tempFrame.data());
-                    cvtColor(colorImage, grayImage, COLOR_BGR2GRAY);
-                }
+            {
+                Mat colorImage = Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC3, tempFrame.data());
+                cvtColor(colorImage, grayImage, COLOR_BGR2GRAY);
                 break;
-            default:
-                // 不支持的格式, 跳过清晰度计算
-                return;
+            }
+            default: return;
         }
         double sharpness = pMainWindow->CalculateTenengradSharpness(grayImage);
         // 发射信号
@@ -779,17 +779,15 @@ void MainWindow::on_pushButton_clicked()
     
 
     // 取出一份缓存快照
+    lock_guard<mutex> lk(m_frameMtx);
+    if (!m_hasFrame || m_lastFrame.empty())
     {
-        lock_guard<mutex> lk(m_frameMtx);
-        if (!m_hasFrame || m_lastFrame.empty())
-        {
-            QMessageBox::warning(this, "保存图片", "暂无可用图像, 请先开始采集。");
-            AppendLog("暂无可用图像, 请先开始采集", WARNNING);
-            return;
-        }
-        frame = m_lastFrame;   // 拷贝到本地变量, 避免持锁编码
-        info  = m_lastInfo;
+        QMessageBox::warning(this, "保存图片", "暂无可用图像, 请先开始采集。");
+        AppendLog("暂无可用图像, 请先开始采集", WARNNING);
+        return;
     }
+    frame = m_lastFrame;   // 拷贝到本地变量, 避免持锁编码
+    info  = m_lastInfo;
 
     // 预分配编码缓冲 (给足空间) 
     dstMax = info.nWidth * info.nHeight * 3 + 4096;
@@ -987,17 +985,10 @@ void MainWindow::AppendLog(const QString &message, int logType, double value)
     // 根据调试信息等级配置文本颜色 (ERROR: 2, WARNNING: 1, INFO: 0)
     switch(logType)
     {
-    case 0:
-        format.setForeground(Qt::black);              // 黑色为信息
-        break;
-    case 1:
-        format.setForeground(QColor(255, 140, 0));    // 橙色为警告
-        break;
-    case 2:
-        format.setForeground(Qt::red);                // 红色为错误
-        break;
-    default:
-        break;
+        case 0: format.setForeground(Qt::black); break;
+        case 1: format.setForeground(QColor(255, 140, 0)); break;
+        case 2: format.setForeground(Qt::red); break;
+        default: break;
     }
 
     // 插入带颜色格式的调试信息
@@ -2424,7 +2415,7 @@ bool MainWindow::GrabLastFrameBGR(Mat& outBGR)
 bool MainWindow::SetTemplateFromCurrent()
 {
     Mat bgr;
-    if (!grabLastFrameBGR(bgr)) 
+    if (!GrabLastFrameBGR(bgr))
     {
         return false;
     }
@@ -2643,7 +2634,7 @@ void MainWindow::on_setTemplate_clicked()
     QAbstractButton* clicked = msg.clickedButton();
     if (clicked == btnCur) 
     {
-        if (setTemplateFromCurrent())
+        if (SetTemplateFromCurrent())
         {
             AppendLog("模板已更新（来自当前帧）", INFO);
         }
@@ -2651,7 +2642,7 @@ void MainWindow::on_setTemplate_clicked()
     else if (clicked == btnFile) 
     {
         QString path = QFileDialog::getOpenFileName(this, "选择模板图像", ".", "Images (*.png *.jpg *.jpeg *.bmp)");
-        if (!path.isEmpty() && setTemplateFromFile(path))
+        if (!path.isEmpty() && SetTemplateFromFile(path))
         {
             AppendLog("模板已更新（来自文件）", INFO);
         }
@@ -2665,7 +2656,7 @@ void MainWindow::on_detect_clicked()
     {
         AppendLog("尚未设置模板，请先设置模板。", WARNNING);
         // 尝试直接用当前帧设模板，继续流程（也可直接 return）
-        if (!setTemplateFromCurrent()) 
+        if (!SetTemplateFromCurrent())
         {
             return;
         }
@@ -2673,7 +2664,7 @@ void MainWindow::on_detect_clicked()
 
     // 取当前帧
     Mat curBGR;
-    if (!grabLastFrameBGR(curBGR)) 
+    if (!GrabLastFrameBGR(curBGR))
     {
         return;
     }
@@ -2684,7 +2675,7 @@ void MainWindow::on_detect_clicked()
     GaussianBlur(curGray, curGray, cv::Size(3,3), 0);
 
     Mat H;
-    if (!computeHomography(curGray, H)) 
+    if (!ComputeHomography(curGray, H))
     {
         return;
     }
@@ -2692,7 +2683,7 @@ void MainWindow::on_detect_clicked()
     // 检测
     QElapsedTimer t; t.start();
     Mat dbgMask;
-    auto boxes = detectDefects(curBGR, H, &dbgMask);
+    auto boxes = DetectDefects(curBGR, H, &dbgMask);
     AppendLog(QString("模板检测耗时: %1 ms, 候选缺陷框数: %2").arg(t.elapsed()).arg((int)boxes.size()), INFO);
 
     // 绘制结果
@@ -2703,7 +2694,7 @@ void MainWindow::on_detect_clicked()
     }
 
     // 展示到 widgetDisplay_2
-    QPixmap pm = matToQPixmap(draw);
+    QPixmap pm = MatToQPixmap(draw);
     if (!pm.isNull()) 
     {
         // 自适应显示
@@ -2720,9 +2711,7 @@ void MainWindow::on_detect_clicked()
     // 日志每个框
     for (size_t i=0; i<boxes.size(); ++i) 
     {
-        AppendLog(QString("缺陷框 %1: (x=%2, y=%3, w=%4, h=%5)")
-                  .arg(i+1).arg(boxes[i].x).arg(boxes[i].y)
-                  .arg(boxes[i].width).arg(boxes[i].height), INFO);
+        AppendLog(QString("缺陷框 %1: (x=%2, y=%3, w=%4, h=%5)").arg(i+1).arg(boxes[i].x).arg(boxes[i].y).arg(boxes[i].width).arg(boxes[i].height), INFO);
     }
 
     // 如需同时叠加尺寸/角度的浮窗，可复用已有的 drawOverlayOnDisplay2()

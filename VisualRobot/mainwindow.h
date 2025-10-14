@@ -39,38 +39,24 @@ public:
     void DrawOverlayOnDisplay2(double length, double width, double diagonal);
 
 private:
-
     void ShowErrorMsg(QString csMessage, unsigned int nErrorNum); // ch:显示错误信息窗口 | en: Show the window of error message
+
 private slots:
 
     void on_bnEnum_clicked();
-
     void on_bnOpen_clicked();
-
     void on_bnClose_clicked();
-
     void on_bnContinuesMode_clicked();
-
     void on_bnTriggerMode_clicked();
-
     void on_bnStart_clicked();
-
     void on_bnStop_clicked();
-
     void on_cbSoftTrigger_clicked();
-
     void on_bnTriggerExec_clicked();
-
     void on_bnGetParam_clicked();
-
     void on_bnSetParam_clicked();
-
     void on_pushButton_clicked();
-
     void on_GetLength_clicked();
-
     void on_genMatrix_clicked();
-
     void on_CallDLwindow_clicked();
 
 private:
@@ -160,17 +146,13 @@ private:
 
     // 将缓存的最新一帧转为BGR Mat（经SDK内存编码为JPEG后imdecode，稳妥）
     bool GrabLastFrameBGR(Mat& outBGR);
-
     // Mat 转 QPixmap（显示用）
     static QPixmap MatToQPixmap(const Mat& bgr);
-
     // 把当前帧设为模板（从当前帧或文件）
     bool SetTemplateFromCurrent();
     bool SetTemplateFromFile(const QString& path);
-
     // 配准：计算 H（模板 <- 当前）
     bool ComputeHomography(const Mat& curGray, Mat& H, vector<DMatch>* dbgMatches=nullptr);
-
     // 检测：根据配准后差异，得到在“当前图像坐标系”的缺陷外接框
     vector<Rect> DetectDefects(const Mat& curBGR, const Mat& H, Mat* dbgMask=nullptr);
 };
