@@ -1027,8 +1027,9 @@ void MainWindow::on_GetLength_clicked()
 
     ui->GetLength->setEnabled(false);
 
-    // 情况一: 如果多边形未完成或没有裁剪图像, 清除多边形显示并处理原始图像
-    if (!m_polygonCompleted || !m_hasCroppedImage) 
+    // 情况一: 如果没有裁剪图像, 清除多边形显示并处理原始图像
+    // 仅当 m_hasCroppedImage 为 false 时使用原始全图进行识别
+    if (!m_hasCroppedImage)
     {
         QElapsedTimer timer;     // 计时器
         timer.start();           // 开始计时
@@ -1102,18 +1103,22 @@ void MainWindow::on_GetLength_clicked()
 
         DrawOverlayOnDisplay2((double)result.heights[0], (double)result.widths[0], (double)result.angles[0]);
     }
-    // 情况二: 如果多边形已完成且有裁剪图像, 处理裁剪后的图像
-    else 
+    // 情况二: 如果已有裁剪图像, 处理裁剪后的图像
+    else
     {
         QElapsedTimer timer;     // 计时器
         timer.start();           // 开始计时
 
         AppendLog("检测到多边形区域, 将处理裁剪后的图像", INFO);
         
-        // 保存裁剪后的图像到临时文件
+        // 如果之前 CropImageToRectangle/CropImageToPolygon 已经保存了裁剪图像到 ../Img/cropped_polygon.jpg
         QString tempCroppedPath = "../Img/cropped_polygon.jpg";
-        m_croppedPixmap.save(tempCroppedPath);
-        
+        // 尝试保存当前 m_croppedPixmap（如果未保存）以确保文件存在
+        if (!m_croppedPixmap.isNull()) 
+        {
+            m_croppedPixmap.save(tempCroppedPath);
+        }
+
         inputPath = tempCroppedPath.toStdString();
         outputPath = "../detectedImg.jpg";
         output = "../detectedImg.jpg";
