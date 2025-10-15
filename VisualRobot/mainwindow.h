@@ -14,6 +14,7 @@
 #include "DLExample.h"
 #include "MvCameraControl.h"
 #include <opencv2/opencv.hpp>
+#include "DefectDetection.h"
 
 using namespace std;
 using namespace cv;
