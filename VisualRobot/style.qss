@@ -70,6 +70,61 @@ QComboBox QAbstractItemView {
     selection-background-color: #E3F0FF;
     color: #222C3A;
     border: none;
+    /* 设备列表下拉框特殊处理 - 提升z-index防止被遮挡 */
+    z-index: 9999;
+}
+
+/* 设备列表特殊样式 - 防止下拉框被遮挡 */
+QComboBox#ComboDevices {
+    background-color: #FFFFFF;
+    border: 1px solid #BFD7FF;
+    color: #222C3A;
+    padding: 6px;
+    border-radius: 7px;
+}
+
+QComboBox#ComboDevices:focus {
+    border: 1.5px solid #338AF3;
+}
+
+QComboBox#ComboDevices:disabled {
+    background-color: #F2F6FA;
+    color: #A0A8B8;
+}
+
+QComboBox#ComboDevices QAbstractItemView {
+    background-color: #F6F8FB;
+    selection-background-color: #E3F0FF;
+    color: #222C3A;
+    border: 1px solid #BFD7FF;
+    border-radius: 7px;
+    /* 确保下拉框在最顶层显示 */
+    z-index: 10000;
+    /* 设置下拉框的最小高度，确保内容完整显示 */
+    min-height: 200px;
+    /* 设置下拉框的弹出方式为顶层弹出 */
+    popup: true;
+    /* 确保下拉框有足够的宽度显示完整内容 */
+    min-width: 500px;
+    /* 设置下拉框的阴影效果，使其更突出 */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* 设备列表下拉框中的项目样式 */
+QComboBox#ComboDevices QAbstractItemView::item {
+    height: 25px;
+    padding: 2px 8px;
+    border-bottom: 1px solid #E3EAF5;
+}
+
+QComboBox#ComboDevices QAbstractItemView::item:selected {
+    background-color: #E3F0FF;
+    color: #222C3A;
+}
+
+QComboBox#ComboDevices QAbstractItemView::item:hover {
+    background-color: #D0E2FF;
+    color: #222C3A;
 }
 QLabel {
     color: #222C3A;
