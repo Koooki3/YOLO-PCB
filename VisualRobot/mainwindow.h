@@ -86,6 +86,9 @@ private:
     QLabel* m_tempLabel;
     QLabel* m_sharpnessLabel;  // 清晰度显示标签
 
+    // 缺陷检测库
+    DefectDetection* m_defectDetection;
+
 private slots:
     void updateSystemStats(float cpuUsage, float memUsage, float temperature);
     void on_btnOpenManual_clicked();
@@ -138,8 +141,7 @@ private:
     void closeEvent(QCloseEvent *event);
 
 private:
-    Mat m_templateGray;              // 模板灰度图
-    bool    m_hasTemplate = false;   // 是否已有模板
+    // 模板法缺陷检测相关参数（已移至DefectDetection库，保留参数用于兼容性）
     double  m_diffThresh = 25.0;     // 差异二值阈值（配准后的 absdiff 后再高斯平滑）
     double  m_minDefectArea = 1200;  // 过滤小区域（像素），按你的分辨率可调
     int     m_orbFeatures = 1500;    // ORB特征点数量（配准用）

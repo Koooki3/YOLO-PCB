@@ -36,6 +36,7 @@
 #include <QElapsedTimer>
 #include <QTextStream>
 #include "Undistort.h"
+#include "DefectDetection.h"
 
 #define ERROR 2
 #define WARNNING 1
@@ -80,6 +81,9 @@ MainWindow::MainWindow(QWidget *parent) :
     m_memLabel = new QLabel(this);
     m_tempLabel = new QLabel(this);
     m_sharpnessLabel = new QLabel(this);
+
+    // 初始化缺陷检测库
+    m_defectDetection = new DefectDetection();
 
     // 设置标签样式
     QString labelStyle = "QLabel { color: white; background-color: rgba(0, 0, 0, 150); padding: 5px; border-radius: 5px; }";
@@ -2420,206 +2424,38 @@ bool MainWindow::SetTemplateFromCurrent()
         return false;
     }
 
-    Mat gray;
-    cvtColor(bgr, gray, COLOR_BGR2GRAY);
-    GaussianBlur(gray, gray, cv::Size(3,3), 0);
-    m_templateGray = gray.clone();
-    m_hasTemplate  = true;
-
-    AppendLog(QString("已将当前帧设为模板，尺寸：%1x%2").arg(m_templateGray.cols).arg(m_templateGray.rows), INFO);
-    return true;
+    if (m_defectDetection->SetTemplateFromCurrent(bgr))
+    {
+        AppendLog(QString("已将当前帧设为模板，尺寸：%1x%2").arg(bgr.cols).arg(bgr.rows), INFO);
+        return true;
+    }
+    return false;
 }
 
 bool MainWindow::SetTemplateFromFile(const QString& path)
 {
-    Mat bgr = imread(path.toStdString(), IMREAD_COLOR);
-    if (bgr.empty()) 
+    if (m_defectDetection->SetTemplateFromFile(path.toStdString()))
     {
-        AppendLog("读取模板文件失败：" + path, ERROR);
-        return false;
+        AppendLog(QString("已从文件加载模板：%1").arg(path), INFO);
+        return true;
     }
-    Mat gray;
-    cvtColor(bgr, gray, COLOR_BGR2GRAY);
-    GaussianBlur(gray, gray, cv::Size(3,3), 0);
-    m_templateGray = gray.clone();
-    m_hasTemplate  = true;
-
-    AppendLog(QString("已从文件加载模板：%1 (%2x%3)").arg(path).arg(m_templateGray.cols).arg(m_templateGray.rows), INFO);
-    return true;
+    AppendLog("读取模板文件失败：" + path, ERROR);
+    return false;
 }
 
 // 计算单应性（模板 <- 当前）
 bool MainWindow::ComputeHomography(const Mat& curGray, Mat& H, vector<DMatch>* dbgMatches)
 {
-    if (!m_hasTemplate || m_templateGray.empty()) 
-    {
-        return false;
-    }
-
-    // ORB 特征
-    Ptr<ORB> orb = ORB::create(m_orbFeatures);
-    vector<KeyPoint> kptT, kptC;
-    Mat desT, desC;
-    orb->detectAndCompute(m_templateGray, noArray(), kptT, desT);
-    orb->detectAndCompute(curGray, noArray(), kptC, desC);
-
-    if (desT.empty() || desC.empty()) 
-    {
-        AppendLog("配准失败：未检测到足够特征。", ERROR);
-        return false;
-    }
-
-    // 暴力匹配 + 交叉检验
-    BFMatcher matcher(NORM_HAMMING, true);
-    vector<DMatch> matches;
-    matcher.match(desT, desC, matches);
-    if (matches.size() < 8) 
-    {
-        AppendLog("配准失败：匹配对过少。", ERROR);
-        return false;
-    }
-
-    // 根据距离剔除离群
-    double maxDist = 0, minDist = 1e9;
-    for (auto& m : matches) 
-    {
-        double d = m.distance;
-        maxDist = std::max(maxDist, d);
-        minDist = std::min(minDist, d);
-    }
-    vector<DMatch> good;
-    double thr = std::max(2.0*minDist, 30.0); // 经验阈值
-    for (auto& m : matches) 
-    {
-        if (m.distance <= thr) 
-        {
-            good.push_back(m);
-        }
-    }
-    if (good.size() < 8) 
-    {
-        good = matches; // 兜底
-    }
-
-    if (dbgMatches) 
-    {
-        *dbgMatches = good;
-    }
-
-    vector<Point2f> ptsT, ptsC;
-    ptsT.reserve(good.size());
-    ptsC.reserve(good.size());
-    for (auto& m : good) 
-    {
-        ptsT.push_back(kptT[m.queryIdx].pt);
-        ptsC.push_back(kptC[m.trainIdx].pt);
-    }
-
-    // RANSAC 求 H（模板 <- 当前）
-    vector<unsigned char> inliers;
-    H = findHomography(ptsC, ptsT, RANSAC, 3.0, inliers);
-    if (H.empty()) 
-    {
-        AppendLog("配准失败：单应矩阵为空。", ERROR);
-        return false;
-    }
-    AppendLog(QString("配准成功：内点数 %1 / %2").arg(count(inliers.begin(), inliers.end(), 1)).arg((int)ptsT.size()), INFO);
-    return true;
+    return m_defectDetection->ComputeHomography(curGray, H, dbgMatches);
 }
 
-// 检测核心：返回在“当前图像坐标系”的外接框
+// 检测核心：返回在"当前图像坐标系"的外接框
 vector<Rect> MainWindow::DetectDefects(const Mat& curBGR, const Mat& H, Mat* dbgMask)
 {
-    vector<Rect> boxes;
-
-    // 统一到模板坐标系做差异
-    Mat curGray;
-    cvtColor(curBGR, curGray, COLOR_BGR2GRAY);
-    GaussianBlur(curGray, curGray, cv::Size(3,3), 0);
-
-    Mat warped;
-    warpPerspective(curGray, warped, H, m_templateGray.size(), INTER_LINEAR);
-
-    // 差异图
-    Mat diff;
-    absdiff(m_templateGray, warped, diff);
-    GaussianBlur(diff, diff, cv::Size(5,5), 0);
-
-    // 二值化（可改Otsu）
-    Mat bin;
-    if (m_diffThresh <= 0) 
-    {
-        threshold(diff, bin, 0, 255, THRESH_BINARY | THRESH_OTSU);
-    } 
-    else 
-    {
-        threshold(diff, bin, m_diffThresh, 255, THRESH_BINARY);
-    }
-
-    // 形态学净化
-    morphologyEx(bin, bin, MORPH_OPEN, getStructuringElement(MORPH_RECT, {5,5}));
-    morphologyEx(bin, bin, MORPH_CLOSE, getStructuringElement(MORPH_RECT, {9,9}));
-
-    if (dbgMask) 
-    {
-        *dbgMask = bin.clone();
-    }
-
-    // 找轮廓（在模板坐标系）
-    vector<vector<Point>> contours;
-    findContours(bin, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
-
-    if (contours.empty()) 
-    {
-        return boxes;
-    }
-
-    // 将模板坐标系下的外接框四角回投影到“当前图像坐标系”
-    Mat Hinv;
-    if (!invert(H, Hinv)) 
-    {
-        AppendLog("单应矩阵不可逆，无法回投影。", ERROR);
-        return boxes;
-    }
-
-    for (auto& c : contours) 
-    {
-        double area = contourArea(c);
-        if (area < m_minDefectArea) 
-        {
-            continue;
-        }
-
-        Rect r = boundingRect(c); // 模板系下
-        // 四角
-        vector<Point2f> srcPts = {
-            { (float)r.x, (float)r.y },
-            { (float)(r.x + r.width), (float)r.y },
-            { (float)(r.x + r.width), (float)(r.y + r.height) },
-            { (float)r.x, (float)(r.y + r.height) }
-        };
-        vector<Point2f> dstPts;
-        perspectiveTransform(srcPts, dstPts, Hinv);
-
-        // 用回投影后的四角做外接框（当前图像坐标系）
-        float minx = curBGR.cols, miny = curBGR.rows, maxx = 0, maxy = 0;
-        for (auto& p : dstPts) 
-        {
-            minx = std::min(minx, p.x); miny = std::min(miny, p.y);
-            maxx = std::max(maxx, p.x); maxy = std::max(maxy, p.y);
-        }
-        Rect box(Point2f(minx, miny), Point2f(maxx, maxy));
-        box &= Rect(0,0, curBGR.cols, curBGR.rows); // 裁边
-        if (box.area() > 0) 
-        {
-            boxes.push_back(box);
-        }
-    }
-
-    return boxes;
+    return m_defectDetection->DetectDefects(curBGR, H, dbgMask);
 }
 
-// 可选：设置模板按钮
+// 设置模板按钮
 void MainWindow::on_setTemplate_clicked()
 {
     // 弹窗选择：当前帧 / 从文件
@@ -2652,7 +2488,7 @@ void MainWindow::on_setTemplate_clicked()
 // 缺陷检测按钮
 void MainWindow::on_detect_clicked()
 {
-    if (!m_hasTemplate) 
+    if (!m_defectDetection->HasTemplate()) 
     {
         AppendLog("尚未设置模板，请先设置模板。", WARNNING);
         // 尝试直接用当前帧设模板，继续流程（也可直接 return）

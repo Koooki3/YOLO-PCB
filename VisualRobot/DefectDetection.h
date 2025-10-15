@@ -37,6 +37,27 @@ public:
 	// 初始化默认 SVM 及 PCA 维度（可通过 SetPCADim 调整）
 	DefectDetection();
 
+	// 模板法缺陷检测相关功能
+	// 设置模板（从当前帧或文件）
+	bool SetTemplateFromCurrent(const cv::Mat& currentFrame);
+	bool SetTemplateFromFile(const std::string& filePath);
+	
+	// 计算单应性矩阵（模板 <- 当前）
+	bool ComputeHomography(const cv::Mat& currentGray, cv::Mat& homography, std::vector<cv::DMatch>* debugMatches = nullptr);
+	
+	// 缺陷检测：根据配准后差异，得到在"当前图像坐标系"的缺陷外接框
+	std::vector<cv::Rect> DetectDefects(const cv::Mat& currentBGR, const cv::Mat& homography, cv::Mat* debugMask = nullptr);
+	
+	// 模板法参数配置
+	void SetTemplateDiffThreshold(double threshold) { m_templateDiffThresh = threshold; }
+	void SetMinDefectArea(double area) { m_minDefectArea = area; }
+	void SetORBFeaturesCount(int count) { m_orbFeatures = count; }
+	
+	double GetTemplateDiffThreshold() const { return m_templateDiffThresh; }
+	double GetMinDefectArea() const { return m_minDefectArea; }
+	int GetORBFeaturesCount() const { return m_orbFeatures; }
+	bool HasTemplate() const { return m_hasTemplate; }
+
 	// 图像预处理（色彩校正与去噪）
 	// 参数：
 	// - src: 输入 BGR 彩色图像（CV_8UC3 或可转换到该类型）
@@ -96,6 +117,13 @@ private:
 	// 特征标准化参数（训练时计算并保存）
 	Mat m_featMean; // 1 x D CV_64F
 	Mat m_featStd;  // 1 x D CV_64F
+
+	// 模板法缺陷检测相关成员变量
+	Mat m_templateGray;              // 模板灰度图
+	bool m_hasTemplate = false;      // 是否已有模板
+	double m_templateDiffThresh = 25.0; // 差异二值阈值
+	double m_minDefectArea = 1200;   // 最小缺陷面积
+	int m_orbFeatures = 1500;        // ORB特征点数量
 
 public:
 	// 使用 OpenCV 的 trainAuto 自动搜索 SVM 超参数并训练（内部使用交叉验证）
