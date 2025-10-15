@@ -582,6 +582,227 @@ bool DefectDetection::TrainSVMAuto(const Mat& samples, const Mat& labels)
     return ok;
 }
 
+// ---------------------------------------------------------------------------
+// 模板法缺陷检测相关功能实现
+// ---------------------------------------------------------------------------
+
+// 从当前帧设置模板
+bool DefectDetection::SetTemplateFromCurrent(const Mat& currentFrame)
+{
+    if (currentFrame.empty())
+    {
+        return false;
+    }
+
+    Mat gray;
+    if (currentFrame.channels() == 3)
+    {
+        cvtColor(currentFrame, gray, COLOR_BGR2GRAY);
+    }
+    else
+    {
+        gray = currentFrame.clone();
+    }
+    
+    GaussianBlur(gray, gray, Size(3,3), 0);
+    m_templateGray = gray.clone();
+    m_hasTemplate = true;
+
+    return true;
+}
+
+// 从文件设置模板
+bool DefectDetection::SetTemplateFromFile(const string& filePath)
+{
+    Mat bgr = imread(filePath, IMREAD_COLOR);
+    if (bgr.empty())
+    {
+        return false;
+    }
+    
+    Mat gray;
+    cvtColor(bgr, gray, COLOR_BGR2GRAY);
+    GaussianBlur(gray, gray, Size(3,3), 0);
+    m_templateGray = gray.clone();
+    m_hasTemplate = true;
+
+    return true;
+}
+
+// 计算单应性矩阵（模板 <- 当前）
+bool DefectDetection::ComputeHomography(const Mat& currentGray, Mat& homography, vector<DMatch>* debugMatches)
+{
+    if (!m_hasTemplate || m_templateGray.empty())
+    {
+        return false;
+    }
+
+    // ORB 特征检测
+    Ptr<ORB> orb = ORB::create(m_orbFeatures);
+    vector<KeyPoint> keypointsTemplate, keypointsCurrent;
+    Mat descriptorsTemplate, descriptorsCurrent;
+    orb->detectAndCompute(m_templateGray, noArray(), keypointsTemplate, descriptorsTemplate);
+    orb->detectAndCompute(currentGray, noArray(), keypointsCurrent, descriptorsCurrent);
+
+    if (descriptorsTemplate.empty() || descriptorsCurrent.empty())
+    {
+        return false;
+    }
+
+    // 暴力匹配 + 交叉检验
+    BFMatcher matcher(NORM_HAMMING, true);
+    vector<DMatch> matches;
+    matcher.match(descriptorsTemplate, descriptorsCurrent, matches);
+    if (matches.size() < 8)
+    {
+        return false;
+    }
+
+    // 根据距离剔除离群点
+    double maxDist = 0, minDist = 1e9;
+    for (auto& match : matches)
+    {
+        double d = match.distance;
+        maxDist = std::max(maxDist, d);
+        minDist = std::min(minDist, d);
+    }
+    
+    vector<DMatch> goodMatches;
+    double threshold = std::max(2.0 * minDist, 30.0); // 经验阈值
+    for (auto& match : matches)
+    {
+        if (match.distance <= threshold)
+        {
+            goodMatches.push_back(match);
+        }
+    }
+    if (goodMatches.size() < 8)
+    {
+        goodMatches = matches; // 兜底
+    }
+
+    if (debugMatches)
+    {
+        *debugMatches = goodMatches;
+    }
+
+    vector<Point2f> pointsTemplate, pointsCurrent;
+    pointsTemplate.reserve(goodMatches.size());
+    pointsCurrent.reserve(goodMatches.size());
+    for (auto& match : goodMatches)
+    {
+        pointsTemplate.push_back(keypointsTemplate[match.queryIdx].pt);
+        pointsCurrent.push_back(keypointsCurrent[match.trainIdx].pt);
+    }
+
+    // RANSAC 求单应性矩阵（模板 <- 当前）
+    vector<unsigned char> inliers;
+    homography = findHomography(pointsCurrent, pointsTemplate, RANSAC, 3.0, inliers);
+    if (homography.empty())
+    {
+        return false;
+    }
+    
+    return true;
+}
+
+// 缺陷检测：根据配准后差异，得到在"当前图像坐标系"的缺陷外接框
+vector<Rect> DefectDetection::DetectDefects(const Mat& currentBGR, const Mat& homography, Mat* debugMask)
+{
+    vector<Rect> defectBoxes;
+
+    // 统一到模板坐标系做差异检测
+    Mat currentGray;
+    cvtColor(currentBGR, currentGray, COLOR_BGR2GRAY);
+    GaussianBlur(currentGray, currentGray, Size(3,3), 0);
+
+    Mat warped;
+    warpPerspective(currentGray, warped, homography, m_templateGray.size(), INTER_LINEAR);
+
+    // 差异图
+    Mat diff;
+    absdiff(m_templateGray, warped, diff);
+    GaussianBlur(diff, diff, Size(5,5), 0);
+
+    // 二值化
+    Mat binary;
+    if (m_templateDiffThresh <= 0)
+    {
+        threshold(diff, binary, 0, 255, THRESH_BINARY | THRESH_OTSU);
+    }
+    else
+    {
+        threshold(diff, binary, m_templateDiffThresh, 255, THRESH_BINARY);
+    }
+
+    // 形态学净化
+    morphologyEx(binary, binary, MORPH_OPEN, getStructuringElement(MORPH_RECT, Size(5,5)));
+    morphologyEx(binary, binary, MORPH_CLOSE, getStructuringElement(MORPH_RECT, Size(9,9)));
+
+    if (debugMask)
+    {
+        *debugMask = binary.clone();
+    }
+
+    // 找轮廓（在模板坐标系）
+    vector<vector<Point>> contours;
+    findContours(binary, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+
+    if (contours.empty())
+    {
+        return defectBoxes;
+    }
+
+    // 将模板坐标系下的外接框四角回投影到"当前图像坐标系"
+    Mat inverseHomography;
+    if (!invert(homography, inverseHomography))
+    {
+        return defectBoxes;
+    }
+
+    for (auto& contour : contours)
+    {
+        double area = contourArea(contour);
+        if (area < m_minDefectArea)
+        {
+            continue;
+        }
+
+        Rect boundingRectTemplate = boundingRect(contour); // 模板系下
+        
+        // 四角坐标
+        vector<Point2f> sourcePoints = {
+            { (float)boundingRectTemplate.x, (float)boundingRectTemplate.y },
+            { (float)(boundingRectTemplate.x + boundingRectTemplate.width), (float)boundingRectTemplate.y },
+            { (float)(boundingRectTemplate.x + boundingRectTemplate.width), (float)(boundingRectTemplate.y + boundingRectTemplate.height) },
+            { (float)boundingRectTemplate.x, (float)(boundingRectTemplate.y + boundingRectTemplate.height) }
+        };
+        
+        vector<Point2f> targetPoints;
+        perspectiveTransform(sourcePoints, targetPoints, inverseHomography);
+
+        // 用回投影后的四角做外接框（当前图像坐标系）
+        float minX = currentBGR.cols, minY = currentBGR.rows, maxX = 0, maxY = 0;
+        for (auto& point : targetPoints)
+        {
+            minX = std::min(minX, point.x);
+            minY = std::min(minY, point.y);
+            maxX = std::max(maxX, point.x);
+            maxY = std::max(maxY, point.y);
+        }
+        
+        Rect defectBox(Point2f(minX, minY), Point2f(maxX, maxY));
+        defectBox &= Rect(0, 0, currentBGR.cols, currentBGR.rows); // 裁边
+        
+        if (defectBox.area() > 0)
+        {
+            defectBoxes.push_back(defectBox);
+        }
+    }
+
+    return defectBoxes;
+}
+
 std::vector<std::pair<double,double>> DefectDetection::GetPCAExplainedVariance() const
 {
     std::vector<std::pair<double,double>> res;
@@ -655,4 +876,3 @@ std::vector<std::pair<double,double>> DefectDetection::GetPCAExplainedVariance()
     }
     return res;
 }
-
