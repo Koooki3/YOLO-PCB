@@ -14,6 +14,7 @@
  */
 
 namespace fs = std::filesystem;
+using namespace cv;
 
 /**
  * @class CameraCalibrator
