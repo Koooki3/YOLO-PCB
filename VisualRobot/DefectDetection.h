@@ -26,6 +26,10 @@
 #include <opencv2/ml.hpp>
 #include <string>
 #include <vector>
+#include <thread>
+#include <future>
+#include <mutex>
+#include <atomic>
 
 using namespace cv;
 using namespace cv::ml;
