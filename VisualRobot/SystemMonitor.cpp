@@ -8,6 +8,7 @@
 #include <QDebug>
 #include <QProcess>
 #include <QFile>
+#include <QDir>
 #include <cmath>
 #include <fstream>
 #include <sstream>
