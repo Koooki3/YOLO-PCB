@@ -706,7 +706,206 @@ bool DefectDetection::ComputeHomography(const Mat& currentGray, Mat& homography,
     return true;
 }
 
-// 缺陷检测：根据配准后差异，得到在"当前图像坐标系"的缺陷外接框
+// 并行处理轮廓的函数
+void ProcessContourParallel(const vector<Point>& contour, const Mat& inverseHomography, 
+                           const Size& imageSize, double minArea, vector<Rect>& result, mutex& mtx)
+{
+    double area = contourArea(contour);
+    if (area < minArea)
+    {
+        return;
+    }
+
+    Rect boundingRectTemplate = boundingRect(contour); // 模板系下
+    
+    // 四角坐标
+    vector<Point2f> sourcePoints = {
+        { (float)boundingRectTemplate.x, (float)boundingRectTemplate.y },
+        { (float)(boundingRectTemplate.x + boundingRectTemplate.width), (float)boundingRectTemplate.y },
+        { (float)(boundingRectTemplate.x + boundingRectTemplate.width), (float)(boundingRectTemplate.y + boundingRectTemplate.height) },
+        { (float)boundingRectTemplate.x, (float)(boundingRectTemplate.y + boundingRectTemplate.height) }
+    };
+    
+    vector<Point2f> targetPoints;
+    perspectiveTransform(sourcePoints, targetPoints, inverseHomography);
+
+    // 用回投影后的四角做外接框（当前图像坐标系）
+    float minX = imageSize.width, minY = imageSize.height, maxX = 0, maxY = 0;
+    for (auto& point : targetPoints)
+    {
+        minX = std::min(minX, point.x);
+        minY = std::min(minY, point.y);
+        maxX = std::max(maxX, point.x);
+        maxY = std::max(maxY, point.y);
+    }
+    
+    Rect defectBox(Point2f(minX, minY), Point2f(maxX, maxY));
+    defectBox &= Rect(0, 0, imageSize.width, imageSize.height); // 裁边
+    
+    if (defectBox.area() > 0)
+    {
+        lock_guard<mutex> lock(mtx);
+        result.push_back(defectBox);
+    }
+}
+
+// 并行计算LBP的函数
+void ComputeLBPParallel(const Mat& gray, Mat& lbp, int startRow, int endRow)
+{
+    for (int y = startRow; y < endRow; ++y)
+    {
+        for (int x = 1; x < gray.cols - 1; ++x)
+        {
+            uchar center = gray.at<uchar>(y, x);
+            unsigned char code = 0;
+            code |= (gray.at<uchar>(y-1, x-1) > center) << 7;
+            code |= (gray.at<uchar>(y-1, x  ) > center) << 6;
+            code |= (gray.at<uchar>(y-1, x+1) > center) << 5;
+            code |= (gray.at<uchar>(y,   x+1) > center) << 4;
+            code |= (gray.at<uchar>(y+1, x+1) > center) << 3;
+            code |= (gray.at<uchar>(y+1, x  ) > center) << 2;
+            code |= (gray.at<uchar>(y+1, x-1) > center) << 1;
+            code |= (gray.at<uchar>(y,   x-1) > center) << 0;
+            lbp.at<uchar>(y, x) = code;
+        }
+    }
+}
+
+// 并行计算LBP直方图
+Mat DefectDetection::ComputeLBPHist(const Mat& gray) const
+{
+    CV_Assert(gray.channels() == 1);
+    Mat lbp = Mat::zeros(gray.size(), CV_8U);
+    
+    // 使用多线程并行计算LBP
+    int numThreads = std::thread::hardware_concurrency();
+    if (numThreads == 0) numThreads = 4;
+    
+    vector<thread> threads;
+    int rowsPerThread = gray.rows / numThreads;
+    
+    for (int i = 0; i < numThreads; ++i)
+    {
+        int startRow = i * rowsPerThread + 1; // +1 避免边界
+        int endRow = (i == numThreads - 1) ? gray.rows - 1 : (i + 1) * rowsPerThread;
+        threads.emplace_back(ComputeLBPParallel, std::cref(gray), std::ref(lbp), startRow, endRow);
+    }
+    
+    for (auto& t : threads)
+    {
+        t.join();
+    }
+
+    // 统计直方图并归一化
+    Mat hist;
+    int histSize = 256;
+    calcHist(vector<Mat>{lbp}, vector<int>{0}, Mat(), hist, vector<int>{histSize}, vector<float>{0,256});
+    hist = hist.reshape(1,1);
+    hist.convertTo(hist, CV_32F);
+    double s = sum(hist)[0];
+    if (s > 0)
+    {
+        hist /= static_cast<float>(s);
+    }
+    return hist;
+}
+
+// 并行处理多通道统计特征
+void ProcessChannelStatsParallel(const Mat& channel, vector<float>& results, int histBins, mutex& mtx)
+{
+    Mat tmp;
+    if (channel.type() == CV_32F)
+    {
+        channel.convertTo(tmp, CV_8U);
+    }
+    else
+    {
+        tmp = channel;
+    }
+
+    // 计算均值与标准差
+    Scalar meanVal, stddevVal;
+    meanStdDev(tmp, meanVal, stddevVal);
+    
+    // 计算并归一化直方图
+    int histSize = histBins;
+    Mat hist;
+    calcHist(vector<Mat>{tmp}, vector<int>{0}, Mat(), hist, vector<int>{histSize}, vector<float>{0,256});
+    hist /= tmp.total();
+
+    // 合并结果
+    vector<float> channelFeatures;
+    channelFeatures.push_back(static_cast<float>(meanVal[0]));
+    channelFeatures.push_back(static_cast<float>(stddevVal[0]));
+    for (int i = 0; i < histSize; ++i)
+    {
+        channelFeatures.push_back(hist.at<float>(i));
+    }
+
+    lock_guard<mutex> lock(mtx);
+    results.insert(results.end(), channelFeatures.begin(), channelFeatures.end());
+}
+
+// 优化后的特征提取函数
+Mat DefectDetection::ExtractFeatures(const Mat& src) const
+{
+    CV_Assert(!src.empty());
+    Mat img;
+    src.copyTo(img);
+    if (img.type() != CV_8UC3)
+    {
+        img.convertTo(img, CV_8UC3);
+    }
+
+    Mat bgr = img, hsv, lab;
+    cvtColor(bgr, hsv, COLOR_BGR2HSV);
+    cvtColor(bgr, lab, COLOR_BGR2Lab);
+
+    vector<Mat> bgrCh(3), hsvCh(3), labCh(3);
+    split(bgr, bgrCh);
+    split(hsv, hsvCh);
+    split(lab, labCh);
+
+    vector<float> feats;
+    mutex featsMutex;
+    vector<thread> threads;
+
+    // 并行处理所有通道的统计特征
+    auto processChannels = [&](const vector<Mat>& channels) {
+        for (const auto& channel : channels)
+        {
+            threads.emplace_back(ProcessChannelStatsParallel, std::cref(channel), std::ref(feats), 16, std::ref(featsMutex));
+        }
+    };
+
+    processChannels(bgrCh);
+    processChannels(hsvCh);
+    processChannels(labCh);
+
+    for (auto& t : threads)
+    {
+        t.join();
+    }
+
+    // LBP 纹理直方图（灰度）
+    Mat gray; cvtColor(bgr, gray, COLOR_BGR2GRAY);
+    Mat lbpHist = ComputeLBPHist(gray); // 1x256 CV_32F
+    // 将 lbpHist 数据追加到 feats（使用安全的 ptr 访问）
+    CV_Assert(lbpHist.isContinuous());
+    const float* p = lbpHist.ptr<float>(0);
+    int len = lbpHist.cols * lbpHist.rows;
+    feats.insert(feats.end(), p, p + len);
+
+    // 转为 CV_32F 单行 Mat
+    Mat featMat(1, static_cast<int>(feats.size()), CV_32F);
+    for (size_t i = 0; i < feats.size(); ++i)
+    {
+        featMat.at<float>(0, static_cast<int>(i)) = feats[i];
+    }
+    return featMat;
+}
+
+// 优化后的缺陷检测函数（并行版本）
 vector<Rect> DefectDetection::DetectDefects(const Mat& currentBGR, const Mat& homography, Mat* debugMask)
 {
     vector<Rect> defectBoxes;
@@ -760,44 +959,20 @@ vector<Rect> DefectDetection::DetectDefects(const Mat& currentBGR, const Mat& ho
         return defectBoxes;
     }
 
+    // 并行处理轮廓
+    mutex resultMutex;
+    vector<thread> contourThreads;
+    
     for (auto& contour : contours)
     {
-        double area = contourArea(contour);
-        if (area < m_minDefectArea)
-        {
-            continue;
-        }
+        contourThreads.emplace_back(ProcessContourParallel, std::cref(contour), 
+                                   std::cref(inverseHomography), currentBGR.size(), 
+                                   m_minDefectArea, std::ref(defectBoxes), std::ref(resultMutex));
+    }
 
-        Rect boundingRectTemplate = boundingRect(contour); // 模板系下
-        
-        // 四角坐标
-        vector<Point2f> sourcePoints = {
-            { (float)boundingRectTemplate.x, (float)boundingRectTemplate.y },
-            { (float)(boundingRectTemplate.x + boundingRectTemplate.width), (float)boundingRectTemplate.y },
-            { (float)(boundingRectTemplate.x + boundingRectTemplate.width), (float)(boundingRectTemplate.y + boundingRectTemplate.height) },
-            { (float)boundingRectTemplate.x, (float)(boundingRectTemplate.y + boundingRectTemplate.height) }
-        };
-        
-        vector<Point2f> targetPoints;
-        perspectiveTransform(sourcePoints, targetPoints, inverseHomography);
-
-        // 用回投影后的四角做外接框（当前图像坐标系）
-        float minX = currentBGR.cols, minY = currentBGR.rows, maxX = 0, maxY = 0;
-        for (auto& point : targetPoints)
-        {
-            minX = std::min(minX, point.x);
-            minY = std::min(minY, point.y);
-            maxX = std::max(maxX, point.x);
-            maxY = std::max(maxY, point.y);
-        }
-        
-        Rect defectBox(Point2f(minX, minY), Point2f(maxX, maxY));
-        defectBox &= Rect(0, 0, currentBGR.cols, currentBGR.rows); // 裁边
-        
-        if (defectBox.area() > 0)
-        {
-            defectBoxes.push_back(defectBox);
-        }
+    for (auto& t : contourThreads)
+    {
+        t.join();
     }
 
     return defectBoxes;
