@@ -1637,6 +1637,12 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         HandleSpaceKeyPress();
         event->accept(); // 标记事件已处理, 阻止传播
     }
+    else if (event->key() == Qt::Key_Q)
+    {
+        // 处理Q键, 退出实时检测模式
+        HandleQKeyPress();
+        event->accept(); // 标记事件已处理, 阻止传播
+    }
     else 
     {
         // 其他按键交给父类处理
@@ -2093,6 +2099,30 @@ void MainWindow::HandleSpaceKeyPress()
     SwitchSelectionMode();
 }
 
+// 处理Q键按下事件 - 退出实时检测模式
+void MainWindow::HandleQKeyPress()
+{
+    {
+        QMutexLocker locker(&m_realTimeDetectionMutex);
+        if (m_realTimeDetectionRunning)
+        {
+            // 停止实时检测
+            m_realTimeDetectionRunning = false;
+            AppendLog("已按Q键退出实时检测模式", INFO);
+            
+            // 清空widgetDisplay_2内容
+            QMetaObject::invokeMethod(this, [this]() {
+                ui->widgetDisplay_2->clear();
+                AppendLog("已清空实时检测显示", INFO);
+            }, Qt::QueuedConnection);
+        }
+        else
+        {
+            AppendLog("当前未在实时检测模式中", WARNNING);
+        }
+    }
+}
+
 // 切换选择模式
 void MainWindow::SwitchSelectionMode()
 {
@@ -2535,8 +2565,8 @@ void MainWindow::RealTimeDetectionThread()
         }
 
         // 在图像上显示检测信息
-        QString infoText = QString("实时检测 - 缺陷数: %1").arg(boxes.size());
-        putText(draw, infoText.toStdString(), Point(10, 30), FONT_HERSHEY_SIMPLEX, 0.8, Scalar(0, 255, 0), 2);
+        QString infoText = QString("REALTIME DETECTION - DEFECTS: %1").arg(boxes.size());
+        putText(draw, infoText.toStdString(), Point(100, 150), FONT_HERSHEY_SIMPLEX, 4, Scalar(0, 255, 0), 10);
 
         // 展示到 widgetDisplay_2
         QPixmap pm = MatToQPixmap(draw);
@@ -2573,16 +2603,6 @@ void MainWindow::StartRealTimeDetection()
     thread->start();
 
     AppendLog("实时缺陷检测已启动", INFO);
-}
-
-// 停止实时检测
-void MainWindow::StopRealTimeDetection()
-{
-    {
-        QMutexLocker locker(&m_realTimeDetectionMutex);
-        m_realTimeDetectionRunning = false;
-    }
-    AppendLog("实时缺陷检测已停止", INFO);
 }
 
 // 缺陷检测按钮
