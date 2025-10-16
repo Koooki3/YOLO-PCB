@@ -166,7 +166,7 @@ private:
     QMutex m_realTimeDetectionMutex;
     void RealTimeDetectionThread();
     void StartRealTimeDetection();
-    void StopRealTimeDetection();
+    void HandleQKeyPress(); // 处理Q键, 退出实时检测模式
 };
 
 #endif // MAINWINDOW_H
