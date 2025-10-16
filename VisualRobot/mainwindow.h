@@ -15,6 +15,8 @@
 #include "MvCameraControl.h"
 #include <opencv2/opencv.hpp>
 #include "DefectDetection.h"
+#include <QMutex>
+#include <QThread>
 
 using namespace std;
 using namespace cv;
@@ -156,8 +158,15 @@ private:
     bool SetTemplateFromFile(const QString& path);
     // 配准：计算 H（模板 <- 当前）
     bool ComputeHomography(const Mat& curGray, Mat& H, vector<DMatch>* dbgMatches=nullptr);
-    // 检测：根据配准后差异，得到在“当前图像坐标系”的缺陷外接框
+    // 检测：根据配准后差异，得到在"当前图像坐标系"的缺陷外接框
     vector<Rect> DetectDefects(const Mat& curBGR, const Mat& H, Mat* dbgMask=nullptr);
+
+    // 实时检测相关
+    bool m_realTimeDetectionRunning;
+    QMutex m_realTimeDetectionMutex;
+    void RealTimeDetectionThread();
+    void StartRealTimeDetection();
+    void StopRealTimeDetection();
 };
 
 #endif // MAINWINDOW_H

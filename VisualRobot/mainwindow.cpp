@@ -2485,70 +2485,206 @@ void MainWindow::on_setTemplate_clicked()
     }
 }
 
+// 实时检测线程控制变量
+bool m_realTimeDetectionRunning = false;
+QMutex m_realTimeDetectionMutex;
+
+// 实时检测线程函数
+void MainWindow::RealTimeDetectionThread()
+{
+    while (true)
+    {
+        {
+            QMutexLocker locker(&m_realTimeDetectionMutex);
+            if (!m_realTimeDetectionRunning)
+            {
+                break;
+            }
+        }
+
+        // 取当前帧
+        Mat curBGR;
+        if (!GrabLastFrameBGR(curBGR))
+        {
+            QThread::msleep(50); // 等待50ms再试
+            continue;
+        }
+
+        // 计算配准 H（模板 <- 当前）
+        Mat curGray;
+        cvtColor(curBGR, curGray, COLOR_BGR2GRAY);
+        GaussianBlur(curGray, curGray, cv::Size(3,3), 0);
+
+        Mat H;
+        if (!ComputeHomography(curGray, H))
+        {
+            QThread::msleep(50);
+            continue;
+        }
+
+        // 检测
+        QElapsedTimer t; t.start();
+        Mat dbgMask;
+        auto boxes = DetectDefects(curBGR, H, &dbgMask);
+        
+        // 绘制结果
+        Mat draw = curBGR.clone();
+        for (auto& b : boxes) 
+        {
+            rectangle(draw, b, Scalar(0,0,255), 2); // 红框
+        }
+
+        // 在图像上显示检测信息
+        QString infoText = QString("实时检测 - 缺陷数: %1").arg(boxes.size());
+        putText(draw, infoText.toStdString(), Point(10, 30), FONT_HERSHEY_SIMPLEX, 0.8, Scalar(0, 255, 0), 2);
+
+        // 展示到 widgetDisplay_2
+        QPixmap pm = MatToQPixmap(draw);
+        if (!pm.isNull()) 
+        {
+            // 在主线程中更新UI
+            QMetaObject::invokeMethod(this, [this, pm]() {
+                QPixmap scaled = pm.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                ui->widgetDisplay_2->setPixmap(scaled);
+                ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
+            }, Qt::QueuedConnection);
+        }
+
+        QThread::msleep(33); // 约30fps
+    }
+}
+
+// 开始实时检测
+void MainWindow::StartRealTimeDetection()
+{
+    {
+        QMutexLocker locker(&m_realTimeDetectionMutex);
+        if (m_realTimeDetectionRunning)
+        {
+            AppendLog("实时检测已在运行", WARNNING);
+            return;
+        }
+        m_realTimeDetectionRunning = true;
+    }
+
+    // 启动实时检测线程
+    QThread* thread = QThread::create([this]() { RealTimeDetectionThread(); });
+    connect(thread, &QThread::finished, thread, &QThread::deleteLater);
+    thread->start();
+
+    AppendLog("实时缺陷检测已启动", INFO);
+}
+
+// 停止实时检测
+void MainWindow::StopRealTimeDetection()
+{
+    {
+        QMutexLocker locker(&m_realTimeDetectionMutex);
+        m_realTimeDetectionRunning = false;
+    }
+    AppendLog("实时缺陷检测已停止", INFO);
+}
+
 // 缺陷检测按钮
 void MainWindow::on_detect_clicked()
 {
-    if (!m_defectDetection->HasTemplate()) 
+    // 创建选择对话框
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle("选择检测模式");
+    msgBox.setText("请选择检测模式:");
+    
+    QPushButton *singleButton = msgBox.addButton("单次", QMessageBox::ActionRole);
+    QPushButton *realTimeButton = msgBox.addButton("实时", QMessageBox::ActionRole);
+    QPushButton *cancelButton = msgBox.addButton("取消", QMessageBox::RejectRole);
+    
+    msgBox.exec();
+    
+    QAbstractButton* clicked = msgBox.clickedButton();
+    if (clicked == cancelButton) 
     {
-        AppendLog("尚未设置模板，请先设置模板。", WARNNING);
-        // 尝试直接用当前帧设模板，继续流程（也可直接 return）
-        if (!SetTemplateFromCurrent())
+        AppendLog("检测已取消", INFO);
+        return;
+    }
+    else if (clicked == realTimeButton)
+    {
+        // 实时检测模式
+        if (!m_defectDetection->HasTemplate()) 
+        {
+            AppendLog("尚未设置模板，请先设置模板。", WARNNING);
+            // 尝试直接用当前帧设模板
+            if (!SetTemplateFromCurrent())
+            {
+                return;
+            }
+        }
+        StartRealTimeDetection();
+        return;
+    }
+    else if (clicked == singleButton)
+    {
+        // 单次检测模式（原有逻辑）
+        if (!m_defectDetection->HasTemplate()) 
+        {
+            AppendLog("尚未设置模板，请先设置模板。", WARNNING);
+            // 尝试直接用当前帧设模板，继续流程（也可直接 return）
+            if (!SetTemplateFromCurrent())
+            {
+                return;
+            }
+        }
+
+        // 取当前帧
+        Mat curBGR;
+        if (!GrabLastFrameBGR(curBGR))
         {
             return;
         }
+
+        // 计算配准 H（模板 <- 当前）
+        Mat curGray;
+        cvtColor(curBGR, curGray, COLOR_BGR2GRAY);
+        GaussianBlur(curGray, curGray, cv::Size(3,3), 0);
+
+        Mat H;
+        if (!ComputeHomography(curGray, H))
+        {
+            return;
+        }
+
+        // 检测
+        QElapsedTimer t; t.start();
+        Mat dbgMask;
+        auto boxes = DetectDefects(curBGR, H, &dbgMask);
+        AppendLog(QString("模板检测耗时: %1 ms, 候选缺陷框数: %2").arg(t.elapsed()).arg((int)boxes.size()), INFO);
+
+        // 绘制结果
+        Mat draw = curBGR.clone();
+        for (auto& b : boxes) 
+        {
+            rectangle(draw, b, Scalar(0,0,255), 2); // 红框
+        }
+
+        // 展示到 widgetDisplay_2
+        QPixmap pm = MatToQPixmap(draw);
+        if (!pm.isNull()) 
+        {
+            // 自适应显示
+            QPixmap scaled = pm.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            ui->widgetDisplay_2->setPixmap(scaled);
+            ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
+            AppendLog("缺陷结果已显示。", INFO);
+        } 
+        else 
+        {
+            AppendLog("显示失败: QPixmap 为空。", ERROR);
+        }
+
+        // 日志每个框
+        for (size_t i=0; i<boxes.size(); ++i) 
+        {
+            AppendLog(QString("缺陷框 %1: (x=%2, y=%3, w=%4, h=%5)").arg(i+1).arg(boxes[i].x).arg(boxes[i].y).arg(boxes[i].width).arg(boxes[i].height), INFO);
+        }
+
+        // 如需同时叠加尺寸/角度的浮窗，可复用已有的 drawOverlayOnDisplay2()
     }
-
-    // 取当前帧
-    Mat curBGR;
-    if (!GrabLastFrameBGR(curBGR))
-    {
-        return;
-    }
-
-    // 计算配准 H（模板 <- 当前）
-    Mat curGray;
-    cvtColor(curBGR, curGray, COLOR_BGR2GRAY);
-    GaussianBlur(curGray, curGray, cv::Size(3,3), 0);
-
-    Mat H;
-    if (!ComputeHomography(curGray, H))
-    {
-        return;
-    }
-
-    // 检测
-    QElapsedTimer t; t.start();
-    Mat dbgMask;
-    auto boxes = DetectDefects(curBGR, H, &dbgMask);
-    AppendLog(QString("模板检测耗时: %1 ms, 候选缺陷框数: %2").arg(t.elapsed()).arg((int)boxes.size()), INFO);
-
-    // 绘制结果
-    Mat draw = curBGR.clone();
-    for (auto& b : boxes) 
-    {
-        rectangle(draw, b, Scalar(0,0,255), 2); // 红框
-    }
-
-    // 展示到 widgetDisplay_2
-    QPixmap pm = MatToQPixmap(draw);
-    if (!pm.isNull()) 
-    {
-        // 自适应显示
-        QPixmap scaled = pm.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        ui->widgetDisplay_2->setPixmap(scaled);
-        ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
-        AppendLog("缺陷结果已显示。", INFO);
-    } 
-    else 
-    {
-        AppendLog("显示失败: QPixmap 为空。", ERROR);
-    }
-
-    // 日志每个框
-    for (size_t i=0; i<boxes.size(); ++i) 
-    {
-        AppendLog(QString("缺陷框 %1: (x=%2, y=%3, w=%4, h=%5)").arg(i+1).arg(boxes[i].x).arg(boxes[i].y).arg(boxes[i].width).arg(boxes[i].height), INFO);
-    }
-
-    // 如需同时叠加尺寸/角度的浮窗，可复用已有的 drawOverlayOnDisplay2()
 }
