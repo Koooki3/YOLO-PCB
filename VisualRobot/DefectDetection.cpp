@@ -71,7 +71,6 @@ DefectDetection::DefectDetection()
     m_svm->setTermCriteria(TermCriteria(TermCriteria::MAX_ITER + TermCriteria::EPS, 1000, 1e-6));
 }
 
-
 // ---------------------------------------------------------------------------
 // Preprocess
 // 功能：对输入 BGR 图像进行简单的色彩校正与去噪
@@ -98,7 +97,6 @@ void DefectDetection::Preprocess(const Mat& src, Mat& dst) const
     // 轻微模糊以抑制噪声
     GaussianBlur(dst, dst, Size(3, 3), 0.5);
 }
-
 
 // ---------------------------------------------------------------------------
 // ChannelStatsAndHist
@@ -137,114 +135,6 @@ void DefectDetection::ChannelStatsAndHist(const Mat& ch, vector<float>& outFeatu
         outFeatures.push_back(hist.at<float>(i));
     }
 }
-
-
-// ---------------------------------------------------------------------------
-// ComputeLBPHist
-// 功能：基于 8 邻域计算每像素 LBP 编码，并返回 256 维归一化直方图
-// 输入：gray - 灰度图（CV_8U）
-// 输出：1x256 的 CV_32F 行向量（归一化）
-// 说明：实现了基础的原始 LBP 编码，未使用旋转不变或统一模式的优化
-// 复杂度：O(N)
-// ---------------------------------------------------------------------------
-Mat DefectDetection::ComputeLBPHist(const Mat& gray) const
-{
-    CV_Assert(gray.channels() == 1);
-    Mat lbp = Mat::zeros(gray.size(), CV_8U);
-    for (int y = 1; y < gray.rows - 1; ++y)
-    {
-        for (int x = 1; x < gray.cols - 1; ++x)
-        {
-            uchar center = gray.at<uchar>(y, x);
-            unsigned char code = 0;
-            code |= (gray.at<uchar>(y-1, x-1) > center) << 7;
-            code |= (gray.at<uchar>(y-1, x  ) > center) << 6;
-            code |= (gray.at<uchar>(y-1, x+1) > center) << 5;
-            code |= (gray.at<uchar>(y,   x+1) > center) << 4;
-            code |= (gray.at<uchar>(y+1, x+1) > center) << 3;
-            code |= (gray.at<uchar>(y+1, x  ) > center) << 2;
-            code |= (gray.at<uchar>(y+1, x-1) > center) << 1;
-            code |= (gray.at<uchar>(y,   x-1) > center) << 0;
-            lbp.at<uchar>(y, x) = code;
-        }
-    }
-
-    // 统计直方图并归一化
-    Mat hist;
-    int histSize = 256;
-    calcHist(vector<Mat>{lbp}, vector<int>{0}, Mat(), hist, vector<int>{histSize}, vector<float>{0,256});
-    hist = hist.reshape(1,1);
-    hist.convertTo(hist, CV_32F);
-    double s = sum(hist)[0];
-    if (s > 0)
-    {
-        hist /= static_cast<float>(s);
-    }
-    return hist;
-}
-
-
-// ---------------------------------------------------------------------------
-// ExtractFeatures
-// 功能：在多色域（BGR/HSV/Lab）上对每个通道提取统计量（均值/方差）及直方图，
-//       并将灰度 LBP 直方图拼接为最终特征向量
-// 输入：src - BGR 彩色图（会在内部保证类型为 CV_8UC3）
-// 输出：1xN 的 CV_32F 行向量
-// 注意：输出向量长度为固定值（由 3 色域 * 3 通道 * (2 + histBins) + 256 决定）
-// 复杂度：O(N_pixels + B)（B 为直方图总 bin 数）
-// ---------------------------------------------------------------------------
-Mat DefectDetection::ExtractFeatures(const Mat& src) const
-{
-    CV_Assert(!src.empty());
-    Mat img;
-    src.copyTo(img);
-    if (img.type() != CV_8UC3)
-    {
-        img.convertTo(img, CV_8UC3);
-    }
-
-    Mat bgr = img, hsv, lab;
-    cvtColor(bgr, hsv, COLOR_BGR2HSV);
-    cvtColor(bgr, lab, COLOR_BGR2Lab);
-
-    vector<Mat> bgrCh(3), hsvCh(3), labCh(3);
-    split(bgr, bgrCh);
-    split(hsv, hsvCh);
-    split(lab, labCh);
-
-    vector<float> feats;
-    // 在每个通道上加入 均值/方差 + 直方图（16 bins）
-    for (int i = 0; i < 3; ++i)
-    {
-        ChannelStatsAndHist(bgrCh[i], feats, 16);
-    }
-    for (int i = 0; i < 3; ++i)
-    {
-        ChannelStatsAndHist(hsvCh[i], feats, 16);
-    }
-    for (int i = 0; i < 3; ++i)
-    {
-        ChannelStatsAndHist(labCh[i], feats, 16);
-    }
-
-    // LBP 纹理直方图（灰度）
-    Mat gray; cvtColor(bgr, gray, COLOR_BGR2GRAY);
-    Mat lbpHist = ComputeLBPHist(gray); // 1x256 CV_32F
-    // 将 lbpHist 数据追加到 feats（使用安全的 ptr 访问）
-    CV_Assert(lbpHist.isContinuous());
-    const float* p = lbpHist.ptr<float>(0);
-    int len = lbpHist.cols * lbpHist.rows;
-    feats.insert(feats.end(), p, p + len);
-
-    // 转为 CV_32F 单行 Mat
-    Mat featMat(1, static_cast<int>(feats.size()), CV_32F);
-    for (size_t i = 0; i < feats.size(); ++i)
-    {
-        featMat.at<float>(0, static_cast<int>(i)) = feats[i];
-    }
-    return featMat;
-}
-
 
 // ---------------------------------------------------------------------------
 // FitPCA
