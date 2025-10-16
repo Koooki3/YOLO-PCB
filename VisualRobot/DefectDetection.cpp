@@ -9,7 +9,12 @@ using namespace cv;
 using namespace cv::ml;
 using namespace std;
 
-// 计算特征矩阵的列均值和标准差（double 精度），并保存到成员变量
+/**
+ * @brief 计算特征矩阵的列均值和标准差（double 精度）
+ * @param samples 输入样本矩阵
+ * @param meanOut 输出均值向量
+ * @param stdOut 输出标准差向量
+ */
 static void computeMeanStd(const Mat& samples, Mat& meanOut, Mat& stdOut)
 {
     CV_Assert(samples.type() == CV_32F || samples.type() == CV_64F);
@@ -34,7 +39,13 @@ static void computeMeanStd(const Mat& samples, Mat& meanOut, Mat& stdOut)
     }
 }
 
-// 对样本做列向量标准化（(x-mean)/std），返回 CV_32F
+/**
+ * @brief 对样本做列向量标准化（(x-mean)/std）
+ * @param samples 输入样本
+ * @param mean 均值向量
+ * @param stdv 标准差向量
+ * @return 标准化后的样本矩阵（CV_32F）
+ */
 static Mat applyStandardize(const Mat& samples, const Mat& mean, const Mat& stdv)
 {
     // Convert input to CV_64F for stable arithmetic, then apply (x-mean)/std per column
@@ -55,12 +66,16 @@ static Mat applyStandardize(const Mat& samples, const Mat& mean, const Mat& stdv
     return out;
 }
 
-// ---------------------------------------------------------------------------
-// 构造函数：初始化成员变量
-// - 初始化默认的 SVM（C_SVC, RBF），并设置终止准则
-// - 初始化 PCA 保留维度为 32（可通过 SetPCADim 修改）
-// 复杂度：O(1)
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// 构造函数实现
+// ===========================================================================
+
+/**
+ * @brief 构造函数实现
+ * @details 初始化默认的 SVM（C_SVC, RBF），并设置终止准则
+ *          初始化 PCA 保留维度为 32（可通过 SetPCADim 修改）
+ * @note 复杂度：O(1)
+ */
 DefectDetection::DefectDetection()
     : m_pcaDim(32)
 {
@@ -71,15 +86,18 @@ DefectDetection::DefectDetection()
     m_svm->setTermCriteria(TermCriteria(TermCriteria::MAX_ITER + TermCriteria::EPS, 1000, 1e-6));
 }
 
-// ---------------------------------------------------------------------------
-// Preprocess
-// 功能：对输入 BGR 图像进行简单的色彩校正与去噪
-// 输入：src - 原始 BGR 图像（CV_8UC3 或可转换）
-// 输出：dst - 处理后的 BGR 图像
-// 说明：采用 Lab 空间对 L 通道进行直方图均衡化以改善亮度分布，随后进行小半径的高斯模糊
-// 注意：该方法为轻量级色彩恒常性近似，并非完整 Retinex 实现
-// 复杂度：O(N)（N = 像素数）
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// 图像预处理实现
+// ===========================================================================
+
+/**
+ * @brief 图像预处理实现
+ * @param src 原始 BGR 图像（CV_8UC3 或可转换）
+ * @param dst 处理后的 BGR 图像
+ * @details 采用 Lab 空间对 L 通道进行直方图均衡化以改善亮度分布，随后进行小半径的高斯模糊
+ * @note 该方法为轻量级色彩恒常性近似，并非完整 Retinex 实现
+ *       复杂度：O(N)（N = 像素数）
+ */
 void DefectDetection::Preprocess(const Mat& src, Mat& dst) const
 {
     CV_Assert(!src.empty());
@@ -98,14 +116,18 @@ void DefectDetection::Preprocess(const Mat& src, Mat& dst) const
     GaussianBlur(dst, dst, Size(3, 3), 0.5);
 }
 
-// ---------------------------------------------------------------------------
-// ChannelStatsAndHist
-// 功能：对单通道图像计算均值、标准差及归一化直方图（histBins）
-// 输入：ch - 单通道图像（CV_8U 或 CV_32F）
-// 输出：outFeatures - 追加均值、方差及直方图值
-// 返回：无（结果通过 outFeatures 追加）
-// 复杂度：O(N + B)（N = 像素数, B = 直方图 bin 数）
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// 通道统计和直方图计算实现
+// ===========================================================================
+
+/**
+ * @brief 通道统计和直方图计算实现
+ * @param ch 单通道图像（CV_8U 或 CV_32F）
+ * @param outFeatures 追加均值、方差及直方图值
+ * @param histBins 直方图bin数
+ * @details 对单通道图像计算均值、标准差及归一化直方图
+ * @note 复杂度：O(N + B)（N = 像素数, B = 直方图 bin 数）
+ */
 void DefectDetection::ChannelStatsAndHist(const Mat& ch, vector<float>& outFeatures, int histBins) const
 {
     CV_Assert(ch.type() == CV_8U || ch.type() == CV_32F);
@@ -136,13 +158,17 @@ void DefectDetection::ChannelStatsAndHist(const Mat& ch, vector<float>& outFeatu
     }
 }
 
-// ---------------------------------------------------------------------------
-// FitPCA
-// 功能：对输入样本做 PCA 训练（DATA_AS_ROW 模式）
-// 输入：samples - 每行一个样本，类型 CV_32F
-// retainedComponents - 要保留的主成分数量
-// 复杂度：O(M*N^2)（视矩阵大小而定，M 为样本数，N 为特征维度）
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// PCA训练实现
+// ===========================================================================
+
+/**
+ * @brief PCA训练实现
+ * @param samples 每行一个样本，类型 CV_32F
+ * @param retainedComponents 要保留的主成分数量
+ * @details 对输入样本做 PCA 训练（DATA_AS_ROW 模式）
+ * @note 复杂度：O(M*N^2)（视矩阵大小而定，M 为样本数，N 为特征维度）
+ */
 void DefectDetection::FitPCA(const Mat& samples, int retainedComponents)
 {
     CV_Assert(samples.type() == CV_32F);
@@ -151,7 +177,11 @@ void DefectDetection::FitPCA(const Mat& samples, int retainedComponents)
     m_pca = PCA(samples, Mat(), PCA::DATA_AS_ROW, m_pcaDim);
 }
 
-// 基于累计解释方差自动选择主成分并训练 PCA
+/**
+ * @brief 基于累计解释方差自动选择主成分并训练 PCA
+ * @param samples 训练样本
+ * @param varianceThreshold 方差阈值
+ */
 void DefectDetection::FitPCAByVariance(const Mat& samples, double varianceThreshold)
 {
     CV_Assert(samples.type() == CV_32F);
@@ -271,12 +301,15 @@ void DefectDetection::FitPCAByVariance(const Mat& samples, double varianceThresh
 }
 
 
-// ---------------------------------------------------------------------------
-// ProjectPCA
-// 功能：将单样本投影到已训练 PCA 子空间
-// 输入：sample - 1xN 行向量（CV_32F）
-// 返回：投影后的行向量（CV_32F），如果未训练 PCA 则返回输入的克隆
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// PCA投影实现
+// ===========================================================================
+
+/**
+ * @brief PCA投影实现
+ * @param sample 1xN 行向量（CV_32F）
+ * @return 投影后的行向量（CV_32F），如果未训练 PCA 则返回输入的克隆
+ */
 Mat DefectDetection::ProjectPCA(const Mat& sample) const
 {
     Mat input = sample;
@@ -297,13 +330,18 @@ Mat DefectDetection::ProjectPCA(const Mat& sample) const
 }
 
 
-// ---------------------------------------------------------------------------
-// TrainSVM
-// 功能：训练 SVM 分类器；若已经 FitPCA 则先投影到 PCA 子空间
-// 输入：samples（每行一个样本 CV_32F），labels（单列 CV_32S）
-// 返回：训练成功与否
-// 复杂度：依赖于 SVM 内部实现（核函数、样本数、维度）
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// SVM训练实现
+// ===========================================================================
+
+/**
+ * @brief SVM训练实现
+ * @param samples 每行一个样本 CV_32F
+ * @param labels 单列 CV_32S
+ * @return 训练成功与否
+ * @details 训练 SVM 分类器；若已经 FitPCA 则先投影到 PCA 子空间
+ * @note 复杂度：依赖于 SVM 内部实现（核函数、样本数、维度）
+ */
 bool DefectDetection::TrainSVM(const Mat& samples, const Mat& labels)
 {
     CV_Assert(!samples.empty());
@@ -339,12 +377,16 @@ bool DefectDetection::TrainSVM(const Mat& samples, const Mat& labels)
 }
 
 
-// ---------------------------------------------------------------------------
-// Predict
-// 功能：对单样本进行预测，返回整型标签（例如 0/1）
-// 输入：sample - 1xN 行向量（CV_32F 或可转换）
-// 注意：如果训练时使用了 PCA，该方法会对输入先执行 PCA 投影
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// 预测实现
+// ===========================================================================
+
+/**
+ * @brief 预测实现
+ * @param sample 1xN 行向量（CV_32F 或可转换）
+ * @return 整型标签（例如 0/1）
+ * @note 如果训练时使用了 PCA，该方法会对输入先执行 PCA 投影
+ */
 int DefectDetection::Predict(const Mat& sample) const
 {
     Mat x = sample;
@@ -366,13 +408,17 @@ int DefectDetection::Predict(const Mat& sample) const
 }
 
 
-// ---------------------------------------------------------------------------
-// SaveModel
-// 功能：保存 SVM 模型和 PCA 参数到文件
-// - SVM 保存为 basePath_svm.yml（OpenCV SVM 自带序列化）
-// - PCA 参数以 FileStorage 保存 mean/eigenvectors/eigenvalues
-// 返回：保存成功/失败
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// 模型保存实现
+// ===========================================================================
+
+/**
+ * @brief 模型保存实现
+ * @param basePath 文件前缀
+ * @return 保存成功/失败
+ * @details SVM 保存为 basePath_svm.yml（OpenCV SVM 自带序列化）
+ *          PCA 参数以 FileStorage 保存 mean/eigenvectors/eigenvalues
+ */
 bool DefectDetection::SaveModel(const string& basePath) const
 {
     string svmFile = basePath + "_svm.yml";
@@ -407,11 +453,16 @@ bool DefectDetection::SaveModel(const string& basePath) const
 }
 
 
-// ---------------------------------------------------------------------------
-// LoadModel
-// 功能：从文件加载 SVM 与 PCA 参数
-// 注意：若文件不存在或读取失败则返回 false
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// 模型加载实现
+// ===========================================================================
+
+/**
+ * @brief 模型加载实现
+ * @param basePath 文件前缀
+ * @return 加载成功/失败
+ * @note 若文件不存在或读取失败则返回 false
+ */
 bool DefectDetection::LoadModel(const string& basePath)
 {
     string svmFile = basePath + "_svm.yml";
@@ -439,6 +490,16 @@ bool DefectDetection::LoadModel(const string& basePath)
     return true;
 }
 
+// ===========================================================================
+// 自动SVM训练实现
+// ===========================================================================
+
+/**
+ * @brief 自动SVM训练实现
+ * @param samples 训练样本
+ * @param labels 训练标签
+ * @return 训练成功与否
+ */
 bool DefectDetection::TrainSVMAuto(const Mat& samples, const Mat& labels)
 {
     CV_Assert(!samples.empty());
@@ -472,11 +533,15 @@ bool DefectDetection::TrainSVMAuto(const Mat& samples, const Mat& labels)
     return ok;
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // 模板法缺陷检测相关功能实现
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
-// 从当前帧设置模板
+/**
+ * @brief 从当前帧设置模板实现
+ * @param currentFrame 当前帧图像
+ * @return 设置成功返回true，失败返回false
+ */
 bool DefectDetection::SetTemplateFromCurrent(const Mat& currentFrame)
 {
     if (currentFrame.empty())
@@ -501,7 +566,11 @@ bool DefectDetection::SetTemplateFromCurrent(const Mat& currentFrame)
     return true;
 }
 
-// 从文件设置模板
+/**
+ * @brief 从文件设置模板实现
+ * @param filePath 模板图像文件路径
+ * @return 设置成功返回true，失败返回false
+ */
 bool DefectDetection::SetTemplateFromFile(const string& filePath)
 {
     Mat bgr = imread(filePath, IMREAD_COLOR);
@@ -519,7 +588,13 @@ bool DefectDetection::SetTemplateFromFile(const string& filePath)
     return true;
 }
 
-// 计算单应性矩阵（模板 <- 当前）
+/**
+ * @brief 计算单应性矩阵实现（模板 <- 当前）
+ * @param currentGray 当前灰度图像
+ * @param homography 输出的单应性矩阵
+ * @param debugMatches 调试用的匹配点（可选）
+ * @return 计算成功返回true，失败返回false
+ */
 bool DefectDetection::ComputeHomography(const Mat& currentGray, Mat& homography, vector<DMatch>* debugMatches)
 {
     if (!m_hasTemplate || m_templateGray.empty())
@@ -596,7 +671,15 @@ bool DefectDetection::ComputeHomography(const Mat& currentGray, Mat& homography,
     return true;
 }
 
-// 并行处理轮廓的函数
+/**
+ * @brief 并行处理轮廓的函数
+ * @param contour 输入轮廓
+ * @param inverseHomography 逆单应性矩阵
+ * @param imageSize 图像尺寸
+ * @param minArea 最小面积阈值
+ * @param result 结果容器
+ * @param mtx 互斥锁
+ */
 void ProcessContourParallel(const vector<Point>& contour, const Mat& inverseHomography, 
                            const Size& imageSize, double minArea, vector<Rect>& result, mutex& mtx)
 {
@@ -639,7 +722,13 @@ void ProcessContourParallel(const vector<Point>& contour, const Mat& inverseHomo
     }
 }
 
-// 并行计算LBP的函数
+/**
+ * @brief 并行计算LBP的函数
+ * @param gray 灰度图像
+ * @param lbp LBP结果矩阵
+ * @param startRow 起始行
+ * @param endRow 结束行
+ */
 void ComputeLBPParallel(const Mat& gray, Mat& lbp, int startRow, int endRow)
 {
     for (int y = startRow; y < endRow; ++y)
@@ -661,7 +750,15 @@ void ComputeLBPParallel(const Mat& gray, Mat& lbp, int startRow, int endRow)
     }
 }
 
-// 并行计算LBP直方图
+// ===========================================================================
+// LBP直方图计算实现
+// ===========================================================================
+
+/**
+ * @brief LBP直方图计算实现
+ * @param gray 灰度图像
+ * @return LBP直方图
+ */
 Mat DefectDetection::ComputeLBPHist(const Mat& gray) const
 {
     CV_Assert(gray.channels() == 1);
@@ -700,7 +797,13 @@ Mat DefectDetection::ComputeLBPHist(const Mat& gray) const
     return hist;
 }
 
-// 并行处理多通道统计特征
+/**
+ * @brief 并行处理多通道统计特征
+ * @param channel 输入通道
+ * @param results 结果容器
+ * @param histBins 直方图bin数
+ * @param mtx 互斥锁
+ */
 void ProcessChannelStatsParallel(const Mat& channel, vector<float>& results, int histBins, mutex& mtx)
 {
     Mat tmp;
@@ -736,7 +839,15 @@ void ProcessChannelStatsParallel(const Mat& channel, vector<float>& results, int
     results.insert(results.end(), channelFeatures.begin(), channelFeatures.end());
 }
 
-// 优化后的特征提取函数
+// ===========================================================================
+// 特征提取实现
+// ===========================================================================
+
+/**
+ * @brief 特征提取实现
+ * @param src 输入图像
+ * @return 特征向量
+ */
 Mat DefectDetection::ExtractFeatures(const Mat& src) const
 {
     CV_Assert(!src.empty());
@@ -795,7 +906,17 @@ Mat DefectDetection::ExtractFeatures(const Mat& src) const
     return featMat;
 }
 
-// 优化后的缺陷检测函数（并行版本）
+// ===========================================================================
+// 缺陷检测实现
+// ===========================================================================
+
+/**
+ * @brief 缺陷检测实现（并行版本）
+ * @param currentBGR 当前BGR图像
+ * @param homography 单应性矩阵
+ * @param debugMask 调试用的差异掩码（可选）
+ * @return 检测到的缺陷外接框列表
+ */
 vector<Rect> DefectDetection::DetectDefects(const Mat& currentBGR, const Mat& homography, Mat* debugMask)
 {
     vector<Rect> defectBoxes;
@@ -868,6 +989,14 @@ vector<Rect> DefectDetection::DetectDefects(const Mat& currentBGR, const Mat& ho
     return defectBoxes;
 }
 
+// ===========================================================================
+// PCA解释方差获取实现
+// ===========================================================================
+
+/**
+ * @brief PCA解释方差获取实现
+ * @return 每个主成分的 (explained_variance, cumulative_variance)
+ */
 std::vector<std::pair<double,double>> DefectDetection::GetPCAExplainedVariance() const
 {
     std::vector<std::pair<double,double>> res;
