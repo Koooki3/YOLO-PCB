@@ -1,52 +1,43 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
-
-// Qt 核心库
 #include <QMessageBox>
 #include <QStyleFactory>
 #include <QTextCodec>
+#include <stdio.h>
+#include <ctime>
 #include <QDir>
 #include <QDateTime>
 #include <QImage>
+#include <cstdlib>
 #include <QStandardPaths>
 #include <QFile>
 #include <QScrollBar>
+#include <memory>
+#include "DIP.h"
 #include <QPointF>
+#include <vector>
+#include <iostream>
+#include <iomanip>
+#include <cmath>
+#include <algorithm>
+#include "eigen3/Eigen/Dense"
 #include <QPainter>
 #include <QFont>
 #include <QFontMetrics>
 #include <QDesktopServices>
 #include <QUrl>
 #include <QCoreApplication>
-#include <QPainterPath>
-#include <QElapsedTimer>
-#include <QTextStream>
-
-// 标准库
-#include <stdio.h>
-#include <ctime>
-#include <cstdlib>
-#include <vector>
-#include <iostream>
-#include <iomanip>
-#include <cmath>
-#include <algorithm>
-#include <string.h>
-#include <memory>
-
-// 第三方库
-#include "eigen3/Eigen/Dense"
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
-
-// 项目自定义库
-#include "DIP.h"
+#include <string.h>
+#include <QPainterPath>
+#include <QElapsedTimer>
+#include <QTextStream>
 #include "Undistort.h"
 #include "DefectDetection.h"
 
-// 日志类型定义
 #define ERROR 2
 #define WARNNING 1
 #define INFO 0
@@ -89,28 +80,22 @@ MainWindow::MainWindow(QWidget *parent) :
     m_cpuLabel = new QLabel(this);
     m_memLabel = new QLabel(this);
     m_tempLabel = new QLabel(this);
-    m_threadLabel = new QLabel(this);
     m_sharpnessLabel = new QLabel(this);
 
     // 初始化缺陷检测库
     m_defectDetection = new DefectDetection();
-
-    // 初始化实时检测状态
-    m_realTimeDetectionRunning = false;
 
     // 设置标签样式
     QString labelStyle = "QLabel { color: white; background-color: rgba(0, 0, 0, 150); padding: 5px; border-radius: 5px; }";
     m_cpuLabel->setStyleSheet(labelStyle);
     m_memLabel->setStyleSheet(labelStyle);
     m_tempLabel->setStyleSheet(labelStyle);
-    m_threadLabel->setStyleSheet(labelStyle);
     m_sharpnessLabel->setStyleSheet(labelStyle);
 
     // 添加标签到状态栏
     statusBar()->addWidget(m_cpuLabel);
     statusBar()->addWidget(m_memLabel);
     statusBar()->addWidget(m_tempLabel);
-    statusBar()->addWidget(m_threadLabel);
     statusBar()->addWidget(m_sharpnessLabel);
 
     // 连接监控信号
@@ -2537,11 +2522,8 @@ QMutex m_realTimeDetectionMutex;
 // 实时检测线程函数
 void MainWindow::RealTimeDetectionThread()
 {
-    AppendLog("实时检测线程已启动", INFO);
-    
     while (true)
     {
-        // 检查是否需要退出
         {
             QMutexLocker locker(&m_realTimeDetectionMutex);
             if (!m_realTimeDetectionRunning)
@@ -2583,8 +2565,8 @@ void MainWindow::RealTimeDetectionThread()
         }
 
         // 在图像上显示检测信息
-        QString infoText = QString("实时检测 - 缺陷数: %1").arg(boxes.size());
-        putText(draw, infoText.toStdString(), Point(10, 30), FONT_HERSHEY_SIMPLEX, 0.8, Scalar(0, 255, 0), 2);
+        QString infoText = QString("REALTIME DETECTION - DEFECTS: %1").arg(boxes.size());
+        putText(draw, infoText.toStdString(), Point(100, 150), FONT_HERSHEY_SIMPLEX, 4, Scalar(0, 255, 0), 10);
 
         // 展示到 widgetDisplay_2
         QPixmap pm = MatToQPixmap(draw);
@@ -2600,8 +2582,6 @@ void MainWindow::RealTimeDetectionThread()
 
         QThread::msleep(33); // 约30fps
     }
-    
-    AppendLog("实时检测线程已退出", INFO);
 }
 
 // 开始实时检测
@@ -2623,24 +2603,6 @@ void MainWindow::StartRealTimeDetection()
     thread->start();
 
     AppendLog("实时缺陷检测已启动", INFO);
-}
-
-// 停止实时检测
-void MainWindow::StopRealTimeDetection()
-{
-    {
-        QMutexLocker locker(&m_realTimeDetectionMutex);
-        if (!m_realTimeDetectionRunning)
-        {
-            AppendLog("实时检测未在运行", WARNNING);
-            return;
-        }
-        m_realTimeDetectionRunning = false;
-    }
-    
-    // 等待线程安全退出
-    QThread::msleep(100);
-    AppendLog("实时缺陷检测已停止", INFO);
 }
 
 // 缺陷检测按钮
