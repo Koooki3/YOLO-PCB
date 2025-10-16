@@ -1,3 +1,9 @@
+/**
+ * @file SystemMonitor.cpp
+ * @brief 系统监控类实现文件
+ * @details 实现系统CPU、内存和温度的监控功能
+ */
+
 #include "SystemMonitor.h"
 #include <QDebug>
 #include <QProcess>
@@ -45,18 +51,18 @@ void SystemMonitor::stopMonitoring()
 float SystemMonitor::GetCpuUsage()
 {
     // 变量定义
-    ifstream statFile;               // /proc/stat 文件流
-    string line;                     // 读取的文件行内容
-    istringstream iss;               // 字符串流用于解析数据
-    string cpu;                      // CPU标识符
-    unsigned long long totalUser;    // 用户态CPU时间
-    unsigned long long totalUserLow; // 低优先级用户态CPU时间
-    unsigned long long totalSys;     // 内核态CPU时间
-    unsigned long long totalIdle;    // 空闲CPU时间
-    unsigned long long iowait;       // I/O等待时间
-    unsigned long long irq;          // 中断时间
-    unsigned long long softirq;      // 软中断时间
-    unsigned long long steal;        // 虚拟化环境中的steal时间
+    ifstream statFile;               ///< /proc/stat 文件流
+    string line;                     ///< 读取的文件行内容
+    istringstream iss;               ///< 字符串流用于解析数据
+    string cpu;                      ///< CPU标识符
+    unsigned long long totalUser;    ///< 用户态CPU时间
+    unsigned long long totalUserLow; ///< 低优先级用户态CPU时间
+    unsigned long long totalSys;     ///< 内核态CPU时间
+    unsigned long long totalIdle;    ///< 空闲CPU时间
+    unsigned long long iowait;       ///< I/O等待时间
+    unsigned long long irq;          ///< 中断时间
+    unsigned long long softirq;      ///< 软中断时间
+    unsigned long long steal;        ///< 虚拟化环境中的steal时间
 
     // 直接尝试读取/proc/stat，不管是什么平台
     statFile.open("/proc/stat");
@@ -96,8 +102,7 @@ float SystemMonitor::GetCpuUsage()
         unsigned long long idleTimeDelta = totalIdle - m_lastTotalIdle;
         
         // 计算总的时间差
-        unsigned long long totalDelta = userTimeDelta + userLowDelta + 
-                                      sysTimeDelta + idleTimeDelta;
+        unsigned long long totalDelta = userTimeDelta + userLowDelta + sysTimeDelta + idleTimeDelta;
         
         // 计算CPU使用率
         float cpuUsage = 0.0f;
@@ -122,11 +127,11 @@ float SystemMonitor::GetCpuUsage()
 float SystemMonitor::GetMemoryUsage()
 {
     // 变量定义
-    unsigned long totalMem = 0;    // 总内存大小 (KB) 
-    unsigned long freeMem = 0;     // 空闲内存大小 (KB) 
-    unsigned long buffers = 0;     // 缓冲区大小 (KB) 
-    unsigned long cached = 0;      // 缓存大小 (KB) 
-    string line;                   // 读取的每行数据
+    unsigned long totalMem = 0;    ///< 总内存大小 (KB)
+    unsigned long freeMem = 0;     ///< 空闲内存大小 (KB)
+    unsigned long buffers = 0;     ///< 缓冲区大小 (KB)
+    unsigned long cached = 0;      ///< 缓存大小 (KB)
+    string line;                   ///< 读取的每行数据
 
     // 尝试从/proc/meminfo读取内存信息
     ifstream memFile("/proc/meminfo");
@@ -163,7 +168,7 @@ float SystemMonitor::GetMemoryUsage()
         return 0.0f;
     }
 
-    // 计算实际使用的内存 (考虑缓存和缓冲区) 
+    // 计算实际使用的内存 (考虑缓存和缓冲区)
     unsigned long usedMem = totalMem - freeMem - buffers - cached;
     float memUsage = 100.0f * static_cast<float>(usedMem) / totalMem;
     
@@ -173,16 +178,16 @@ float SystemMonitor::GetMemoryUsage()
 float SystemMonitor::GetTemperature()
 {
     // 变量定义
-    QFile tempFile;                 // 温度文件对象
-    QString tempStr;                // 读取的温度字符串
-    bool ok;                        // 转换结果标志
-    float tempValue;                // 温度值
+    QFile tempFile;                 ///< 温度文件对象
+    QString tempStr;                ///< 读取的温度字符串
+    bool ok;                        ///< 转换结果标志
+    float tempValue;                ///< 温度值
 
     // 尝试多个可能的温度传感器路径
     QStringList tempPaths = {
-        "/sys/class/thermal/thermal_zone0/temp",  // 标准路径
-        "/sys/devices/virtual/thermal/thermal_zone0/temp", // 虚拟设备路径
-        "/sys/class/hwmon/hwmon0/temp1_input"    // hwmon路径
+        "/sys/class/thermal/thermal_zone0/temp",  ///< 标准路径
+        "/sys/devices/virtual/thermal/thermal_zone0/temp", ///< 虚拟设备路径
+        "/sys/class/hwmon/hwmon0/temp1_input"    ///< hwmon路径
     };
 
     // 遍历所有可能的温度传感器路径
@@ -237,6 +242,89 @@ float SystemMonitor::GetTemperature()
     return 0.0f;
 }
 
+bool SystemMonitor::GetThreadInfo(int &totalThreads, int &activeThreads)
+{
+    // 初始化返回值
+    totalThreads = 0;
+    activeThreads = 0;
+
+    // 方法1: 通过/proc/stat获取系统总线程数
+    ifstream statFile("/proc/stat");
+    if (statFile.is_open()) 
+    {
+        string line;
+        while (getline(statFile, line)) 
+        {
+            if (line.find("procs_running") != string::npos) 
+            {
+                istringstream iss(line);
+                string key;
+                iss >> key >> activeThreads;
+            }
+            else if (line.find("processes") != string::npos) 
+            {
+                istringstream iss(line);
+                string key;
+                iss >> key >> totalThreads;
+            }
+        }
+        statFile.close();
+        
+        if (totalThreads > 0 && activeThreads > 0) 
+        {
+            return true;
+        }
+    }
+
+    // 方法2: 通过系统命令获取线程信息
+    QProcess process;
+    process.start("sh", QStringList() << "-c" << "ps -eLf | wc -l");
+    process.waitForFinished(1000);
+    
+    if (process.exitCode() == 0) 
+    {
+        QString output = process.readAllStandardOutput().trimmed();
+        bool ok;
+        int threadCount = output.toInt(&ok);
+        
+        if (ok && threadCount > 0) 
+        {
+            totalThreads = threadCount - 1; // 减去标题行
+            activeThreads = totalThreads;   // 简化处理，假设所有线程都活跃
+            return true;
+        }
+    }
+
+    // 方法3: 通过/proc文件系统统计线程
+    QDir procDir("/proc");
+    QStringList processDirs = procDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    
+    int threadCount = 0;
+    for (const QString& dir : processDirs) 
+    {
+        bool isPid;
+        dir.toInt(&isPid);
+        if (isPid) 
+        {
+            QDir taskDir(QString("/proc/%1/task").arg(dir));
+            if (taskDir.exists()) 
+            {
+                threadCount += taskDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot).count();
+            }
+        }
+    }
+    
+    if (threadCount > 0) 
+    {
+        totalThreads = threadCount;
+        activeThreads = threadCount; // 简化处理
+        return true;
+    }
+
+    qDebug() << "Can't get thread information";
+    return false;
+}
+
 void SystemMonitor::updateSystemStats()
 {
     // 获取系统状态数据
@@ -244,6 +332,18 @@ void SystemMonitor::updateSystemStats()
     float memUsage = GetMemoryUsage();
     float temperature = GetTemperature();
     
+    // 获取线程信息
+    int totalThreads = 0;
+    int activeThreads = 0;
+    bool threadInfoAvailable = GetThreadInfo(totalThreads, activeThreads);
+    
+    // 如果无法获取线程信息，使用默认值
+    if (!threadInfoAvailable) 
+    {
+        totalThreads = 0;
+        activeThreads = 0;
+    }
+    
     // 发送系统状态更新信号
-    emit systemStatsUpdated(cpuUsage, memUsage, temperature);
+    emit systemStatsUpdated(cpuUsage, memUsage, temperature, totalThreads, activeThreads);
 }

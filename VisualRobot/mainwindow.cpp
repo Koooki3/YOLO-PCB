@@ -1,43 +1,52 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+
+// Qt 核心库
 #include <QMessageBox>
 #include <QStyleFactory>
 #include <QTextCodec>
-#include <stdio.h>
-#include <ctime>
 #include <QDir>
 #include <QDateTime>
 #include <QImage>
-#include <cstdlib>
 #include <QStandardPaths>
 #include <QFile>
 #include <QScrollBar>
-#include <memory>
-#include "DIP.h"
 #include <QPointF>
-#include <vector>
-#include <iostream>
-#include <iomanip>
-#include <cmath>
-#include <algorithm>
-#include "eigen3/Eigen/Dense"
 #include <QPainter>
 #include <QFont>
 #include <QFontMetrics>
 #include <QDesktopServices>
 #include <QUrl>
 #include <QCoreApplication>
+#include <QPainterPath>
+#include <QElapsedTimer>
+#include <QTextStream>
+
+// 标准库
+#include <stdio.h>
+#include <ctime>
+#include <cstdlib>
+#include <vector>
+#include <iostream>
+#include <iomanip>
+#include <cmath>
+#include <algorithm>
+#include <string.h>
+#include <memory>
+
+// 第三方库
+#include "eigen3/Eigen/Dense"
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
-#include <string.h>
-#include <QPainterPath>
-#include <QElapsedTimer>
-#include <QTextStream>
+
+// 项目自定义库
+#include "DIP.h"
 #include "Undistort.h"
 #include "DefectDetection.h"
 
+// 日志类型定义
 #define ERROR 2
 #define WARNNING 1
 #define INFO 0
@@ -80,6 +89,7 @@ MainWindow::MainWindow(QWidget *parent) :
     m_cpuLabel = new QLabel(this);
     m_memLabel = new QLabel(this);
     m_tempLabel = new QLabel(this);
+    m_threadLabel = new QLabel(this);
     m_sharpnessLabel = new QLabel(this);
 
     // 初始化缺陷检测库
@@ -90,12 +100,14 @@ MainWindow::MainWindow(QWidget *parent) :
     m_cpuLabel->setStyleSheet(labelStyle);
     m_memLabel->setStyleSheet(labelStyle);
     m_tempLabel->setStyleSheet(labelStyle);
+    m_threadLabel->setStyleSheet(labelStyle);
     m_sharpnessLabel->setStyleSheet(labelStyle);
 
     // 添加标签到状态栏
     statusBar()->addWidget(m_cpuLabel);
     statusBar()->addWidget(m_memLabel);
     statusBar()->addWidget(m_tempLabel);
+    statusBar()->addWidget(m_threadLabel);
     statusBar()->addWidget(m_sharpnessLabel);
 
     // 连接监控信号
@@ -2524,12 +2536,10 @@ void MainWindow::RealTimeDetectionThread()
 {
     while (true)
     {
+        QMutexLocker locker(&m_realTimeDetectionMutex);
+        if (!m_realTimeDetectionRunning)
         {
-            QMutexLocker locker(&m_realTimeDetectionMutex);
-            if (!m_realTimeDetectionRunning)
-            {
-                break;
-            }
+            break;
         }
 
         // 取当前帧
@@ -2587,15 +2597,13 @@ void MainWindow::RealTimeDetectionThread()
 // 开始实时检测
 void MainWindow::StartRealTimeDetection()
 {
+    QMutexLocker locker(&m_realTimeDetectionMutex);
+    if (m_realTimeDetectionRunning)
     {
-        QMutexLocker locker(&m_realTimeDetectionMutex);
-        if (m_realTimeDetectionRunning)
-        {
-            AppendLog("实时检测已在运行", WARNNING);
-            return;
-        }
-        m_realTimeDetectionRunning = true;
+        AppendLog("实时检测已在运行", WARNNING);
+        return;
     }
+    m_realTimeDetectionRunning = true;
 
     // 启动实时检测线程
     QThread* thread = QThread::create([this]() { RealTimeDetectionThread(); });
