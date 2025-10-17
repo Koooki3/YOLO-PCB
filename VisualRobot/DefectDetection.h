@@ -62,6 +62,20 @@ public:
 	int GetORBFeaturesCount() const { return m_orbFeatures; }
 	bool HasTemplate() const { return m_hasTemplate; }
 
+	// 缺陷分类相关功能
+	// 加载模板库
+	bool LoadTemplateLibrary(const std::string& templateDir);
+	
+	// 对缺陷区域进行分类
+	std::string ClassifyDefect(const cv::Mat& defectROI) const;
+	
+	// 获取模板库信息
+	std::vector<std::string> GetTemplateNames() const;
+	
+	// 设置模板匹配阈值
+	void SetTemplateMatchThreshold(double threshold) { m_templateMatchThresh = threshold; }
+	double GetTemplateMatchThreshold() const { return m_templateMatchThresh; }
+
 	// 图像预处理（色彩校正与去噪）
 	// 参数：
 	// - src: 输入 BGR 彩色图像（CV_8UC3 或可转换到该类型）
@@ -128,6 +142,12 @@ private:
 	double m_templateDiffThresh = 25.0; // 差异二值阈值
 	double m_minDefectArea = 1200;   // 最小缺陷面积
 	int m_orbFeatures = 1500;        // ORB特征点数量
+
+	// 缺陷分类相关成员变量
+	std::vector<cv::Mat> m_templateImages;    // 模板图像
+	std::vector<std::string> m_templateNames; // 模板名称（文件名）
+	double m_templateMatchThresh = 0.6;       // 模板匹配阈值
+	bool m_templateLibraryLoaded = false;     // 模板库是否已加载
 
 public:
 	// 使用 OpenCV 的 trainAuto 自动搜索 SVM 超参数并训练（内部使用交叉验证）

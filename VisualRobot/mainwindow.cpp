@@ -84,6 +84,18 @@ MainWindow::MainWindow(QWidget *parent) :
 
     // 初始化缺陷检测库
     m_defectDetection = new DefectDetection();
+    
+    // 加载缺陷分类模板库
+    if (m_defectDetection->LoadTemplateLibrary("../Img/Templates")) {
+        AppendLog("缺陷分类模板库加载成功", INFO);
+        auto templateNames = m_defectDetection->GetTemplateNames();
+        AppendLog(QString("加载的模板类型: %1").arg(templateNames.size()), INFO);
+        for (const auto& name : templateNames) {
+            AppendLog(QString("模板: %1").arg(QString::fromStdString(name)), INFO);
+        }
+    } else {
+        AppendLog("缺陷分类模板库加载失败", WARNNING);
+    }
 
     // 设置标签样式
     QString labelStyle = "QLabel { color: white; background-color: rgba(0, 0, 0, 150); padding: 5px; border-radius: 5px; }";
@@ -2559,9 +2571,37 @@ void MainWindow::RealTimeDetectionThread()
         
         // 绘制结果
         Mat draw = curBGR.clone();
-        for (auto& b : boxes) 
+        for (size_t i = 0; i < boxes.size(); ++i) 
         {
+            auto& b = boxes[i];
             rectangle(draw, b, Scalar(0,0,255), 2); // 红框
+            
+            // 对缺陷区域进行分类
+            Mat defectROI = curBGR(b);
+            std::string defectType = m_defectDetection->ClassifyDefect(defectROI);
+            
+            // 在缺陷框左上角显示缺陷类型
+            QString typeText = QString::fromStdString(defectType);
+            int fontFace = FONT_HERSHEY_SIMPLEX;
+            double fontScale = 0.6;
+            int thickness = 2;
+            int baseline = 0;
+            Size textSize = getTextSize(typeText.toStdString(), fontFace, fontScale, thickness, &baseline);
+            
+            // 计算文本位置（框内左上角）
+            Point textOrg(b.x + 5, b.y + textSize.height + 5);
+            
+            // 绘制半透明背景
+            rectangle(draw, 
+                     Point(b.x, b.y), 
+                     Point(b.x + textSize.width + 10, b.y + textSize.height + 10),
+                     Scalar(0, 0, 0), -1);
+            
+            // 绘制文本
+            putText(draw, typeText.toStdString(), textOrg, fontFace, fontScale, Scalar(0, 255, 0), thickness);
+            
+            // 记录分类结果
+            AppendLog(QString("缺陷框 %1: 类型=%2").arg(i+1).arg(typeText), INFO);
         }
 
         // 在图像上显示检测信息

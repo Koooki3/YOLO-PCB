@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 
 using namespace cv;
 using namespace cv::ml;
@@ -940,4 +941,107 @@ std::vector<std::pair<double,double>> DefectDetection::GetPCAExplainedVariance()
         res.emplace_back(explained, cumul);
     }
     return res;
+}
+
+// ---------------------------------------------------------------------------
+// 缺陷分类相关功能实现
+// ---------------------------------------------------------------------------
+
+// 加载模板库
+bool DefectDetection::LoadTemplateLibrary(const std::string& templateDir)
+{
+    m_templateImages.clear();
+    m_templateNames.clear();
+    
+    try {
+        // 遍历模板目录中的所有图像文件
+        for (const auto& entry : std::filesystem::directory_iterator(templateDir)) {
+            if (entry.is_regular_file()) {
+                std::string ext = entry.path().extension().string();
+                // 检查是否为图像文件
+                if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp") {
+                    // 读取模板图像
+                    Mat templateImg = imread(entry.path().string(), IMREAD_GRAYSCALE);
+                    if (!templateImg.empty()) {
+                        // 预处理模板图像
+                        GaussianBlur(templateImg, templateImg, Size(3,3), 0);
+                        
+                        // 保存模板图像和名称
+                        m_templateImages.push_back(templateImg);
+                        m_templateNames.push_back(entry.path().stem().string());
+                    }
+                }
+            }
+        }
+        
+        if (m_templateImages.empty()) {
+            return false;
+        }
+        
+        m_templateLibraryLoaded = true;
+        return true;
+        
+    } catch (const std::exception& e) {
+        return false;
+    }
+}
+
+// 对缺陷区域进行分类
+std::string DefectDetection::ClassifyDefect(const cv::Mat& defectROI) const
+{
+    if (!m_templateLibraryLoaded || m_templateImages.empty()) {
+        return "Unknown";
+    }
+    
+    if (defectROI.empty()) {
+        return "Unknown";
+    }
+    
+    // 预处理缺陷区域
+    Mat defectGray;
+    if (defectROI.channels() == 3) {
+        cvtColor(defectROI, defectGray, COLOR_BGR2GRAY);
+    } else {
+        defectGray = defectROI.clone();
+    }
+    GaussianBlur(defectGray, defectGray, Size(3,3), 0);
+    
+    double bestScore = -1.0;
+    int bestIndex = -1;
+    
+    // 与所有模板进行匹配
+    for (size_t i = 0; i < m_templateImages.size(); ++i) {
+        const Mat& templateImg = m_templateImages[i];
+        
+        // 调整缺陷区域大小以匹配模板
+        Mat defectResized;
+        resize(defectGray, defectResized, templateImg.size());
+        
+        // 使用模板匹配
+        Mat result;
+        matchTemplate(defectResized, templateImg, result, TM_CCOEFF_NORMED);
+        
+        double minVal, maxVal;
+        Point minLoc, maxLoc;
+        minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc);
+        
+        // 取最大相似度作为匹配分数
+        if (maxVal > bestScore) {
+            bestScore = maxVal;
+            bestIndex = static_cast<int>(i);
+        }
+    }
+    
+    // 检查是否超过阈值
+    if (bestIndex >= 0 && bestScore >= m_templateMatchThresh) {
+        return m_templateNames[bestIndex];
+    } else {
+        return "Unknown";
+    }
+}
+
+// 获取模板库信息
+std::vector<std::string> DefectDetection::GetTemplateNames() const
+{
+    return m_templateNames;
 }
