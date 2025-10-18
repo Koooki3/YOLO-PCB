@@ -2682,7 +2682,7 @@ void MainWindow::on_detect_clicked()
     }
     else if (clicked == singleButton)
     {
-        // 单次检测模式（原有逻辑）
+        // 单次检测模式（集成特征对齐）
         if (!m_defectDetection->HasTemplate()) 
         {
             AppendLog("尚未设置模板，请先设置模板。", WARNNING);
@@ -2700,25 +2700,49 @@ void MainWindow::on_detect_clicked()
             return;
         }
 
-        // 计算配准 H（模板 <- 当前）
-        Mat curGray;
-        cvtColor(curBGR, curGray, COLOR_BGR2GRAY);
-        GaussianBlur(curGray, curGray, cv::Size(3,3), 0);
-
+        // 使用特征对齐进行图像配准
+        QElapsedTimer alignTimer;
+        alignTimer.start();
+        
         Mat H;
-        if (!ComputeHomography(curGray, H))
+        if (!m_defectDetection->ComputeHomographyWithFeatureAlignment(curBGR, H))
         {
-            return;
+            AppendLog("特征对齐失败，使用传统方法", WARNNING);
+            // 回退到传统方法
+            Mat curGray;
+            cvtColor(curBGR, curGray, COLOR_BGR2GRAY);
+            GaussianBlur(curGray, curGray, cv::Size(3,3), 0);
+            
+            if (!ComputeHomography(curGray, H))
+            {
+                return;
+            }
+        }
+        else
+        {
+            AppendLog(QString("特征对齐成功，耗时: %1 ms").arg(alignTimer.elapsed()), INFO);
+        }
+
+        // 重构待检测图像（使用特征对齐后的变换矩阵）
+        Mat alignedBGR = m_defectDetection->AlignAndWarpImage(curBGR);
+        if (alignedBGR.empty())
+        {
+            AppendLog("图像重构失败，使用原始图像", WARNNING);
+            alignedBGR = curBGR.clone();
+        }
+        else
+        {
+            AppendLog("图像重构成功，已对齐到模板坐标系", INFO);
         }
 
         // 检测
         QElapsedTimer t; t.start();
         Mat dbgMask;
-        auto boxes = DetectDefects(curBGR, H, &dbgMask);
+        auto boxes = DetectDefects(alignedBGR, H, &dbgMask);
         AppendLog(QString("模板检测耗时: %1 ms, 候选缺陷框数: %2").arg(t.elapsed()).arg((int)boxes.size()), INFO);
 
-        // 绘制结果
-        Mat draw = curBGR.clone();
+        // 绘制结果（在重构后的图像上绘制）
+        Mat draw = alignedBGR.clone();
         for (auto& b : boxes) 
         {
             rectangle(draw, b, Scalar(0,0,255), 2); // 红框
@@ -2732,7 +2756,7 @@ void MainWindow::on_detect_clicked()
             QPixmap scaled = pm.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
             ui->widgetDisplay_2->setPixmap(scaled);
             ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
-            AppendLog("缺陷结果已显示。", INFO);
+            AppendLog("缺陷结果已显示（基于特征对齐重构图像）。", INFO);
         } 
         else 
         {

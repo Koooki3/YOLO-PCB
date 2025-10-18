@@ -226,8 +226,9 @@ cv::Mat FeatureAlignment::WarpImage(
     
     cv::Mat warpedImage;
     try {
+        // 使用白色背景填充空白区域
         cv::warpPerspective(srcImage, warpedImage, transformMatrix, dstSize,
-                           cv::INTER_LINEAR, cv::BORDER_CONSTANT);
+                           cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar(255, 255, 255));
     } catch (const cv::Exception& e) {
         qDebug() << "图像变换失败:" << e.what();
         return cv::Mat();
