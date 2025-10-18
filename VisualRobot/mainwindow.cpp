@@ -2732,41 +2732,122 @@ void MainWindow::on_detect_clicked()
         }
         else
         {
+            imwrite("../Img/alignedBGR.jpg", alignedBGR);
             AppendLog("图像重构成功，已对齐到模板坐标系", INFO);
         }
 
-        // 检测
-        QElapsedTimer t; t.start();
-        Mat dbgMask;
-        auto boxes = DetectDefects(alignedBGR, H, &dbgMask);
-        AppendLog(QString("模板检测耗时: %1 ms, 候选缺陷框数: %2").arg(t.elapsed()).arg((int)boxes.size()), INFO);
+        AppendLog("重构图像已保存: ../Img/alignedBGR.jpg", INFO);
 
-        // 绘制结果（在重构后的图像上绘制）
-        Mat draw = alignedBGR.clone();
-        for (auto& b : boxes) 
-        {
-            rectangle(draw, b, Scalar(0,0,255), 2); // 红框
+        // 步骤6: 从文件重新读取模板图和重构图像进行缺陷检测
+        AppendLog("步骤6: 从文件重新读取图像进行缺陷检测...", INFO);
+        
+        // 读取模板图像
+        Mat templateBGR = imread("../Img/templateBGR.jpg");
+        if (templateBGR.empty()) {
+            AppendLog("错误: 无法加载模板图像: ../Img/templateBGR.jpg", ERROR);
+            return;
+        }
+        AppendLog("模板图像加载成功", INFO);
+        
+        // 读取重构后的待检测图像
+        Mat testImage = imread("../Img/alignedBGR.jpg");
+        if (testImage.empty()) {
+            AppendLog("错误: 无法加载待检测图像: ../Img/alignedBGR.jpg", ERROR);
+            return;
+        }
+        AppendLog("待检测图像加载成功", INFO);
+
+        // 创建新的缺陷检测对象进行独立检测
+        DefectDetection fileDetector;
+        
+        // 设置模板
+        if (!fileDetector.SetTemplateFromFile("../Img/templateBGR.jpg")) {
+            AppendLog("错误: 无法设置模板图像", ERROR);
+            return;
+        }
+        AppendLog("模板设置成功", INFO);
+
+        // 使用ORB方法计算单应性矩阵
+        QElapsedTimer orbTimer;
+        orbTimer.start();
+        
+        Mat testGray;
+        cvtColor(testImage, testGray, COLOR_BGR2GRAY);
+        GaussianBlur(testGray, testGray, cv::Size(3,3), 0);
+        
+        Mat fileHomography;
+        vector<DMatch> fileDebugMatches;
+        if (!fileDetector.ComputeHomography(testGray, fileHomography, &fileDebugMatches)) {
+            AppendLog("ORB方法配准失败，无法进行缺陷检测", ERROR);
+            return;
+        }
+        AppendLog(QString("ORB方法配准成功，耗时: %1 ms，匹配点数量: %2").arg(orbTimer.elapsed()).arg(fileDebugMatches.size()), INFO);
+
+        // 缺陷检测
+        QElapsedTimer detectTimer;
+        detectTimer.start();
+        Mat fileDebugMask;
+        auto boxes = fileDetector.DetectDefects(testImage, fileHomography, &fileDebugMask);
+        AppendLog(QString("基于模板的缺陷检测耗时: %1 ms，检测到缺陷框数: %2").arg(detectTimer.elapsed()).arg((int)boxes.size()), INFO);
+
+        // 绘制检测结果
+        Mat resultImage = testImage.clone();
+        for (size_t i = 0; i < boxes.size(); i++) {
+            Rect rect = boxes[i];
+            
+            // 绘制缺陷框
+            rectangle(resultImage, rect, Scalar(0, 0, 255), 2);
+            
+            // 绘制缺陷类型标签
+            string label = "Defect";
+            
+            int baseline = 0;
+            Size textSize = getTextSize(label, FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
+            
+            // 在框上方绘制标签背景
+            rectangle(resultImage, 
+                     Point(rect.x, rect.y - textSize.height - 5),
+                     Point(rect.x + textSize.width, rect.y),
+                     Scalar(0, 0, 255),
+                     FILLED);
+            
+            // 绘制标签文本
+            putText(resultImage, label, 
+                    Point(rect.x, rect.y - 5),
+                    FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 255), 1);
         }
 
-        // 展示到 widgetDisplay_2
-        QPixmap pm = MatToQPixmap(draw);
+        // 保存结果图像
+        imwrite("../Img/detection_result.jpg", resultImage);
+        AppendLog("检测结果已保存: ../Img/detection_result.jpg", INFO);
+
+        // 显示结果
+        QPixmap pm = MatToQPixmap(resultImage);
         if (!pm.isNull()) 
         {
             // 自适应显示
             QPixmap scaled = pm.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
             ui->widgetDisplay_2->setPixmap(scaled);
             ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
-            AppendLog("缺陷结果已显示（基于特征对齐重构图像）。", INFO);
+            AppendLog("缺陷结果已显示（基于文件读取的模板和重构图像）。", INFO);
         } 
         else 
         {
             AppendLog("显示失败: QPixmap 为空。", ERROR);
         }
 
+        // 输出检测统计信息
+        AppendLog("=== 检测统计 ===", INFO);
+        AppendLog("模板图像: ../Img/templateBGR.jpg", INFO);
+        AppendLog("测试图像: ../Img/alignedBGR.jpg", INFO);
+        AppendLog(QString("检测到的缺陷数量: %1").arg(boxes.size()), INFO);
+        AppendLog(QString("最小缺陷面积: %1").arg(fileDetector.GetMinDefectArea()), INFO);
+        AppendLog(QString("差异阈值: %1").arg(fileDetector.GetTemplateDiffThreshold()), INFO);
+
         // 日志每个框
         for (size_t i=0; i<boxes.size(); ++i) 
         {
-            AppendLog(QString("缺陷框 %1: (x=%2, y=%3, w=%4, h=%5)").arg(i+1).arg(boxes[i].x).arg(boxes[i].y).arg(boxes[i].width).arg(boxes[i].height), INFO);
+            AppendLog(QString("缺陷框 %1: (x=%2, y=%3, w=%4, h=%5) 面积: %6").arg(i+1).arg(boxes[i].x).arg(boxes[i].y).arg(boxes[i].width).arg(boxes[i].height).arg(boxes[i].area()), INFO);
         }
 
         // 如需同时叠加尺寸/角度的浮窗，可复用已有的 drawOverlayOnDisplay2()
