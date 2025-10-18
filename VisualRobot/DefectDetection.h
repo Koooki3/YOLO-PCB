@@ -30,6 +30,7 @@
 #include <future>
 #include <mutex>
 #include <atomic>
+#include "FeatureAlignment.h"
 
 using namespace cv;
 using namespace cv::ml;
@@ -61,6 +62,18 @@ public:
 	double GetMinDefectArea() const { return m_minDefectArea; }
 	int GetORBFeaturesCount() const { return m_orbFeatures; }
 	bool HasTemplate() const { return m_hasTemplate; }
+
+	// 特征对齐相关配置
+	void SetUseFeatureAlignment(bool use) { m_useFeatureAlignment = use; }
+	void SetMinInliersForAlignment(int minInliers) { m_minInliersForAlignment = minInliers; }
+	bool GetUseFeatureAlignment() const { return m_useFeatureAlignment; }
+	int GetMinInliersForAlignment() const { return m_minInliersForAlignment; }
+	
+	// 使用特征对齐进行图像配准
+	bool ComputeHomographyWithFeatureAlignment(const cv::Mat& currentBGR, cv::Mat& homography);
+	
+	// 使用特征对齐重构图像
+	cv::Mat AlignAndWarpImage(const cv::Mat& currentBGR);
 
 	// 缺陷分类相关功能
 	// 加载模板库
@@ -142,6 +155,12 @@ private:
 	double m_templateDiffThresh = 25.0; // 差异二值阈值
 	double m_minDefectArea = 1200;   // 最小缺陷面积
 	int m_orbFeatures = 1500;        // ORB特征点数量
+
+	// 特征对齐相关成员变量
+	FeatureAlignment* m_featureAlignment; // 特征对齐对象
+	Mat m_templateBGR;               // 模板BGR图像（用于特征对齐）
+	bool m_useFeatureAlignment = true; // 是否使用特征对齐
+	int m_minInliersForAlignment = 10; // 特征对齐所需最小内点数量
 
 	// 缺陷分类相关成员变量
 	std::vector<cv::Mat> m_templateImages;    // 模板图像
