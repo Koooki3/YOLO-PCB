@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <QDebug>
 
 using namespace cv;
 using namespace cv::ml;
@@ -60,6 +61,7 @@ static Mat applyStandardize(const Mat& samples, const Mat& mean, const Mat& stdv
 // 构造函数：初始化成员变量
 // - 初始化默认的 SVM（C_SVC, RBF），并设置终止准则
 // - 初始化 PCA 保留维度为 32（可通过 SetPCADim 修改）
+// - 初始化特征对齐对象
 // 复杂度：O(1)
 // ---------------------------------------------------------------------------
 DefectDetection::DefectDetection()
@@ -70,6 +72,9 @@ DefectDetection::DefectDetection()
     m_svm->setType(SVM::C_SVC);
     m_svm->setKernel(SVM::RBF);
     m_svm->setTermCriteria(TermCriteria(TermCriteria::MAX_ITER + TermCriteria::EPS, 1000, 1e-6));
+    
+    // 初始化特征对齐对象
+    m_featureAlignment = new FeatureAlignment();
 }
 
 // ---------------------------------------------------------------------------
@@ -1044,4 +1049,131 @@ std::string DefectDetection::ClassifyDefect(const cv::Mat& defectROI) const
 std::vector<std::string> DefectDetection::GetTemplateNames() const
 {
     return m_templateNames;
+}
+
+// ---------------------------------------------------------------------------
+// 特征对齐相关功能实现
+// ---------------------------------------------------------------------------
+
+// 使用特征对齐进行图像配准
+bool DefectDetection::ComputeHomographyWithFeatureAlignment(const cv::Mat& currentBGR, cv::Mat& homography)
+{
+    if (!m_hasTemplate || m_templateBGR.empty()) {
+        qDebug() << "尚未设置模板或模板为空";
+        return false;
+    }
+
+    if (currentBGR.empty()) {
+        qDebug() << "当前图像为空";
+        return false;
+    }
+
+    // 设置对齐参数
+    AlignmentParams params;
+    params.minInliers = m_minInliersForAlignment;
+    params.enableParallel = true;
+    params.numThreads = 4;
+
+    // 使用快速对齐（匹配到足够内点时立即停止）
+    AlignmentResult result = m_featureAlignment->FastAlignImages(currentBGR, m_templateBGR, params);
+    
+    if (!result.success) {
+        qDebug() << "特征对齐失败，内点数量:" << result.inlierCount;
+        return false;
+    }
+
+    // 返回变换矩阵
+    homography = result.transformMatrix;
+    
+    qDebug() << "特征对齐成功 - 内点数量:" << result.inlierCount 
+             << "重投影误差:" << result.reprojectionError;
+    
+    return true;
+}
+
+// 使用特征对齐重构图像
+cv::Mat DefectDetection::AlignAndWarpImage(const cv::Mat& currentBGR)
+{
+    if (!m_hasTemplate || m_templateBGR.empty()) {
+        qDebug() << "尚未设置模板或模板为空";
+        return cv::Mat();
+    }
+
+    if (currentBGR.empty()) {
+        qDebug() << "当前图像为空";
+        return cv::Mat();
+    }
+
+    // 计算变换矩阵
+    cv::Mat homography;
+    if (!ComputeHomographyWithFeatureAlignment(currentBGR, homography)) {
+        qDebug() << "无法计算变换矩阵";
+        return cv::Mat();
+    }
+
+    // 重构图像
+    cv::Mat alignedImage = m_featureAlignment->WarpImage(currentBGR, homography, m_templateBGR.size());
+    
+    if (alignedImage.empty()) {
+        qDebug() << "图像重构失败";
+        return cv::Mat();
+    }
+
+    qDebug() << "图像重构成功，尺寸:" << alignedImage.cols << "x" << alignedImage.rows;
+    
+    return alignedImage;
+}
+
+// 修改SetTemplateFromCurrent方法，保存BGR模板
+bool DefectDetection::SetTemplateFromCurrent(const cv::Mat& currentFrame)
+{
+    if (currentFrame.empty())
+    {
+        return false;
+    }
+
+    Mat gray;
+    if (currentFrame.channels() == 3)
+    {
+        cvtColor(currentFrame, gray, COLOR_BGR2GRAY);
+    }
+    else
+    {
+        gray = currentFrame.clone();
+    }
+    
+    GaussianBlur(gray, gray, Size(3,3), 0);
+    m_templateGray = gray.clone();
+    
+    // 保存BGR模板用于特征对齐
+    if (currentFrame.channels() == 3) {
+        m_templateBGR = currentFrame.clone();
+    } else {
+        cvtColor(currentFrame, m_templateBGR, COLOR_GRAY2BGR);
+    }
+    
+    m_hasTemplate = true;
+
+    return true;
+}
+
+// 修改SetTemplateFromFile方法，保存BGR模板
+bool DefectDetection::SetTemplateFromFile(const std::string& filePath)
+{
+    Mat bgr = imread(filePath, IMREAD_COLOR);
+    if (bgr.empty())
+    {
+        return false;
+    }
+    
+    Mat gray;
+    cvtColor(bgr, gray, COLOR_BGR2GRAY);
+    GaussianBlur(gray, gray, Size(3,3), 0);
+    m_templateGray = gray.clone();
+    
+    // 保存BGR模板用于特征对齐
+    m_templateBGR = bgr.clone();
+    m_hasTemplate = true;
+
+    return true;
 }
