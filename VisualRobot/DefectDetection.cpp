@@ -1151,7 +1151,7 @@ bool DefectDetection::SetTemplateFromCurrent(const cv::Mat& currentFrame)
     } else {
         cvtColor(currentFrame, m_templateBGR, COLOR_GRAY2BGR);
     }
-    
+    imwrite("../Img/templateBGR.jpg", m_templateBGR); 
     m_hasTemplate = true;
 
     return true;
@@ -1174,6 +1174,7 @@ bool DefectDetection::SetTemplateFromFile(const std::string& filePath)
     // 保存BGR模板用于特征对齐
     m_templateBGR = bgr.clone();
     m_hasTemplate = true;
+    imwrite("../Img/templateBGR.jpg", m_templateBGR); 
 
     return true;
 }
