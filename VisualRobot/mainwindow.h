@@ -15,6 +15,7 @@
 #include "MvCameraControl.h"
 #include <opencv2/opencv.hpp>
 #include "DefectDetection.h"
+#include "FeatureAlignment.h"
 #include <QMutex>
 #include <QThread>
 
