@@ -482,49 +482,6 @@ bool DefectDetection::TrainSVMAuto(const Mat& samples, const Mat& labels)
 // 模板法缺陷检测相关功能实现
 // ---------------------------------------------------------------------------
 
-// 从当前帧设置模板
-bool DefectDetection::SetTemplateFromCurrent(const Mat& currentFrame)
-{
-    if (currentFrame.empty())
-    {
-        return false;
-    }
-
-    Mat gray;
-    if (currentFrame.channels() == 3)
-    {
-        cvtColor(currentFrame, gray, COLOR_BGR2GRAY);
-    }
-    else
-    {
-        gray = currentFrame.clone();
-    }
-    
-    GaussianBlur(gray, gray, Size(3,3), 0);
-    m_templateGray = gray.clone();
-    m_hasTemplate = true;
-
-    return true;
-}
-
-// 从文件设置模板
-bool DefectDetection::SetTemplateFromFile(const string& filePath)
-{
-    Mat bgr = imread(filePath, IMREAD_COLOR);
-    if (bgr.empty())
-    {
-        return false;
-    }
-    
-    Mat gray;
-    cvtColor(bgr, gray, COLOR_BGR2GRAY);
-    GaussianBlur(gray, gray, Size(3,3), 0);
-    m_templateGray = gray.clone();
-    m_hasTemplate = true;
-
-    return true;
-}
-
 // 计算单应性矩阵（模板 <- 当前）
 bool DefectDetection::ComputeHomography(const Mat& currentGray, Mat& homography, vector<DMatch>* debugMatches)
 {
