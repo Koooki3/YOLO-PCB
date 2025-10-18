@@ -18,11 +18,11 @@ struct FeatureParams
     bool useRansac = true;           // 是否使用RANSAC验证
 };
 
-class FeatureDetector
+class featureDetector
 {
 public:
-    FeatureDetector();
-    ~FeatureDetector();
+    featureDetector();
+    ~featureDetector();
 
     // 特征匹配和几何验证函数
     // 对特征匹配进行多阶段筛选，包括响应值筛选、比率测试和RANSAC几何验证

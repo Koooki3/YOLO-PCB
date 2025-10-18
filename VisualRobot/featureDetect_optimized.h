@@ -14,10 +14,10 @@
 #include <condition_variable>
 
 // 特征识别参数结构体
-struct FeatureParams
+struct FeatureParams_optimize
 {
-    float ratioThresh = 0.7f;        // SIFT匹配比率阈值
-    float responseThresh = 0.0f;      // 特征点响应值阈值
+    float ratioThresh = 0.85f;        // SIFT匹配比率阈值
+    float responseThresh = 0.1f;      // 特征点响应值阈值
     float ransacReprojThresh = 3.0f;  // RANSAC重投影阈值
     int minInliers = 10;             // 最小内点数量
     bool useRansac = true;           // 是否使用RANSAC验证
@@ -47,7 +47,7 @@ public:
         const std::vector<std::vector<cv::DMatch>>& knnMatches,
         std::vector<cv::Point2f>& points1,
         std::vector<cv::Point2f>& points2,
-        const FeatureParams& params);
+        const FeatureParams_optimize& params);
 
     // 并行特征检测测试函数
     static void TestFeatureDetectionParallel(const QString& imagePath1, const QString& imagePath2);
@@ -55,20 +55,20 @@ public:
     // 批量特征检测 - 并行处理多对图像
     static std::vector<ParallelResult> BatchFeatureDetection(
         const std::vector<std::pair<QString, QString>>& imagePairs,
-        const FeatureParams& params);
+        const FeatureParams_optimize& params);
 
     // 异步特征检测 - 非阻塞版本
     static std::future<ParallelResult> AsyncFeatureDetection(
         const QString& imagePath1, 
         const QString& imagePath2,
-        const FeatureParams& params);
+        const FeatureParams_optimize& params);
 
 private:
     // 并行处理函数
     static ParallelResult ProcessImagePair(
         const QString& imagePath1,
         const QString& imagePath2,
-        const FeatureParams& params);
+        const FeatureParams_optimize& params);
 
     // 并行特征点筛选
     static void ParallelKeypointFilter(
@@ -97,7 +97,7 @@ private:
         const std::vector<cv::DMatch>& goodMatches,
         std::vector<cv::Point2f>& points1,
         std::vector<cv::Point2f>& points2,
-        const FeatureParams& params);
+        const FeatureParams_optimize& params);
 
     // 线程池管理
     static void InitializeThreadPool(int numThreads);
