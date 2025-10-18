@@ -23,7 +23,7 @@ public:
         for (int threads : threadCounts) {
             std::cout << "\n--- Parallel Algorithm (" << threads << " threads) ---" << std::endl;
             auto parallelTime = TestParallelAlgorithm(imagePath1, imagePath2, threads);
-            
+
             double speedup = static_cast<double>(originalTime) / parallelTime;
             std::cout << "Speedup: " << std::fixed << std::setprecision(2) << speedup << "x" << std::endl;
         }
@@ -38,37 +38,37 @@ public:
 private:
     static long long TestOriginalAlgorithm(const std::string& imagePath1, const std::string& imagePath2) {
         auto start = std::chrono::high_resolution_clock::now();
-        
+
         // 调用原始算法
-        FeatureDetector::TestFeatureDetection(
-            QString::fromStdString(imagePath1), 
+        featureDetector::TestFeatureDetection(
+            QString::fromStdString(imagePath1),
             QString::fromStdString(imagePath2)
         );
-        
+
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-        
+
         std::cout << "Execution Time: " << duration.count() << " ms" << std::endl;
         return duration.count();
     }
 
     static long long TestParallelAlgorithm(const std::string& imagePath1, const std::string& imagePath2, int numThreads) {
         auto start = std::chrono::high_resolution_clock::now();
-        
-        // 配置并行参数
-        FeatureParams params;
+
+        // 配置并行参数 - 使用优化版本的特征参数
+        FeatureParams_optimize params;  // 这会使用 featureDetect_optimized.h 中的定义
         params.enableParallel = true;
         params.numThreads = numThreads;
-        
+
         // 调用并行算法
         FeatureDetectorOptimized::TestFeatureDetectionParallel(
-            QString::fromStdString(imagePath1), 
+            QString::fromStdString(imagePath1),
             QString::fromStdString(imagePath2)
         );
-        
+
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-        
+
         std::cout << "Execution Time: " << duration.count() << " ms" << std::endl;
         return duration.count();
     }
@@ -81,16 +81,16 @@ private:
             // 可以根据需要添加更多测试图像对
         };
 
-        // 配置并行参数
-        FeatureParams params;
+        // 配置并行参数 - 使用优化版本的特征参数
+        FeatureParams_optimize params;  // 这会使用 featureDetect_optimized.h 中的定义
         params.enableParallel = true;
         params.numThreads = 4;
 
         auto start = std::chrono::high_resolution_clock::now();
-        
+
         // 执行批量处理
         auto results = FeatureDetectorOptimized::BatchFeatureDetection(imagePairs, params);
-        
+
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
@@ -119,17 +119,18 @@ private:
 // 异步处理测试函数
 void TestAsyncProcessing() {
     std::cout << "\n--- Async Processing Test ---" << std::endl;
-    
-    FeatureParams params;
+
+    // 使用优化版本的特征参数
+    FeatureParams_optimize params;
     params.enableParallel = true;
     params.numThreads = 4;
 
     // 启动多个异步任务
-    std::vector<std::future<FeatureDetectorOptimized::ParallelResult>> futures;
-    
+    std::vector<std::future<ParallelResult>> futures;
+
     std::vector<std::pair<QString, QString>> imagePairs = {
-        {"../Img/test1.jpg", "../Img/test2.jpg"},
-        {"../Img/test3.jpg", "../Img/test4.jpg"},
+        {"../Img/test5.jpg", "../Img/test6.jpg"},
+        {"../Img/test1.jpg", "../Img/test2.jpg"}
     };
 
     auto start = std::chrono::high_resolution_clock::now();
@@ -163,8 +164,8 @@ int main() {
     std::cout << "=======================================" << std::endl;
 
     // 使用项目中的测试图像
-    std::string image1 = "../Img/test1.jpg";
-    std::string image2 = "../Img/test2.jpg";
+    std::string image1 = "../Img/test5.jpg";
+    std::string image2 = "../Img/test6.jpg";
 
     // 运行基准测试
     FeatureDetectBenchmark::RunBenchmark(image1, image2);

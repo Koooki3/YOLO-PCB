@@ -2,17 +2,17 @@
 #include "DataProcessor.h"
 #include "DLProcessor.h"
 
-FeatureDetector::FeatureDetector()
+featureDetector::featureDetector()
 {
 
 }
 
-FeatureDetector::~FeatureDetector()
+featureDetector::~featureDetector()
 {
 
 }
 
-std::vector<cv::DMatch> FeatureDetector::FilterMatches(
+std::vector<cv::DMatch> featureDetector::FilterMatches(
     const std::vector<cv::KeyPoint>& keypoints1,
     const std::vector<cv::KeyPoint>& keypoints2,
     const std::vector<std::vector<cv::DMatch>>& knnMatches,
@@ -97,7 +97,7 @@ std::vector<cv::DMatch> FeatureDetector::FilterMatches(
     return goodMatches;
 }
 
-void FeatureDetector::TestFeatureDetection(const QString& imagePath1, const QString& imagePath2)
+void featureDetector::TestFeatureDetection(const QString& imagePath1, const QString& imagePath2)
 {
     // 定义局部变量
     DataProcessor dataProcessor;                     // 数据处理器实例
@@ -129,12 +129,12 @@ void FeatureDetector::TestFeatureDetection(const QString& imagePath1, const QStr
     }
 
     // 1. 图像预处理
-    standardized1 = dataProcessor.standardizeImage(image1);
-    standardized2 = dataProcessor.standardizeImage(image2);
+    standardized1 = dataProcessor.StandardizeImage(image1);
+    standardized2 = dataProcessor.StandardizeImage(image2);
 
     // 2. 提取特征
-    keypoints1 = dataProcessor.detectKeypoints(standardized1, descriptors1);
-    keypoints2 = dataProcessor.detectKeypoints(standardized2, descriptors2);
+    keypoints1 = dataProcessor.DetectKeypoints(standardized1, descriptors1);
+    keypoints2 = dataProcessor.DetectKeypoints(standardized2, descriptors2);
 
     // 设置特征识别参数
     params.ratioThresh = 0.7f;          // SIFT匹配比率阈值
