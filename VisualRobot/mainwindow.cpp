@@ -2794,27 +2794,6 @@ void MainWindow::on_detect_clicked()
         Mat resultImage = testImage.clone();
         for (size_t i = 0; i < boxes.size(); i++) {
             Rect rect = boxes[i];
-            
-            // 绘制缺陷框
-            rectangle(resultImage, rect, Scalar(0, 0, 255), 2);
-            
-            // 绘制缺陷类型标签
-            string label = "Defect";
-            
-            int baseline = 0;
-            Size textSize = getTextSize(label, FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
-            
-            // 在框上方绘制标签背景
-            rectangle(resultImage, 
-                     Point(rect.x, rect.y - textSize.height - 5),
-                     Point(rect.x + textSize.width, rect.y),
-                     Scalar(0, 0, 255),
-                     FILLED);
-            
-            // 绘制标签文本
-            putText(resultImage, label, 
-                    Point(rect.x, rect.y - 5),
-                    FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 255), 1);
         }
 
         // 保存结果图像
