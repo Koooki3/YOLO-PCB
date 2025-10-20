@@ -1062,9 +1062,9 @@ void MainWindow::on_GetLength_clicked()
         params.blurK = 5;
         params.areaMin = 100.0;
 
-        // 处理图像
+        // 处理图像 - 使用多目标检长算法
         bias = 1.0;
-        result = CalculateLength(inputImage, params, bias);
+        result = CalculateLengthMultiTarget(inputImage, params, bias);
 
         // 保存输出图像
         if (!result.image.empty()) 
@@ -1103,12 +1103,18 @@ void MainWindow::on_GetLength_clicked()
         ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
 
         AppendLog("检测后图像显示成功", INFO);
-        AppendLog("检长算法执行完成", INFO);
-        AppendLog(QString("物件长度 (mm) : %1").arg((double)result.heights[0]), INFO);
-        AppendLog(QString("物件宽度 (mm) : %1").arg((double)result.widths[0]), INFO);
-        AppendLog(QString("物件倾角 (°) : %1").arg((double)result.angles[0]), INFO);
+        AppendLog("基于连通域的多目标检长算法执行完成", INFO);
+        
+        // 输出所有目标的检长结果到日志
+        for (size_t i = 0; i < result.heights.size(); i++) 
+        {
+            AppendLog(QString("目标%1 - 长度 (mm) : %2").arg(i+1).arg((double)result.heights[i]), INFO);
+            AppendLog(QString("目标%1 - 宽度 (mm) : %2").arg(i+1).arg((double)result.widths[i]), INFO);
+            AppendLog(QString("目标%1 - 倾角 (°) : %2").arg(i+1).arg((double)result.angles[i]), INFO);
+        }
 
-        DrawOverlayOnDisplay2((double)result.heights[0], (double)result.widths[0], (double)result.angles[0]);
+        // 多目标检长时不显示右上角叠加信息
+        // DrawOverlayOnDisplay2((double)result.heights[0], (double)result.widths[0], (double)result.angles[0]);
     }
     // 情况二: 如果已有裁剪图像, 处理裁剪后的图像
     else

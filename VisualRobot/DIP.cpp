@@ -755,3 +755,159 @@ Result CalculateLength(const Mat& input, const Params& params, double bias)
     result.image = colorImage;
     return result;
 }
+
+// 基于连通域的多目标检长函数
+// 参数:
+//   input - 输入图像
+//   params - 处理参数
+//   bias - 比例偏差
+// 返回值:
+//   包含所有目标宽度、高度、角度和图像的结果结构体
+Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double bias)
+{
+    // 变量定义
+    Result result;                            // 结果结构体
+    Mat source, binary, colorImage;           // 图像处理变量
+    int k;                                    // 滤波核大小
+    static Mat kernel;                        // 形态学核
+    vector<vector<Point>> contours;           // 轮廓列表
+    vector<Vec4i> hierarchy;                  // 轮廓层级
+    vector<vector<Point>> preservedContours;  // 保留的轮廓
+    vector<vector<Point>> filteredContours;   // 过滤的轮廓
+    int thickness;                            // 绘制线宽
+    RotatedRect rotatedRect;                  // 旋转矩形
+    Size2f rotatedSize;                       // 旋转矩形尺寸
+    float spring_length, spring_width, angle; // 弹簧尺寸和角度
+    Point2f vertices[4];                      // 矩形顶点
+    int thickBorder;                          // 边框厚度
+    int targetIndex;                          // 目标序号
+    
+    if (input.empty()) 
+    {
+        cerr << "图像读取失败" << endl;
+        return result;
+    }
+
+    // 检查通道数，如果需要则转换为灰度图
+    if (input.channels() > 1) 
+    {
+        cvtColor(input, source, COLOR_BGR2GRAY);
+    } 
+    else 
+    {
+        source = input;
+    }
+
+    // 多阶段滤波
+    if (params.blurK >= 3) 
+    {
+        k = (params.blurK % 2 == 0) ? params.blurK - 1 : params.blurK;
+        if (k >= 3) 
+        {
+            Mat dst;
+            bilateralFilter(source, dst, 5, 30, 2);  // 双边滤波
+            GaussianBlur(dst, source, Size(k, k), 2.0, 2.0); // 高斯模糊
+        }
+    }
+
+    // 预计算核
+    kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
+
+    // 阈值处理
+    binary = source > params.thresh;
+    binary = 255 - binary;
+
+    // 形态学操作
+    morphologyEx(binary, binary, MORPH_DILATE, kernel);  // 仅膨胀操作
+
+    // 查找轮廓
+    findContours(binary, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+
+    // 按面积过滤轮廓
+    for (const auto& contour : contours) 
+    {
+        if (contourArea(contour) < params.areaMin) 
+        {
+            filteredContours.push_back(contour);
+        } 
+        else 
+        {
+            preservedContours.push_back(contour);
+        }
+    }
+
+    // 转换为BGR用于彩色绘图
+    cvtColor(source, colorImage, COLOR_GRAY2BGR);
+
+    // 基于图像宽度计算线宽
+    thickness = round(source.cols * 0.002);
+    thickBorder = static_cast<int>(thickness * 1);
+
+    // 处理所有保留的轮廓
+    targetIndex = 1;
+    for (const auto& contour : preservedContours) 
+    {
+        // 获取旋转矩形
+        rotatedRect = minAreaRect(contour);
+        rotatedSize = rotatedRect.size;
+
+        spring_length = max(rotatedSize.width, rotatedSize.height);
+        spring_width = min(rotatedSize.width, rotatedSize.height);
+        result.widths.push_back(spring_width*bias);
+        result.heights.push_back(spring_length*bias);
+
+        // 用绿色绘制边界框
+        rotatedRect.points(vertices);
+        for (int i = 0; i < 4; i++) 
+        {
+            line(colorImage, vertices[i], vertices[(i+1)%4], Scalar(0, 255, 0), thickBorder);
+        }
+
+        // 在矩形左上角绘制序号
+        Point2f rectCenter = rotatedRect.center;
+        Size2f rectSize = rotatedRect.size;
+        Point textPosition;
+        
+        // 计算文本位置（矩形左上角）
+        if (rotatedRect.angle < -45) 
+        {
+            textPosition = Point(static_cast<int>(rectCenter.x - rectSize.width/2), 
+                                static_cast<int>(rectCenter.y - rectSize.height/2));
+        } 
+        else 
+        {
+            textPosition = Point(static_cast<int>(rectCenter.x - rectSize.height/2), 
+                                static_cast<int>(rectCenter.y - rectSize.width/2));
+        }
+        
+        // 确保文本位置在图像范围内
+        textPosition.x = max(5, textPosition.x);
+        textPosition.y = max(20, textPosition.y);
+        
+        // 绘制序号背景框
+        rectangle(colorImage, 
+                 Point(textPosition.x - 2, textPosition.y - 15),
+                 Point(textPosition.x + 15, textPosition.y + 2),
+                 Scalar(0, 0, 0), -1);
+        
+        // 绘制序号文本
+        putText(colorImage, to_string(targetIndex), textPosition, 
+                FONT_HERSHEY_SIMPLEX, 0.6, Scalar(255, 255, 255), 2);
+
+        angle = rotatedRect.angle;
+        result.angles.push_back(angle);
+
+        cout << "目标" << targetIndex << ": 长度=" << spring_length*bias 
+             << ", 宽度=" << spring_width*bias << ", 角度=" << angle << "°" << endl;
+        
+        targetIndex++;
+    }
+
+    if (preservedContours.empty()) 
+    {
+        cerr << "未找到有效轮廓" << endl;
+    }
+
+    result.image = colorImage;
+    return result;
+}
