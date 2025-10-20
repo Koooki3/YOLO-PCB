@@ -919,55 +919,148 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
 
     // 处理所有最终保留的轮廓
     targetIndex = 1;
+    vector<pair<vector<Point>, RotatedRect>> contourRects;
+    
+    // 第一步：收集所有轮廓和对应的旋转矩形
     for (const auto& contour : finalContours) 
     {
-        // 获取旋转矩形
         rotatedRect = minAreaRect(contour);
-        rotatedSize = rotatedRect.size;
-
-        spring_length = max(rotatedSize.width, rotatedSize.height);
-        spring_width = min(rotatedSize.width, rotatedSize.height);
+        contourRects.push_back(make_pair(contour, rotatedRect));
+        
+        spring_length = max(rotatedRect.size.width, rotatedRect.size.height);
+        spring_width = min(rotatedRect.size.width, rotatedRect.size.height);
         result.widths.push_back(spring_width*bias);
         result.heights.push_back(spring_length*bias);
-
-        // 用绿色绘制边界框
-        rotatedRect.points(vertices);
-        for (int i = 0; i < 4; i++) 
-        {
-            line(colorImage, vertices[i], vertices[(i+1)%4], Scalar(0, 255, 0), thickBorder);
-        }
-
-        // 在矩形左上角绘制序号
-        Point2f rectCenter = rotatedRect.center;
-        Size2f rectSize = rotatedRect.size;
-        Point textPosition;
-        
-        // 计算文本位置（矩形左上角）
-        if (rotatedRect.angle < -45) 
-        {
-            textPosition = Point(static_cast<int>(rectCenter.x - rectSize.width/2), 
-                                static_cast<int>(rectCenter.y - rectSize.height/2));
-        } 
-        else 
-        {
-            textPosition = Point(static_cast<int>(rectCenter.x - rectSize.height/2), 
-                                static_cast<int>(rectCenter.y - rectSize.width/2));
-        }
-        
-        // 确保文本位置在图像范围内
-        textPosition.x = max(5, textPosition.x);
-        textPosition.y = max(20, textPosition.y);
-        
-        // 绘制序号文本 - 增大字体
-        putText(colorImage, to_string(targetIndex), textPosition, FONT_HERSHEY_SIMPLEX, 4, Scalar(255, 255, 255), 10);
-
-        angle = rotatedRect.angle;
-        result.angles.push_back(angle);
-        
-        targetIndex++;
+        result.angles.push_back(rotatedRect.angle);
     }
 
-    if (finalContours.empty()) 
+    // 第二步：最终检查 - 确保没有遗漏的被包裹小轮廓
+    vector<bool> finalIsValid(contourRects.size(), true);
+    vector<int> finalOrder(contourRects.size());
+    
+    // 按面积从大到小排序
+    vector<pair<size_t, double>> finalContourAreas;
+    for (i = 0; i < contourRects.size(); i++) 
+    {
+        finalContourAreas.push_back(make_pair(i, contourArea(contourRects[i].first)));
+    }
+    sort(finalContourAreas.begin(), finalContourAreas.end(), 
+         [](const pair<size_t, double>& a, const pair<size_t, double>& b) {
+             return a.second > b.second;
+         });
+    
+    // 最终检查：从大到小处理，排除被包裹的小轮廓
+    for (i = 0; i < finalContourAreas.size(); i++) 
+    {
+        size_t currentIdx = finalContourAreas[i].first;
+        
+        // 如果当前轮廓已经被标记为无效，跳过
+        if (!finalIsValid[currentIdx]) 
+        {
+            continue;
+        }
+        
+        // 检查当前轮廓是否包含其他小轮廓
+        for (j = i + 1; j < finalContourAreas.size(); j++) 
+        {
+            size_t otherIdx = finalContourAreas[j].first;
+            
+            // 如果其他轮廓已经被标记为无效，跳过
+            if (!finalIsValid[otherIdx]) 
+            {
+                continue;
+            }
+            
+            // 检查轮廓otherIdx是否被轮廓currentIdx完全包裹
+            Rect rectCurrent = boundingRect(contourRects[currentIdx].first);
+            Rect rectOther = boundingRect(contourRects[otherIdx].first);
+            
+            // 如果当前轮廓完全包含其他轮廓的边界框
+            if (rectCurrent.contains(rectOther.tl()) && rectCurrent.contains(rectOther.br())) 
+            {
+                // 进一步检查：其他轮廓的所有点是否都在当前轮廓内部
+                bool allPointsInside = true;
+                for (const Point& point : contourRects[otherIdx].first) 
+                {
+                    if (pointPolygonTest(contourRects[currentIdx].first, point, false) <= 0) 
+                    {
+                        allPointsInside = false;
+                        break;
+                    }
+                }
+                
+                if (allPointsInside) 
+                {
+                    // 标记小轮廓为无效
+                    finalIsValid[otherIdx] = false;
+                }
+            }
+        }
+    }
+    
+    // 第三步：重新排序序号，只保留有效的轮廓
+    targetIndex = 1;
+    vector<double> finalWidths, finalHeights, finalAngles;
+    
+    for (i = 0; i < finalContourAreas.size(); i++) 
+    {
+        size_t currentIdx = finalContourAreas[i].first;
+        
+        // 只处理有效的轮廓
+        if (finalIsValid[currentIdx]) 
+        {
+            // 绘制边界框
+            rotatedRect = contourRects[currentIdx].second;
+            rotatedRect.points(vertices);
+            for (int k = 0; k < 4; k++) 
+            {
+                line(colorImage, vertices[k], vertices[(k+1)%4], Scalar(0, 255, 0), thickBorder);
+            }
+
+            // 在矩形左上角绘制序号
+            Point2f rectCenter = rotatedRect.center;
+            Size2f rectSize = rotatedRect.size;
+            Point textPosition;
+            
+            // 计算文本位置（矩形左上角）
+            if (rotatedRect.angle < -45) 
+            {
+                textPosition = Point(static_cast<int>(rectCenter.x - rectSize.width/2), 
+                                    static_cast<int>(rectCenter.y - rectSize.height/2));
+            } 
+            else 
+            {
+                textPosition = Point(static_cast<int>(rectCenter.x - rectSize.height/2), 
+                                    static_cast<int>(rectCenter.y - rectSize.width/2));
+            }
+            
+            // 确保文本位置在图像范围内
+            textPosition.x = max(5, textPosition.x);
+            textPosition.y = max(20, textPosition.y);
+            
+            // 绘制序号文本 - 增大字体
+            putText(colorImage, to_string(targetIndex), textPosition, FONT_HERSHEY_SIMPLEX, 4, Scalar(0, 255, 0), 10);
+
+            // 输出检长结果到日志
+            spring_length = max(rotatedRect.size.width, rotatedRect.size.height);
+            spring_width = min(rotatedRect.size.width, rotatedRect.size.height);
+            angle = rotatedRect.angle;
+            
+            // 保存最终结果
+            finalWidths.push_back(spring_width*bias);
+            finalHeights.push_back(spring_length*bias);
+            finalAngles.push_back(angle);
+            
+            targetIndex++;
+        }
+    }
+
+    // 更新最终结果
+    result.widths = finalWidths;
+    result.heights = finalHeights;
+    result.angles = finalAngles;
+
+    if (finalWidths.empty()) 
     {
         cerr << "未找到有效轮廓" << endl;
     }
