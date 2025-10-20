@@ -1108,8 +1108,8 @@ void MainWindow::on_GetLength_clicked()
         // 输出所有目标的检长结果到日志
         for (size_t i = 0; i < result.heights.size(); i++) 
         {
-            AppendLog(QString("目标%1 - 长度 (mm) : %2").arg(i+1).arg((double)result.heights[i]), INFO);
-            AppendLog(QString("目标%1 - 宽度 (mm) : %2").arg(i+1).arg((double)result.widths[i]), INFO);
+            AppendLog(QString("目标%1 - 长度 (pixs) : %2").arg(i+1).arg((double)result.heights[i]), INFO);
+            AppendLog(QString("目标%1 - 宽度 (pixs) : %2").arg(i+1).arg((double)result.widths[i]), INFO);
             AppendLog(QString("目标%1 - 倾角 (°) : %2").arg(i+1).arg((double)result.angles[i]), INFO);
         }
 
@@ -1193,8 +1193,8 @@ void MainWindow::on_GetLength_clicked()
 
         AppendLog("裁剪区域检测后图像显示成功", INFO);
         AppendLog("裁剪区域检长算法执行完成", INFO);
-        AppendLog(QString("裁剪区域物件长度 (mm) : %1").arg((double)result.heights[0]), INFO);
-        AppendLog(QString("裁剪区域物件宽度 (mm) : %1").arg((double)result.widths[0]), INFO);
+        AppendLog(QString("裁剪区域物件长度 (pixs) : %1").arg((double)result.heights[0]), INFO);
+        AppendLog(QString("裁剪区域物件宽度 (pixs) : %1").arg((double)result.widths[0]), INFO);
         AppendLog(QString("裁剪区域物件倾角 (°) : %1").arg((double)result.angles[0]), INFO);
 
         DrawOverlayOnDisplay2((double)result.heights[0], (double)result.widths[0], (double)result.angles[0]);
@@ -1465,7 +1465,7 @@ void MainWindow::DrawOverlayOnDisplay2(double length, double width, double angle
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setRenderHint(QPainter::TextAntialiasing, true);
 
-    text = QString("长: %1 mm\n宽: %2 mm\n角度: %3 °").arg(length, 0, 'f', 3).arg(width, 0, 'f', 3).arg(angle, 0, 'f', 3);
+    text = QString("长: %1 pixs\n宽: %2 pixs\n角度: %3 °").arg(length, 0, 'f', 3).arg(width, 0, 'f', 3).arg(angle, 0, 'f', 3);
 
     font.setPointSize(12); 
     font.setBold(true);
