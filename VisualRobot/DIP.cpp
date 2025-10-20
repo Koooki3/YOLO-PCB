@@ -774,6 +774,7 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
     vector<Vec4i> hierarchy;                  // 轮廓层级
     vector<vector<Point>> preservedContours;  // 保留的轮廓
     vector<vector<Point>> filteredContours;   // 过滤的轮廓
+    vector<vector<Point>> finalContours;      // 最终处理的轮廓
     int thickness;                            // 绘制线宽
     RotatedRect rotatedRect;                  // 旋转矩形
     Size2f rotatedSize;                       // 旋转矩形尺寸
@@ -781,6 +782,7 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
     Point2f vertices[4];                      // 矩形顶点
     int thickBorder;                          // 边框厚度
     int targetIndex;                          // 目标序号
+    size_t i, j;                              // 循环索引
     
     if (input.empty()) 
     {
@@ -836,6 +838,52 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
         }
     }
 
+    // 过滤被大轮廓完全包裹的小轮廓
+    finalContours.clear();
+    for (i = 0; i < preservedContours.size(); i++) 
+    {
+        bool isContained = false;
+        
+        // 检查当前轮廓是否被其他更大的轮廓完全包裹
+        for (j = 0; j < preservedContours.size(); j++) 
+        {
+            if (i != j) 
+            {
+                // 检查轮廓i是否被轮廓j完全包裹
+                Rect rectI = boundingRect(preservedContours[i]);
+                Rect rectJ = boundingRect(preservedContours[j]);
+                
+                // 如果轮廓j完全包含轮廓i的边界框，并且轮廓j面积更大
+                if (rectJ.contains(rectI.tl()) && rectJ.contains(rectI.br()) && 
+                    contourArea(preservedContours[j]) > contourArea(preservedContours[i])) 
+                {
+                    // 进一步检查：轮廓i的所有点是否都在轮廓j内部
+                    bool allPointsInside = true;
+                    for (const Point& point : preservedContours[i]) 
+                    {
+                        if (pointPolygonTest(preservedContours[j], point, false) <= 0) 
+                        {
+                            allPointsInside = false;
+                            break;
+                        }
+                    }
+                    
+                    if (allPointsInside) 
+                    {
+                        isContained = true;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // 如果当前轮廓没有被任何其他轮廓完全包裹，则保留
+        if (!isContained) 
+        {
+            finalContours.push_back(preservedContours[i]);
+        }
+    }
+
     // 转换为BGR用于彩色绘图
     cvtColor(source, colorImage, COLOR_GRAY2BGR);
 
@@ -843,9 +891,9 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
     thickness = round(source.cols * 0.002);
     thickBorder = static_cast<int>(thickness * 1);
 
-    // 处理所有保留的轮廓
+    // 处理所有最终保留的轮廓
     targetIndex = 1;
-    for (const auto& contour : preservedContours) 
+    for (const auto& contour : finalContours) 
     {
         // 获取旋转矩形
         rotatedRect = minAreaRect(contour);
@@ -890,9 +938,9 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
                  Point(textPosition.x + 15, textPosition.y + 2),
                  Scalar(0, 0, 0), -1);
         
-        // 绘制序号文本
+        // 绘制序号文本 - 增大字体
         putText(colorImage, to_string(targetIndex), textPosition, 
-                FONT_HERSHEY_SIMPLEX, 0.6, Scalar(255, 255, 255), 2);
+                FONT_HERSHEY_SIMPLEX, 1.2, Scalar(255, 255, 255), 3);
 
         angle = rotatedRect.angle;
         result.angles.push_back(angle);
@@ -903,7 +951,7 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
         targetIndex++;
     }
 
-    if (preservedContours.empty()) 
+    if (finalContours.empty()) 
     {
         cerr << "未找到有效轮廓" << endl;
     }
