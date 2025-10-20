@@ -838,50 +838,76 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
         }
     }
 
-    // 过滤被大轮廓完全包裹的小轮廓
+    // 过滤被大轮廓完全包裹的小轮廓 - 改进算法
+    // 先按面积从大到小排序，然后优先处理大轮廓
     finalContours.clear();
+    
+    // 创建轮廓索引和面积列表
+    vector<pair<size_t, double>> contourAreas;
     for (i = 0; i < preservedContours.size(); i++) 
     {
-        bool isContained = false;
+        contourAreas.push_back(make_pair(i, contourArea(preservedContours[i])));
+    }
+    
+    // 按面积从大到小排序
+    sort(contourAreas.begin(), contourAreas.end(), 
+         [](const pair<size_t, double>& a, const pair<size_t, double>& b) {
+             return a.second > b.second;
+         });
+    
+    // 使用标记数组来记录哪些轮廓被排除
+    vector<bool> isExcluded(preservedContours.size(), false);
+    
+    // 从大到小处理轮廓
+    for (i = 0; i < contourAreas.size(); i++) 
+    {
+        size_t currentIdx = contourAreas[i].first;
         
-        // 检查当前轮廓是否被其他更大的轮廓完全包裹
-        for (j = 0; j < preservedContours.size(); j++) 
+        // 如果当前轮廓已经被排除，跳过
+        if (isExcluded[currentIdx]) 
         {
-            if (i != j) 
+            continue;
+        }
+        
+        // 检查当前轮廓是否包含其他小轮廓
+        for (j = i + 1; j < contourAreas.size(); j++) 
+        {
+            size_t otherIdx = contourAreas[j].first;
+            
+            // 如果其他轮廓已经被排除，跳过
+            if (isExcluded[otherIdx]) 
             {
-                // 检查轮廓i是否被轮廓j完全包裹
-                Rect rectI = boundingRect(preservedContours[i]);
-                Rect rectJ = boundingRect(preservedContours[j]);
-                
-                // 如果轮廓j完全包含轮廓i的边界框，并且轮廓j面积更大
-                if (rectJ.contains(rectI.tl()) && rectJ.contains(rectI.br()) && 
-                    contourArea(preservedContours[j]) > contourArea(preservedContours[i])) 
+                continue;
+            }
+            
+            // 检查轮廓otherIdx是否被轮廓currentIdx完全包裹
+            Rect rectCurrent = boundingRect(preservedContours[currentIdx]);
+            Rect rectOther = boundingRect(preservedContours[otherIdx]);
+            
+            // 如果当前轮廓完全包含其他轮廓的边界框
+            if (rectCurrent.contains(rectOther.tl()) && rectCurrent.contains(rectOther.br())) 
+            {
+                // 进一步检查：其他轮廓的所有点是否都在当前轮廓内部
+                bool allPointsInside = true;
+                for (const Point& point : preservedContours[otherIdx]) 
                 {
-                    // 进一步检查：轮廓i的所有点是否都在轮廓j内部
-                    bool allPointsInside = true;
-                    for (const Point& point : preservedContours[i]) 
+                    if (pointPolygonTest(preservedContours[currentIdx], point, false) <= 0) 
                     {
-                        if (pointPolygonTest(preservedContours[j], point, false) <= 0) 
-                        {
-                            allPointsInside = false;
-                            break;
-                        }
-                    }
-                    
-                    if (allPointsInside) 
-                    {
-                        isContained = true;
+                        allPointsInside = false;
                         break;
                     }
+                }
+                
+                if (allPointsInside) 
+                {
+                    // 标记小轮廓为被排除
+                    isExcluded[otherIdx] = true;
                 }
             }
         }
         
-        // 如果当前轮廓没有被任何其他轮廓完全包裹，则保留
-        if (!isContained) 
-        {
-            finalContours.push_back(preservedContours[i]);
-        }
+        // 将当前轮廓添加到最终列表
+        finalContours.push_back(preservedContours[currentIdx]);
     }
 
     // 转换为BGR用于彩色绘图
@@ -932,21 +958,11 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
         textPosition.x = max(5, textPosition.x);
         textPosition.y = max(20, textPosition.y);
         
-        // 绘制序号背景框
-        rectangle(colorImage, 
-                 Point(textPosition.x - 2, textPosition.y - 15),
-                 Point(textPosition.x + 15, textPosition.y + 2),
-                 Scalar(0, 0, 0), -1);
-        
         // 绘制序号文本 - 增大字体
-        putText(colorImage, to_string(targetIndex), textPosition, 
-                FONT_HERSHEY_SIMPLEX, 1.2, Scalar(255, 255, 255), 3);
+        putText(colorImage, to_string(targetIndex), textPosition, FONT_HERSHEY_SIMPLEX, 4, Scalar(255, 255, 255), 10);
 
         angle = rotatedRect.angle;
         result.angles.push_back(angle);
-
-        cout << "目标" << targetIndex << ": 长度=" << spring_length*bias 
-             << ", 宽度=" << spring_width*bias << ", 角度=" << angle << "°" << endl;
         
         targetIndex++;
     }
