@@ -929,9 +929,6 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
         
         spring_length = max(rotatedRect.size.width, rotatedRect.size.height);
         spring_width = min(rotatedRect.size.width, rotatedRect.size.height);
-        result.widths.push_back(spring_width*bias);
-        result.heights.push_back(spring_length*bias);
-        result.angles.push_back(rotatedRect.angle);
     }
 
     // 第二步：最终检查 - 确保没有遗漏的被包裹小轮廓
@@ -1050,15 +1047,14 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
             finalWidths.push_back(spring_width*bias);
             finalHeights.push_back(spring_length*bias);
             finalAngles.push_back(angle);
+
+            result.widths.push_back(spring_width*bias);
+            result.heights.push_back(spring_length*bias);
+            result.angles.push_back(angle);
             
             targetIndex++;
         }
     }
-
-    // 更新最终结果
-    result.widths = finalWidths;
-    result.heights = finalHeights;
-    result.angles = finalAngles;
 
     if (finalWidths.empty()) 
     {
