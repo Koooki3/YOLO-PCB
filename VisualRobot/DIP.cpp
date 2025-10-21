@@ -999,6 +999,9 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
     targetIndex = 1;
     vector<double> finalWidths, finalHeights, finalAngles;
     
+    // 确保Img目录存在
+    CreateDirectory("../Img");
+    
     for (i = 0; i < finalContourAreas.size(); i++) 
     {
         size_t currentIdx = finalContourAreas[i].first;
@@ -1051,6 +1054,33 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
             result.widths.push_back(spring_width*bias);
             result.heights.push_back(spring_length*bias);
             result.angles.push_back(angle);
+            
+            // 保存目标框选范围内的图像
+            // 计算旋转矩形的边界框
+            Rect boundingBox = boundingRect(contourRects[currentIdx].first);
+            
+            // 确保边界框在图像范围内
+            boundingBox = boundingBox & Rect(0, 0, input.cols, input.rows);
+            
+            if (!boundingBox.empty() && boundingBox.width > 0 && boundingBox.height > 0) 
+            {
+                // 从原始输入图像中提取目标区域
+                Mat targetImage = input(boundingBox).clone();
+                
+                // 生成文件名
+                string filename = "../Img/object0" + to_string(targetIndex) + ".jpg";
+                
+                // 保存目标图像
+                bool saveSuccess = imwrite(filename, targetImage);
+                if (saveSuccess) 
+                {
+                    cout << "目标" << targetIndex << "图像已保存: " << filename << endl;
+                } 
+                else 
+                {
+                    cerr << "保存目标" << targetIndex << "图像失败: " << filename << endl;
+                }
+            }
             
             targetIndex++;
         }

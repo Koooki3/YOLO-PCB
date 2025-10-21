@@ -1111,6 +1111,7 @@ void MainWindow::on_GetLength_clicked()
             AppendLog(QString("目标%1 - 长度 (pixs) : %2").arg(i+1).arg((double)result.heights[i]), INFO);
             AppendLog(QString("目标%1 - 宽度 (pixs) : %2").arg(i+1).arg((double)result.widths[i]), INFO);
             AppendLog(QString("目标%1 - 倾角 (°) : %2").arg(i+1).arg((double)result.angles[i]), INFO);
+            AppendLog(QString("目标%1 - 图像已保存: ../Img/object0%2.jpg").arg(i+1).arg(i+1), INFO);
         }
 
         // 多目标检长时不显示右上角叠加信息
