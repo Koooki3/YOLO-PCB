@@ -2657,17 +2657,29 @@ void MainWindow::StartDefectDetectionAfterLength(const Result& result)
         }
 
         // 使用DefectDetection库进行缺陷检测
-        DefectDetection defectDetector;
+        // 使用已存在的m_defectDetection对象，而不是创建新的
         
         // 设置模板
-        if (!defectDetector.SetTemplateImage(templateImage)) 
+        if (!m_defectDetection->SetTemplateFromCurrent(templateImage)) 
         {
             AppendLog(QString("目标%1: 设置模板失败").arg(i), WARNNING);
             continue;
         }
 
         // 进行缺陷检测
-        defectBoxes = defectDetector.DetectDefectsInImage(targetImage);
+        Mat targetGray;
+        cvtColor(targetImage, targetGray, COLOR_BGR2GRAY);
+        GaussianBlur(targetGray, targetGray, Size(3,3), 0);
+        
+        Mat homography;
+        if (!m_defectDetection->ComputeHomography(targetGray, homography)) 
+        {
+            AppendLog(QString("目标%1: 计算单应性矩阵失败").arg(i), WARNNING);
+            continue;
+        }
+
+        // 进行缺陷检测
+        defectBoxes = m_defectDetection->DetectDefects(targetImage, homography);
         
         if (!defectBoxes.empty()) 
         {
