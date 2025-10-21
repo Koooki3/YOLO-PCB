@@ -168,6 +168,9 @@ private:
     void RealTimeDetectionThread();
     void StartRealTimeDetection();
     void HandleQKeyPress(); // 处理Q键, 退出实时检测模式
+    
+    // 对检测到的目标图像执行缺陷检测
+    void PerformDefectDetectionOnTargets();
 };
 
 #endif // MAINWINDOW_H
