@@ -756,7 +756,7 @@ Result CalculateLength(const Mat& input, const Params& params, double bias)
     return result;
 }
 
-// 基于连通域的多目标检长函数
+// 基于连通域的多目标检长函数（支持缺陷检测）
 // 参数:
 //   input - 输入图像
 //   params - 处理参数
@@ -783,6 +783,11 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
     int thickBorder;                          // 边框厚度
     int targetIndex;                          // 目标序号
     size_t i, j;                              // 循环索引
+    
+    // 新增变量：用于缺陷检测
+    vector<vector<Point>> defectContours;     // 缺陷小轮廓列表
+    vector<vector<Point>> innerContours;      // 内部小轮廓列表
+    vector<bool> hasDefects;                  // 标记每个目标是否有缺陷
     
     if (input.empty()) 
     {
@@ -841,6 +846,8 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
     // 过滤被大轮廓完全包裹的小轮廓 - 改进算法
     // 先按面积从大到小排序，然后优先处理大轮廓
     finalContours.clear();
+    defectContours.clear();
+    innerContours.clear();
     
     // 创建轮廓索引和面积列表
     vector<pair<size_t, double>> contourAreas;
@@ -900,8 +907,9 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
                 
                 if (allPointsInside) 
                 {
-                    // 标记小轮廓为被排除
+                    // 标记小轮廓为被排除，但将其记录为内部小轮廓（缺陷）
                     isExcluded[otherIdx] = true;
+                    innerContours.push_back(preservedContours[otherIdx]);
                 }
             }
         }
@@ -995,13 +1003,8 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
         }
     }
     
-    // 第三步：重新排序序号，只保留有效的轮廓
-    targetIndex = 1;
-    vector<double> finalWidths, finalHeights, finalAngles;
-    
-    // 确保Img目录存在
-    CreateDirectory("../Img");
-    
+    // 第三步：检测每个目标是否有内部小轮廓（缺陷）
+    hasDefects.clear();
     for (i = 0; i < finalContourAreas.size(); i++) 
     {
         size_t currentIdx = finalContourAreas[i].first;
@@ -1009,12 +1012,88 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
         // 只处理有效的轮廓
         if (finalIsValid[currentIdx]) 
         {
+            bool hasDefect = false;
+            
+            // 检查当前目标是否包含内部小轮廓
+            for (const auto& innerContour : innerContours) 
+            {
+                // 检查内部小轮廓是否在当前目标内部
+                bool allPointsInside = true;
+                for (const Point& point : innerContour) 
+                {
+                    if (pointPolygonTest(contourRects[currentIdx].first, point, false) <= 0) 
+                    {
+                        allPointsInside = false;
+                        break;
+                    }
+                }
+                
+                if (allPointsInside) 
+                {
+                    hasDefect = true;
+                    // 记录缺陷小轮廓
+                    defectContours.push_back(innerContour);
+                }
+            }
+            
+            hasDefects.push_back(hasDefect);
+        }
+    }
+    
+    // 第四步：重新排序序号，只保留有效的轮廓，并根据是否有缺陷设置颜色
+    targetIndex = 1;
+    vector<double> finalWidths, finalHeights, finalAngles;
+    
+    // 确保Img目录存在
+    CreateDirectory("../Img");
+    
+    // 先绘制缺陷小边缘（红色线拟合）
+    for (const auto& defectContour : defectContours) 
+    {
+        // 用红色线拟合小边缘
+        Scalar defectColor = Scalar(0, 0, 255); // 红色
+        drawContours(colorImage, vector<vector<Point>>{defectContour}, -1, defectColor, 3);
+        
+        // 计算缺陷轮廓的最小外接矩形
+        RotatedRect defectRect = minAreaRect(defectContour);
+        Point2f defectVertices[4];
+        defectRect.points(defectVertices);
+        
+        // 绘制缺陷矩形框（红色）
+        for (int k = 0; k < 4; k++) 
+        {
+            line(colorImage, defectVertices[k], defectVertices[(k+1)%4], defectColor, 2);
+        }
+    }
+    
+    // 然后绘制主要目标
+    int defectIndex = 0;
+    for (i = 0; i < finalContourAreas.size(); i++) 
+    {
+        size_t currentIdx = finalContourAreas[i].first;
+        
+        // 只处理有效的轮廓
+        if (finalIsValid[currentIdx]) 
+        {
+            // 根据是否有缺陷设置颜色
+            Scalar boxColor, textColor;
+            if (hasDefects[defectIndex]) 
+            {
+                boxColor = Scalar(0, 0, 255); // 红色 - 有缺陷
+                textColor = Scalar(0, 0, 255); // 红色 - 有缺陷
+            }
+            else 
+            {
+                boxColor = Scalar(0, 255, 0); // 绿色 - 无缺陷
+                textColor = Scalar(0, 255, 0); // 绿色 - 无缺陷
+            }
+            
             // 绘制边界框
             rotatedRect = contourRects[currentIdx].second;
             rotatedRect.points(vertices);
             for (int k = 0; k < 4; k++) 
             {
-                line(colorImage, vertices[k], vertices[(k+1)%4], Scalar(0, 255, 0), thickBorder);
+                line(colorImage, vertices[k], vertices[(k+1)%4], boxColor, thickBorder);
             }
 
             // 在矩形左上角绘制序号
@@ -1038,8 +1117,8 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
             textPosition.x = max(5, textPosition.x);
             textPosition.y = max(20, textPosition.y);
             
-            // 绘制序号文本 - 增大字体
-            putText(colorImage, to_string(targetIndex), textPosition, FONT_HERSHEY_SIMPLEX, 4, Scalar(0, 255, 0), 10);
+            // 绘制序号文本 - 增大字体，使用对应颜色
+            putText(colorImage, to_string(targetIndex), textPosition, FONT_HERSHEY_SIMPLEX, 4, textColor, 10);
 
             // 输出检长结果到日志
             spring_length = max(rotatedRect.size.width, rotatedRect.size.height);
@@ -1085,7 +1164,18 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
                 }
             }
             
+            // 输出缺陷信息到日志
+            if (hasDefects[defectIndex]) 
+            {
+                cout << "目标" << targetIndex << "检测到缺陷" << endl;
+            }
+            else 
+            {
+                cout << "目标" << targetIndex << "无缺陷" << endl;
+            }
+            
             targetIndex++;
+            defectIndex++;
         }
     }
 
