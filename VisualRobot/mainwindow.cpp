@@ -1031,6 +1031,21 @@ void MainWindow::on_GetLength_clicked()
     bool success;            // 保存成功标志
     QPixmap pixmap;          // 图像对象
     QPixmap scaledPixmap;    // 缩放后的图像
+    QMessageBox defectDetectionDialog; // 缺陷检测选择对话框
+    QPushButton *yesButton;  // 是按钮
+    QPushButton *noButton;   // 否按钮
+    QAbstractButton *clicked; // 被点击的按钮
+    bool performDefectDetection; // 是否执行缺陷检测
+
+    // 新增：询问用户是否执行缺陷检测
+    defectDetectionDialog.setWindowTitle("缺陷检测选择");
+    defectDetectionDialog.setText("是否执行缺陷检测？");
+    yesButton = defectDetectionDialog.addButton("是", QMessageBox::AcceptRole);
+    noButton = defectDetectionDialog.addButton("否", QMessageBox::RejectRole);
+    
+    defectDetectionDialog.exec();
+    clicked = defectDetectionDialog.clickedButton();
+    performDefectDetection = (clicked == yesButton);
 
     ui->GetLength->setEnabled(false);
 
@@ -1199,6 +1214,11 @@ void MainWindow::on_GetLength_clicked()
         AppendLog(QString("裁剪区域物件倾角 (°) : %1").arg((double)result.angles[0]), INFO);
 
         DrawOverlayOnDisplay2((double)result.heights[0], (double)result.widths[0], (double)result.angles[0]);
+    }
+
+    // 新增：如果用户选择执行缺陷检测，则对检测到的目标图像进行缺陷检测
+    if (performDefectDetection) {
+        PerformDefectDetectionOnTargets();
     }
 }
 
@@ -2650,6 +2670,119 @@ void MainWindow::StartRealTimeDetection()
     thread->start();
 
     AppendLog("实时缺陷检测已启动", INFO);
+}
+
+// 对检测到的目标图像执行缺陷检测
+void MainWindow::PerformDefectDetectionOnTargets()
+{
+    // 变量定义
+    QString templatePath;          // 模板文件路径
+    Mat templateImage;             // 模板图像
+    Mat templateGray;              // 模板灰度图像
+    vector<QString> targetFiles;   // 目标图像文件列表
+    int targetIndex;               // 目标序号
+    QString targetPath;            // 目标图像路径
+    QString resultPath;            // 结果图像路径
+    Mat targetImage;               // 目标图像
+    Mat targetResized;             // 调整大小后的目标图像
+    Mat targetGray;                // 目标灰度图像
+    Mat homography;                // 单应性矩阵
+    vector<DMatch> debugMatches;   // 调试匹配点
+    Mat debugMask;                 // 调试掩码
+    vector<Rect> defectBoxes;      // 缺陷框列表
+    Mat resultImage;               // 结果图像
+    bool saveSuccess;              // 保存成功标志
+
+    AppendLog("开始对检测到的目标图像执行缺陷检测", INFO);
+
+    // 步骤1: 加载模板图像
+    templatePath = "../Img/DetectTemplate.jpg";
+    templateImage = imread(templatePath.toStdString());
+    if (templateImage.empty()) {
+        AppendLog(QString("无法加载模板图像: %1，请确保文件存在").arg(templatePath), ERROR);
+        return;
+    }
+    AppendLog(QString("模板图像加载成功，尺寸: %1x%2").arg(templateImage.cols).arg(templateImage.rows), INFO);
+
+    // 转换为灰度图并预处理
+    cvtColor(templateImage, templateGray, COLOR_BGR2GRAY);
+    GaussianBlur(templateGray, templateGray, Size(3,3), 0);
+
+    // 步骤2: 查找目标图像文件
+    QDir imgDir("../Img");
+    QStringList filters;
+    filters << "object0*.jpg";
+    QStringList targetFileList = imgDir.entryList(filters, QDir::Files, QDir::Name);
+    
+    if (targetFileList.isEmpty()) {
+        AppendLog("未找到目标图像文件 (object0*.jpg)，请先执行多目标检长", WARNNING);
+        return;
+    }
+    
+    AppendLog(QString("找到 %1 个目标图像文件").arg(targetFileList.size()), INFO);
+
+    // 步骤3: 对每个目标图像执行缺陷检测
+    for (const QString& fileName : targetFileList) {
+        targetPath = "../Img/" + fileName;
+        
+        // 提取目标序号
+        QString indexStr = fileName.mid(7, fileName.length() - 11); // 提取"object0x"中的x
+        targetIndex = indexStr.toInt();
+        
+        AppendLog(QString("处理目标 %1: %2").arg(targetIndex).arg(fileName), INFO);
+
+        // 加载目标图像
+        targetImage = imread(targetPath.toStdString());
+        if (targetImage.empty()) {
+            AppendLog(QString("无法加载目标图像: %1").arg(targetPath), ERROR);
+            continue;
+        }
+
+        // 调整目标图像大小以匹配模板
+        resize(targetImage, targetResized, templateImage.size());
+        AppendLog(QString("目标图像已调整大小: %1x%2 -> %3x%4").arg(targetImage.cols).arg(targetImage.rows)
+                 .arg(targetResized.cols).arg(targetResized.rows), INFO);
+
+        // 转换为灰度图并预处理
+        cvtColor(targetResized, targetGray, COLOR_BGR2GRAY);
+        GaussianBlur(targetGray, targetGray, Size(3,3), 0);
+
+        // 步骤4: 计算单应性矩阵
+        if (!m_defectDetection->ComputeHomography(targetGray, homography, &debugMatches)) {
+            AppendLog(QString("目标 %1: 无法计算单应性矩阵").arg(targetIndex), WARNNING);
+            continue;
+        }
+        AppendLog(QString("目标 %1: 单应性矩阵计算成功，匹配点数量: %2").arg(targetIndex).arg(debugMatches.size()), INFO);
+
+        // 步骤5: 执行缺陷检测
+        defectBoxes = m_defectDetection->DetectDefects(targetResized, homography, &debugMask);
+        AppendLog(QString("目标 %1: 检测到 %2 个缺陷区域").arg(targetIndex).arg(defectBoxes.size()), INFO);
+
+        // 步骤6: 绘制缺陷框并保存结果
+        resultImage = targetResized.clone();
+        for (size_t i = 0; i < defectBoxes.size(); i++) {
+            Rect rect = defectBoxes[i];
+            rectangle(resultImage, rect, Scalar(0, 0, 255), 3); // 红色框，线宽3
+            
+            // 在框上显示序号
+            putText(resultImage, to_string(i+1), Point(rect.x + 5, rect.y + 20), 
+                    FONT_HERSHEY_SIMPLEX, 0.6, Scalar(0, 0, 255), 2);
+            
+            AppendLog(QString("目标 %1 - 缺陷框 %2: (x=%3, y=%4, w=%5, h=%6)").arg(targetIndex).arg(i+1)
+                     .arg(rect.x).arg(rect.y).arg(rect.width).arg(rect.height), INFO);
+        }
+
+        // 保存结果图像
+        resultPath = QString("../Img/object0%1_detected.jpg").arg(targetIndex);
+        saveSuccess = imwrite(resultPath.toStdString(), resultImage);
+        if (saveSuccess) {
+            AppendLog(QString("目标 %1: 缺陷检测结果已保存: %2").arg(targetIndex).arg(resultPath), INFO);
+        } else {
+            AppendLog(QString("目标 %1: 保存缺陷检测结果失败").arg(targetIndex), ERROR);
+        }
+    }
+
+    AppendLog("所有目标图像的缺陷检测已完成", INFO);
 }
 
 // 缺陷检测按钮
