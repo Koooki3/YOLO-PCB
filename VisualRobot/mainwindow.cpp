@@ -1031,29 +1031,8 @@ void MainWindow::on_GetLength_clicked()
     bool success;            // 保存成功标志
     QPixmap pixmap;          // 图像对象
     QPixmap scaledPixmap;    // 缩放后的图像
-    QMessageBox msgBox;      // 消息对话框
-    QPushButton *defectButton; // 缺陷检测按钮
-    QPushButton *noDefectButton; // 无缺陷检测按钮
-    QAbstractButton *clicked; // 被点击的按钮
-    bool performDefectDetection = false; // 是否执行缺陷检测
 
     ui->GetLength->setEnabled(false);
-
-    // 弹窗询问用户是否进行缺陷检测
-    msgBox.setWindowTitle("缺陷检测选择");
-    msgBox.setText("是否进行缺陷检测？");
-    defectButton = msgBox.addButton("是，进行缺陷检测", QMessageBox::AcceptRole);
-    noDefectButton = msgBox.addButton("否，仅检长", QMessageBox::RejectRole);
-    
-    msgBox.exec();
-    clicked = msgBox.clickedButton();
-    if (clicked == defectButton) {
-        performDefectDetection = true;
-        AppendLog("用户选择进行缺陷检测", INFO);
-    } else {
-        performDefectDetection = false;
-        AppendLog("用户选择仅进行检长", INFO);
-    }
 
     // 情况一: 如果没有裁剪图像, 清除多边形显示并处理原始图像
     // 仅当 m_hasCroppedImage 为 false 时使用原始全图进行识别
@@ -1086,54 +1065,6 @@ void MainWindow::on_GetLength_clicked()
         // 处理图像 - 使用多目标检长算法
         bias = 1.0;
         result = CalculateLengthMultiTarget(inputImage, params, bias);
-
-        // 如果用户选择进行缺陷检测，则在各个目标ROI区域内执行缺陷检测
-        if (performDefectDetection && !result.heights.empty()) {
-            AppendLog("开始执行基于边缘检测的缺陷范围检测", INFO);
-            
-            // 创建缺陷标记向量
-            std::vector<bool> defectFlags(result.heights.size(), false);
-            
-            // 在各个目标ROI区域内执行缺陷检测
-            for (size_t i = 0; i < result.heights.size(); i++) {
-                QString objectPath = QString("../Img/object0%1.jpg").arg(i+1);
-                Mat objectImage = imread(objectPath.toStdString());
-                
-                if (!objectImage.empty()) {
-                    // 执行基于边缘检测的缺陷检测
-                    std::vector<std::vector<cv::Point>> defectContours;
-                    Mat defectEdges;
-                    bool hasDefect = m_defectDetection->DetectDefectByEdge(objectImage, defectContours, defectEdges);
-                    
-                    if (hasDefect) {
-                        AppendLog(QString("目标%1 - 检测到缺陷，缺陷轮廓数量: %2").arg(i+1).arg(defectContours.size()), WARNNING);
-                        defectFlags[i] = true; // 标记该目标有缺陷
-                        
-                        // 拟合缺陷边缘
-                        std::vector<std::vector<cv::Point>> fittedEdges;
-                        m_defectDetection->FitDefectEdges(defectContours, fittedEdges);
-                        
-                        // 在结果图像上绘制缺陷边缘（红色）
-                        for (const auto& edge : fittedEdges) {
-                            // 将缺陷边缘绘制到结果图像上
-                            // 注意：这里需要将缺陷边缘坐标映射回原图坐标系
-                            // 由于是多目标检长，需要找到对应的目标位置
-                            // 这里简化处理，在实际应用中需要更精确的坐标映射
-                            drawContours(result.image, fittedEdges, -1, Scalar(0, 0, 255), 3);
-                        }
-                        
-                        AppendLog(QString("目标%1 - 标记为有缺陷（红色）").arg(i+1), WARNNING);
-                    } else {
-                        AppendLog(QString("目标%1 - 无缺陷（绿色）").arg(i+1), INFO);
-                        defectFlags[i] = false; // 标记该目标无缺陷
-                    }
-                }
-            }
-            
-            // 重新执行多目标检长，这次传入缺陷标记信息
-            AppendLog("重新执行多目标检长，应用缺陷标记颜色", INFO);
-            result = CalculateLengthMultiTarget(inputImage, params, bias, defectFlags);
-        }
 
         // 保存输出图像
         if (!result.image.empty()) 
