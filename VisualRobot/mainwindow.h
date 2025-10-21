@@ -168,6 +168,13 @@ private:
     void RealTimeDetectionThread();
     void StartRealTimeDetection();
     void HandleQKeyPress(); // 处理Q键, 退出实时检测模式
+
+    // 检长后的缺陷检测功能
+    void PerformDefectDetectionAfterLengthMeasurement();
+    vector<RotatedRect> GetTargetRotatedRectsFromLengthMeasurement();
+    void PerformEdgeDetectionOnTargets(const vector<RotatedRect>& targetRects, Mat& resultImage);
+    bool HasDefectInTarget(const RotatedRect& targetRect, const Mat& edges);
+    void DrawTargetWithDefectStatus(const RotatedRect& targetRect, int targetIndex, bool hasDefect, Mat& resultImage);
 };
 
 #endif // MAINWINDOW_H
