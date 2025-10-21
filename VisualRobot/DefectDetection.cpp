@@ -1081,6 +1081,101 @@ cv::Mat DefectDetection::AlignAndWarpImage(const cv::Mat& currentBGR)
     return alignedImage;
 }
 
+// ---------------------------------------------------------------------------
+// 基于边缘检测的缺陷范围检测
+// 功能：在ROI区域内检测缺陷边缘并提取缺陷轮廓
+// 输入：roi - ROI区域图像
+// 输出：defectContours - 检测到的缺陷轮廓
+//       defectEdges - 检测到的缺陷边缘图像
+// 返回：是否检测到缺陷
+// ---------------------------------------------------------------------------
+bool DefectDetection::DetectDefectByEdge(const Mat& roi, std::vector<std::vector<cv::Point>>& defectContours, Mat& defectEdges)
+{
+    if (roi.empty()) {
+        return false;
+    }
+
+    // 转换为灰度图
+    Mat gray;
+    if (roi.channels() == 3) {
+        cvtColor(roi, gray, COLOR_BGR2GRAY);
+    } else {
+        gray = roi.clone();
+    }
+
+    // 高斯模糊去噪
+    GaussianBlur(gray, gray, Size(3, 3), 0);
+
+    // Canny边缘检测
+    Mat edges;
+    Canny(gray, edges, m_edgeThreshold, m_edgeThreshold * 2, 3);
+
+    // 形态学操作连接断裂的边缘
+    Mat kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
+    morphologyEx(edges, edges, MORPH_CLOSE, kernel);
+
+    // 膨胀边缘以增强缺陷区域
+    dilate(edges, edges, kernel, Point(-1, -1), m_edgeDilateIterations);
+
+    // 查找轮廓
+    std::vector<std::vector<cv::Point>> contours;
+    std::vector<Vec4i> hierarchy;
+    findContours(edges, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+
+    // 过滤小轮廓
+    defectContours.clear();
+    for (const auto& contour : contours) {
+        double area = contourArea(contour);
+        if (area >= m_minDefectEdgeArea) {
+            defectContours.push_back(contour);
+        }
+    }
+
+    // 创建边缘图像用于可视化
+    defectEdges = Mat::zeros(roi.size(), CV_8UC3);
+    if (!defectContours.empty()) {
+        // 绘制检测到的缺陷边缘（红色）
+        drawContours(defectEdges, defectContours, -1, Scalar(0, 0, 255), 2);
+    }
+
+    return !defectContours.empty();
+}
+
+// ---------------------------------------------------------------------------
+// 拟合缺陷边缘
+// 功能：对检测到的缺陷轮廓进行多边形拟合，简化边缘
+// 输入：defectContours - 缺陷轮廓
+// 输出：fittedEdges - 拟合后的边缘
+// ---------------------------------------------------------------------------
+void DefectDetection::FitDefectEdges(const std::vector<std::vector<cv::Point>>& defectContours, 
+                                    std::vector<std::vector<cv::Point>>& fittedEdges)
+{
+    fittedEdges.clear();
+    
+    for (const auto& contour : defectContours) {
+        if (contour.size() < 5) {
+            // 如果轮廓点太少，直接使用原轮廓
+            fittedEdges.push_back(contour);
+            continue;
+        }
+        
+        // 计算轮廓周长
+        double epsilon = 0.02 * arcLength(contour, true);
+        
+        // 多边形拟合
+        std::vector<cv::Point> approx;
+        approxPolyDP(contour, approx, epsilon, true);
+        
+        // 确保拟合后的多边形至少有3个点
+        if (approx.size() >= 3) {
+            fittedEdges.push_back(approx);
+        } else {
+            // 如果拟合后点数太少，使用原轮廓
+            fittedEdges.push_back(contour);
+        }
+    }
+}
+
 // 修改SetTemplateFromCurrent方法，保存BGR模板
 bool DefectDetection::SetTemplateFromCurrent(const cv::Mat& currentFrame)
 {

@@ -51,6 +51,6 @@ int GetCoordsOpenCV(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, 
 Result CalculateLength(const Mat& input, const Params& params, double bias);
 
 // 基于连通域的多目标检长函数
-Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double bias);
+Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double bias, const std::vector<bool>& defectFlags = std::vector<bool>());
 
 #endif // DIP_H
