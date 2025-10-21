@@ -1056,8 +1056,11 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
             result.angles.push_back(angle);
             
             // 保存目标框选范围内的图像
-            // 计算旋转矩形的边界框
-            Rect boundingBox = boundingRect(contourRects[currentIdx].first);
+            // 使用旋转矩形的边界框来保存目标图像
+            rotatedRect = contourRects[currentIdx].second;
+            
+            // 获取旋转矩形的边界矩形
+            Rect boundingBox = rotatedRect.boundingRect();
             
             // 确保边界框在图像范围内
             boundingBox = boundingBox & Rect(0, 0, input.cols, input.rows);
