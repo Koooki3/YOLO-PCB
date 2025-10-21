@@ -2565,19 +2565,15 @@ void MainWindow::StartDefectDetectionAfterLength(const Result& result)
     QString selectedTarget;                         // 选中的目标
     QString templateImagePath;                      // 模板图像路径
     Mat templateImage;                              // 模板图像
-    Mat resultImage;                                // 结果图像
+    Mat originalImage;                              // 原始图像
     vector<bool> defectFlags;                       // 缺陷标记
     int i;                                          // 循环索引
     QString targetImagePath;                        // 目标图像路径
     Mat targetImage;                                // 目标图像
     vector<Rect> defectBoxes;                       // 缺陷框列表
-    Point2f vertices[4];                            // 矩形顶点
     Scalar color;                                   // 颜色
     int thickness;                                  // 线宽
-    Point textPosition;                             // 文本位置
-    Size2f rectSize;                                // 矩形尺寸
-    Point2f rectCenter;                             // 矩形中心
-    RotatedRect rotatedRect;                        // 旋转矩形
+    Mat finalResult;                                // 最终结果图像
 
     AppendLog("开始缺陷检测流程", INFO);
     
@@ -2626,15 +2622,17 @@ void MainWindow::StartDefectDetectionAfterLength(const Result& result)
 
     AppendLog(QString("模板图像加载成功: %1").arg(templateImagePath), INFO);
 
-    // 初始化缺陷检测结果
-    defectFlags.resize(targetCount, false);
-    resultImage = imread("../detectedImg.jpg"); // 加载原始检测结果图像
-
-    if (resultImage.empty()) 
+    // 加载原始图像用于绘制缺陷框
+    originalImage = imread("/home/orangepi/Desktop/VisualRobot_Local/Img/capture.jpg");
+    if (originalImage.empty()) 
     {
-        AppendLog("无法加载原始检测结果图像", ERROR);
+        AppendLog("无法加载原始图像", ERROR);
         return;
     }
+
+    // 初始化缺陷检测结果
+    defectFlags.resize(targetCount, false);
+    finalResult = originalImage.clone(); // 使用原始图像作为基础
 
     // 对每个目标进行缺陷检测（跳过模板目标）
     for (i = 1; i <= targetCount; i++) 
@@ -2686,15 +2684,42 @@ void MainWindow::StartDefectDetectionAfterLength(const Result& result)
             defectFlags[i-1] = true;
             AppendLog(QString("目标%1: 检测到%2个缺陷").arg(i).arg(defectBoxes.size()), INFO);
             
-            // 在结果图像上标记缺陷目标
-            // 获取该目标的旋转矩形信息（需要从原始结果中获取）
-            // 这里简化处理，直接使用绿色框变红色
-            // 在实际实现中，需要从result中获取具体的矩形信息
+            // 在原始图像上绘制红色缺陷框
+            color = Scalar(0, 0, 255); // 红色
+            thickness = 3;
             
-            // 修改目标框颜色为红色
-            // 这里需要根据目标序号找到对应的矩形并修改颜色
-            // 由于DIP.cpp中已经绘制了绿色框，我们需要重新绘制红色框
-            
+            // 绘制所有缺陷框
+            for (const Rect& defectBox : defectBoxes) 
+            {
+                rectangle(finalResult, defectBox, color, thickness);
+                
+                // 在缺陷框左上角显示缺陷类型
+                Mat defectROI = targetImage(defectBox);
+                std::string defectType = m_defectDetection->ClassifyDefect(defectROI);
+                
+                QString typeText = QString::fromStdString(defectType);
+                int fontFace = FONT_HERSHEY_SIMPLEX;
+                double fontScale = 0.6;
+                int textThickness = 2;
+                int baseline = 0;
+                Size textSize = getTextSize(typeText.toStdString(), fontFace, fontScale, textThickness, &baseline);
+                
+                // 计算文本位置（框内左上角）
+                Point textOrg(defectBox.x + 5, defectBox.y + textSize.height + 5);
+                
+                // 绘制半透明背景
+                rectangle(finalResult, 
+                         Point(defectBox.x, defectBox.y), 
+                         Point(defectBox.x + textSize.width + 10, defectBox.y + textSize.height + 10),
+                         Scalar(0, 0, 0), -1);
+                
+                // 绘制文本
+                putText(finalResult, typeText.toStdString(), textOrg, fontFace, fontScale, Scalar(0, 255, 0), textThickness);
+                
+                AppendLog(QString("目标%1 - 缺陷框: 位置(%2,%3) 尺寸(%4x%5) 类型: %6")
+                         .arg(i).arg(defectBox.x).arg(defectBox.y)
+                         .arg(defectBox.width).arg(defectBox.height).arg(typeText), INFO);
+            }
         } 
         else 
         {
@@ -2702,51 +2727,17 @@ void MainWindow::StartDefectDetectionAfterLength(const Result& result)
         }
     }
 
-    // 重新绘制结果图像，将缺陷目标标记为红色
-    Mat finalResult = resultImage.clone();
-    
-    // 基于defectFlags重新绘制所有目标框
-    for (i = 0; i < targetCount; i++) 
+    // 保存带缺陷检测结果的图像到本地
+    QString detectedImagePath = QString("../Img/object0%1_detected.jpg").arg(templateIndex);
+    bool saveSuccess = imwrite(detectedImagePath.toStdString(), finalResult);
+    if (saveSuccess) 
     {
-        if (defectFlags[i]) 
-        {
-            color = Scalar(0, 0, 255); // 红色 - 有缺陷
-        } 
-        else 
-        {
-            color = Scalar(0, 255, 0); // 绿色 - 无缺陷
-        }
-        
-        // 这里需要根据目标序号绘制对应的矩形框
-        // 由于我们无法直接获取每个目标的精确位置，这里简化处理
-        // 在实际实现中，需要从DIP.cpp中获取每个目标的旋转矩形信息
-        
-        thickness = 3;
-        
-        // 简化：在图像上绘制彩色框和序号
-        // 实际应该使用CalculateLengthMultiTarget中保存的矩形信息
-        int boxSize = 100;
-        int x = 50 + (i % 3) * 150;
-        int y = 50 + (i / 3) * 150;
-        
-        rectangle(finalResult, Rect(x, y, boxSize, boxSize), color, thickness);
-        
-        // 绘制序号
-        if (defectFlags[i]) 
-        {
-            putText(finalResult, to_string(i+1), Point(x+10, y+30), 
-                    FONT_HERSHEY_SIMPLEX, 1, Scalar(0, 0, 255), 3); // 红色序号
-        } 
-        else 
-        {
-            putText(finalResult, to_string(i+1), Point(x+10, y+30), 
-                    FONT_HERSHEY_SIMPLEX, 1, Scalar(0, 255, 0), 3); // 绿色序号
-        }
+        AppendLog(QString("缺陷检测结果已保存: %1").arg(detectedImagePath), INFO);
+    } 
+    else 
+    {
+        AppendLog("保存缺陷检测结果失败", ERROR);
     }
-
-    // 保存并显示最终结果
-    imwrite("../detectedImg.jpg", finalResult);
-    AppendLog("缺陷检测完成，结果已保存", INFO);
 
     // 显示结果
     QPixmap pm = MatToQPixmap(finalResult);
@@ -2770,7 +2761,23 @@ void MainWindow::StartDefectDetectionAfterLength(const Result& result)
     AppendLog(QString("模板目标: 目标%1").arg(templateIndex), INFO);
     AppendLog(QString("缺陷目标数: %1").arg(defectCount), INFO);
     AppendLog(QString("正常目标数: %1").arg(targetCount - defectCount - 1), INFO); // 减去模板目标
-}
+    
+    // 输出每个目标的检测结果
+    for (i = 0; i < targetCount; i++) 
+    {
+        if (i == templateIndex - 1) 
+        {
+            AppendLog(QString("目标%1: 模板目标").arg(i+1), INFO);
+        } 
+        else if (defectFlags[i]) 
+        {
+            AppendLog(QString("目标%1: 有缺陷").arg(i+1), INFO);
+        } 
+        else 
+        {
+            AppendLog(QString("目标%1: 无缺陷").arg(i+1), INFO);
+        }
+    }
 
 // 实时检测线程函数
 void MainWindow::RealTimeDetectionThread()
