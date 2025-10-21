@@ -35,7 +35,6 @@
 #include <QPainterPath>
 #include <QElapsedTimer>
 #include <QTextStream>
-#include <QInputDialog>
 #include "Undistort.h"
 #include "DefectDetection.h"
 
@@ -1035,17 +1034,6 @@ void MainWindow::on_GetLength_clicked()
 
     ui->GetLength->setEnabled(false);
 
-    // 在执行检长前询问是否进行缺陷检测
-    QMessageBox defectDetectionMsg;
-    defectDetectionMsg.setWindowTitle("缺陷检测");
-    defectDetectionMsg.setText("是否需要进行缺陷检测？");
-    QPushButton *yesButton = defectDetectionMsg.addButton("是", QMessageBox::AcceptRole);
-    QPushButton *noButton = defectDetectionMsg.addButton("否", QMessageBox::RejectRole);
-    
-    defectDetectionMsg.exec();
-    
-    bool performDefectDetection = (defectDetectionMsg.clickedButton() == yesButton);
-
     // 情况一: 如果没有裁剪图像, 清除多边形显示并处理原始图像
     // 仅当 m_hasCroppedImage 为 false 时使用原始全图进行识别
     if (!m_hasCroppedImage)
@@ -1128,13 +1116,6 @@ void MainWindow::on_GetLength_clicked()
 
         // 多目标检长时不显示右上角叠加信息
         // DrawOverlayOnDisplay2((double)result.heights[0], (double)result.widths[0], (double)result.angles[0]);
-
-        // 如果用户选择进行缺陷检测，则执行缺陷检测
-        if (performDefectDetection) 
-        {
-            // 用户选择进行缺陷检测
-            StartDefectDetectionAfterLength(result);
-        }
     }
     // 情况二: 如果已有裁剪图像, 处理裁剪后的图像
     else
@@ -2556,197 +2537,6 @@ void MainWindow::on_setTemplate_clicked()
 // 实时检测线程控制变量
 bool m_realTimeDetectionRunning = false;
 QMutex m_realTimeDetectionMutex;
-
-// 多目标检长后的缺陷检测流程
-void MainWindow::StartDefectDetectionAfterLength(const Result& result)
-{
-    // 变量定义
-    int targetCount;                                // 目标数量
-    QString templateImagePath;                      // 模板图像路径
-    Mat templateImage;                              // 模板图像
-    Mat originalImage;                              // 原始图像
-    vector<bool> defectFlags;                       // 缺陷标记
-    int i;                                          // 循环索引
-    QString targetImagePath;                        // 目标图像路径
-    Mat targetImage;                                // 目标图像
-    vector<Rect> defectBoxes;                       // 缺陷框列表
-    Scalar color;                                   // 颜色
-    int thickness;                                  // 线宽
-    Mat finalResult;                                // 最终结果图像
-
-    AppendLog("开始缺陷检测流程", INFO);
-    
-    // 获取目标数量
-    targetCount = static_cast<int>(result.heights.size());
-    if (targetCount == 0) 
-    {
-        AppendLog("没有检测到目标，无法进行缺陷检测", WARNNING);
-        return;
-    }
-
-    // 使用默认模板路径
-    templateImagePath = "../Img/DetectTemplate.jpg";
-    AppendLog(QString("使用默认模板: %1").arg(templateImagePath), INFO);
-
-    // 加载模板图像
-    templateImage = imread(templateImagePath.toStdString());
-    
-    if (templateImage.empty()) 
-    {
-        AppendLog(QString("无法加载默认模板图像: %1").arg(templateImagePath), ERROR);
-        return;
-    }
-
-    AppendLog(QString("默认模板图像加载成功: %1").arg(templateImagePath), INFO);
-
-    // 加载原始图像用于绘制缺陷框
-    originalImage = imread("/home/orangepi/Desktop/VisualRobot_Local/Img/capture.jpg");
-    if (originalImage.empty()) 
-    {
-        AppendLog("无法加载原始图像", ERROR);
-        return;
-    }
-
-    // 初始化缺陷检测结果
-    defectFlags.resize(targetCount, false);
-    finalResult = originalImage.clone(); // 使用原始图像作为基础
-
-    // 对每个目标进行缺陷检测
-    for (i = 1; i <= targetCount; i++) 
-    {
-        AppendLog(QString("正在检测目标%1...").arg(i), INFO);
-        
-        // 加载目标图像
-        targetImagePath = QString("../Img/object0%1.jpg").arg(i);
-        targetImage = imread(targetImagePath.toStdString());
-        
-        if (targetImage.empty()) 
-        {
-            AppendLog(QString("无法加载目标图像: %1").arg(targetImagePath), WARNNING);
-            continue;
-        }
-
-        // 使用DefectDetection库进行缺陷检测
-        // 使用已存在的m_defectDetection对象，而不是创建新的
-        
-        // 设置模板
-        if (!m_defectDetection->SetTemplateFromCurrent(templateImage)) 
-        {
-            AppendLog(QString("目标%1: 设置模板失败").arg(i), WARNNING);
-            continue;
-        }
-
-        // 进行缺陷检测
-        Mat targetGray;
-        cvtColor(targetImage, targetGray, COLOR_BGR2GRAY);
-        GaussianBlur(targetGray, targetGray, Size(3,3), 0);
-        
-        Mat homography;
-        if (!m_defectDetection->ComputeHomography(targetGray, homography)) 
-        {
-            AppendLog(QString("目标%1: 计算单应性矩阵失败").arg(i), WARNNING);
-            continue;
-        }
-
-        // 进行缺陷检测
-        defectBoxes = m_defectDetection->DetectDefects(targetImage, homography);
-        
-        if (!defectBoxes.empty()) 
-        {
-            defectFlags[i-1] = true;
-            AppendLog(QString("目标%1: 检测到%2个缺陷").arg(i).arg(defectBoxes.size()), INFO);
-            
-            // 在原始图像上绘制红色缺陷框
-            color = Scalar(0, 0, 255); // 红色
-            thickness = 3;
-            
-            // 绘制所有缺陷框
-            for (const Rect& defectBox : defectBoxes) 
-            {
-                rectangle(finalResult, defectBox, color, thickness);
-                
-                // 在缺陷框左上角显示缺陷类型
-                Mat defectROI = targetImage(defectBox);
-                std::string defectType = m_defectDetection->ClassifyDefect(defectROI);
-                
-                QString typeText = QString::fromStdString(defectType);
-                int fontFace = FONT_HERSHEY_SIMPLEX;
-                double fontScale = 0.6;
-                int textThickness = 2;
-                int baseline = 0;
-                Size textSize = getTextSize(typeText.toStdString(), fontFace, fontScale, textThickness, &baseline);
-                
-                // 计算文本位置（框内左上角）
-                Point textOrg(defectBox.x + 5, defectBox.y + textSize.height + 5);
-                
-                // 绘制半透明背景
-                rectangle(finalResult, 
-                         Point(defectBox.x, defectBox.y), 
-                         Point(defectBox.x + textSize.width + 10, defectBox.y + textSize.height + 10),
-                         Scalar(0, 0, 0), -1);
-                
-                // 绘制文本
-                putText(finalResult, typeText.toStdString(), textOrg, fontFace, fontScale, Scalar(0, 255, 0), textThickness);
-                
-                AppendLog(QString("目标%1 - 缺陷框: 位置(%2,%3) 尺寸(%4x%5) 类型: %6")
-                         .arg(i).arg(defectBox.x).arg(defectBox.y)
-                         .arg(defectBox.width).arg(defectBox.height).arg(typeText), INFO);
-            }
-        } 
-        else 
-        {
-            AppendLog(QString("目标%1: 无缺陷").arg(i), INFO);
-        }
-    }
-
-    // 保存带缺陷检测结果的图像到本地
-    QString detectedImagePath = "../Img/detectedImg.jpg";
-    bool saveSuccess = imwrite(detectedImagePath.toStdString(), finalResult);
-    if (saveSuccess) 
-    {
-        AppendLog(QString("缺陷检测结果已保存: %1").arg(detectedImagePath), INFO);
-    } 
-    else 
-    {
-        AppendLog("保存缺陷检测结果失败", ERROR);
-    }
-
-    // 显示结果
-    QPixmap pm = MatToQPixmap(finalResult);
-    if (!pm.isNull()) 
-    {
-        QPixmap scaled = pm.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        ui->widgetDisplay_2->setPixmap(scaled);
-        ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
-        AppendLog("缺陷检测结果已显示", INFO);
-    }
-
-    // 输出检测统计
-    int defectCount = 0;
-    for (bool flag : defectFlags) 
-    {
-        if (flag) defectCount++;
-    }
-    
-    AppendLog("=== 缺陷检测统计 ===", INFO);
-    AppendLog(QString("总目标数: %1").arg(targetCount), INFO);
-    AppendLog(QString("使用默认模板: %1").arg(templateImagePath), INFO);
-    AppendLog(QString("缺陷目标数: %1").arg(defectCount), INFO);
-    AppendLog(QString("正常目标数: %1").arg(targetCount - defectCount), INFO);
-    
-    // 输出每个目标的检测结果
-    for (i = 0; i < targetCount; i++) 
-    {
-        if (defectFlags[i]) 
-        {
-            AppendLog(QString("目标%1: 有缺陷").arg(i+1), INFO);
-        } 
-        else 
-        {
-            AppendLog(QString("目标%1: 无缺陷").arg(i+1), INFO);
-        }
-    }
-}
 
 // 实时检测线程函数
 void MainWindow::RealTimeDetectionThread()
