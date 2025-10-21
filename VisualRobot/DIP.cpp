@@ -1055,16 +1055,34 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
             result.heights.push_back(spring_length*bias);
             result.angles.push_back(angle);
             
-            // 记录最小外接矩形框的四点像素坐标
+            // 保存目标框选范围内的图像
+            // 使用旋转矩形的边界框来保存目标图像
             rotatedRect = contourRects[currentIdx].second;
-            Point2f vertices[4];
-            rotatedRect.points(vertices);
             
-            // 输出矩形四点坐标到日志
-            cout << "目标" << targetIndex << "最小外接矩形四点坐标:" << endl;
-            for (int k = 0; k < 4; k++) 
+            // 获取旋转矩形的边界矩形
+            Rect boundingBox = rotatedRect.boundingRect();
+            
+            // 确保边界框在图像范围内
+            boundingBox = boundingBox & Rect(0, 0, input.cols, input.rows);
+            
+            if (!boundingBox.empty() && boundingBox.width > 0 && boundingBox.height > 0) 
             {
-                cout << "  点" << (k+1) << ": (" << vertices[k].x << ", " << vertices[k].y << ")" << endl;
+                // 从原始输入图像中提取目标区域
+                Mat targetImage = input(boundingBox).clone();
+                
+                // 生成文件名
+                string filename = "../Img/object0" + to_string(targetIndex) + ".jpg";
+                
+                // 保存目标图像
+                bool saveSuccess = imwrite(filename, targetImage);
+                if (saveSuccess) 
+                {
+                    cout << "目标" << targetIndex << "图像已保存: " << filename << endl;
+                } 
+                else 
+                {
+                    cerr << "保存目标" << targetIndex << "图像失败: " << filename << endl;
+                }
             }
             
             targetIndex++;
