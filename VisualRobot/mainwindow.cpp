@@ -1035,6 +1035,17 @@ void MainWindow::on_GetLength_clicked()
 
     ui->GetLength->setEnabled(false);
 
+    // 在执行检长前询问是否进行缺陷检测
+    QMessageBox defectDetectionMsg;
+    defectDetectionMsg.setWindowTitle("缺陷检测");
+    defectDetectionMsg.setText("是否需要进行缺陷检测？");
+    QPushButton *yesButton = defectDetectionMsg.addButton("是", QMessageBox::AcceptRole);
+    QPushButton *noButton = defectDetectionMsg.addButton("否", QMessageBox::RejectRole);
+    
+    defectDetectionMsg.exec();
+    
+    bool performDefectDetection = (defectDetectionMsg.clickedButton() == yesButton);
+
     // 情况一: 如果没有裁剪图像, 清除多边形显示并处理原始图像
     // 仅当 m_hasCroppedImage 为 false 时使用原始全图进行识别
     if (!m_hasCroppedImage)
@@ -1118,18 +1129,10 @@ void MainWindow::on_GetLength_clicked()
         // 多目标检长时不显示右上角叠加信息
         // DrawOverlayOnDisplay2((double)result.heights[0], (double)result.widths[0], (double)result.angles[0]);
 
-        // 询问用户是否继续缺陷检测
-        QMessageBox defectDetectionMsg;
-        defectDetectionMsg.setWindowTitle("缺陷检测");
-        defectDetectionMsg.setText("多目标检长已完成，是否继续缺陷检测？");
-        QPushButton *yesButton = defectDetectionMsg.addButton("是", QMessageBox::AcceptRole);
-        QPushButton *noButton = defectDetectionMsg.addButton("否", QMessageBox::RejectRole);
-        
-        defectDetectionMsg.exec();
-        
-        if (defectDetectionMsg.clickedButton() == yesButton) 
+        // 如果用户选择进行缺陷检测，则执行缺陷检测
+        if (performDefectDetection) 
         {
-            // 用户选择继续缺陷检测
+            // 用户选择进行缺陷检测
             StartDefectDetectionAfterLength(result);
         }
     }
@@ -2559,10 +2562,6 @@ void MainWindow::StartDefectDetectionAfterLength(const Result& result)
 {
     // 变量定义
     int targetCount;                                // 目标数量
-    bool ok;                                        // 输入确认标志
-    int templateIndex;                              // 模板目标序号
-    QStringList targetOptions;                      // 目标选项列表
-    QString selectedTarget;                         // 选中的目标
     QString templateImagePath;                      // 模板图像路径
     Mat templateImage;                              // 模板图像
     Mat originalImage;                              // 原始图像
@@ -2585,42 +2584,20 @@ void MainWindow::StartDefectDetectionAfterLength(const Result& result)
         return;
     }
 
-    // 创建目标选项列表
-    for (i = 1; i <= targetCount; i++) 
-    {
-        targetOptions << QString("目标%1").arg(i);
-    }
-
-    // 弹出模板选择对话框
-    selectedTarget = QInputDialog::getItem(this, 
-                                          "选择模板目标", 
-                                          "请选择作为模板的目标序号:", 
-                                          targetOptions, 
-                                          0, 
-                                          false, 
-                                          &ok);
-    
-    if (!ok || selectedTarget.isEmpty()) 
-    {
-        AppendLog("用户取消模板选择", INFO);
-        return;
-    }
-
-    // 解析选择的模板序号
-    templateIndex = targetOptions.indexOf(selectedTarget) + 1;
-    AppendLog(QString("用户选择目标%1作为模板").arg(templateIndex), INFO);
+    // 使用默认模板路径
+    templateImagePath = "../Img/DetectTemplate.jpg";
+    AppendLog(QString("使用默认模板: %1").arg(templateImagePath), INFO);
 
     // 加载模板图像
-    templateImagePath = QString("../Img/object0%1.jpg").arg(templateIndex);
     templateImage = imread(templateImagePath.toStdString());
     
     if (templateImage.empty()) 
     {
-        AppendLog(QString("无法加载模板图像: %1").arg(templateImagePath), ERROR);
+        AppendLog(QString("无法加载默认模板图像: %1").arg(templateImagePath), ERROR);
         return;
     }
 
-    AppendLog(QString("模板图像加载成功: %1").arg(templateImagePath), INFO);
+    AppendLog(QString("默认模板图像加载成功: %1").arg(templateImagePath), INFO);
 
     // 加载原始图像用于绘制缺陷框
     originalImage = imread("/home/orangepi/Desktop/VisualRobot_Local/Img/capture.jpg");
@@ -2634,14 +2611,9 @@ void MainWindow::StartDefectDetectionAfterLength(const Result& result)
     defectFlags.resize(targetCount, false);
     finalResult = originalImage.clone(); // 使用原始图像作为基础
 
-    // 对每个目标进行缺陷检测（跳过模板目标）
+    // 对每个目标进行缺陷检测
     for (i = 1; i <= targetCount; i++) 
     {
-        if (i == templateIndex) 
-        {
-            continue; // 跳过模板目标
-        }
-
         AppendLog(QString("正在检测目标%1...").arg(i), INFO);
         
         // 加载目标图像
@@ -2728,7 +2700,7 @@ void MainWindow::StartDefectDetectionAfterLength(const Result& result)
     }
 
     // 保存带缺陷检测结果的图像到本地
-    QString detectedImagePath = QString("../Img/object0%1_detected.jpg").arg(templateIndex);
+    QString detectedImagePath = "../Img/detectedImg.jpg";
     bool saveSuccess = imwrite(detectedImagePath.toStdString(), finalResult);
     if (saveSuccess) 
     {
@@ -2758,18 +2730,14 @@ void MainWindow::StartDefectDetectionAfterLength(const Result& result)
     
     AppendLog("=== 缺陷检测统计 ===", INFO);
     AppendLog(QString("总目标数: %1").arg(targetCount), INFO);
-    AppendLog(QString("模板目标: 目标%1").arg(templateIndex), INFO);
+    AppendLog(QString("使用默认模板: %1").arg(templateImagePath), INFO);
     AppendLog(QString("缺陷目标数: %1").arg(defectCount), INFO);
-    AppendLog(QString("正常目标数: %1").arg(targetCount - defectCount - 1), INFO); // 减去模板目标
+    AppendLog(QString("正常目标数: %1").arg(targetCount - defectCount), INFO);
     
     // 输出每个目标的检测结果
     for (i = 0; i < targetCount; i++) 
     {
-        if (i == templateIndex - 1) 
-        {
-            AppendLog(QString("目标%1: 模板目标").arg(i+1), INFO);
-        } 
-        else if (defectFlags[i]) 
+        if (defectFlags[i]) 
         {
             AppendLog(QString("目标%1: 有缺陷").arg(i+1), INFO);
         } 
@@ -2778,6 +2746,7 @@ void MainWindow::StartDefectDetectionAfterLength(const Result& result)
             AppendLog(QString("目标%1: 无缺陷").arg(i+1), INFO);
         }
     }
+}
 
 // 实时检测线程函数
 void MainWindow::RealTimeDetectionThread()
