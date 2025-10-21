@@ -761,10 +761,9 @@ Result CalculateLength(const Mat& input, const Params& params, double bias)
 //   input - 输入图像
 //   params - 处理参数
 //   bias - 比例偏差
-//   defectFlags - 可选参数，标记哪些目标有缺陷（红色），哪些无缺陷（绿色）
 // 返回值:
 //   包含所有目标宽度、高度、角度和图像的结果结构体
-Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double bias, const std::vector<bool>& defectFlags)
+Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double bias)
 {
     // 变量定义
     Result result;                            // 结果结构体
@@ -1010,22 +1009,12 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
         // 只处理有效的轮廓
         if (finalIsValid[currentIdx]) 
         {
-            // 根据缺陷标记选择颜色（有缺陷：红色，无缺陷：绿色）
-            Scalar boxColor, textColor;
-            if (i < defectFlags.size() && defectFlags[i]) {
-                boxColor = Scalar(0, 0, 255);  // 红色
-                textColor = Scalar(0, 0, 255); // 红色
-            } else {
-                boxColor = Scalar(0, 255, 0);  // 绿色
-                textColor = Scalar(0, 255, 0); // 绿色
-            }
-
             // 绘制边界框
             rotatedRect = contourRects[currentIdx].second;
             rotatedRect.points(vertices);
             for (int k = 0; k < 4; k++) 
             {
-                line(colorImage, vertices[k], vertices[(k+1)%4], boxColor, thickBorder);
+                line(colorImage, vertices[k], vertices[(k+1)%4], Scalar(0, 255, 0), thickBorder);
             }
 
             // 在矩形左上角绘制序号
@@ -1050,7 +1039,7 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
             textPosition.y = max(20, textPosition.y);
             
             // 绘制序号文本 - 增大字体
-            putText(colorImage, to_string(targetIndex), textPosition, FONT_HERSHEY_SIMPLEX, 4, textColor, 10);
+            putText(colorImage, to_string(targetIndex), textPosition, FONT_HERSHEY_SIMPLEX, 4, Scalar(0, 255, 0), 10);
 
             // 输出检长结果到日志
             spring_length = max(rotatedRect.size.width, rotatedRect.size.height);
