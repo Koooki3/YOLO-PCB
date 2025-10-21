@@ -172,6 +172,36 @@ public:
 	// 使用 OpenCV 的 trainAuto 自动搜索 SVM 超参数并训练（内部使用交叉验证）
 	// 返回训练成功与否
 	bool TrainSVMAuto(const Mat& samples, const Mat& labels);
+
+	// 基于边缘检测的缺陷范围检测
+	// 参数：
+	//   roi - 输入ROI区域图像
+	//   defectContours - 输出参数，存储检测到的缺陷轮廓
+	//   defectEdges - 输出参数，存储检测到的缺陷边缘
+	// 返回值：是否检测到缺陷
+	bool DetectDefectByEdge(const Mat& roi, std::vector<std::vector<cv::Point>>& defectContours, Mat& defectEdges);
+
+	// 拟合缺陷边缘
+	// 参数：
+	//   defectContours - 缺陷轮廓
+	//   fittedEdges - 输出参数，存储拟合后的边缘
+	void FitDefectEdges(const std::vector<std::vector<cv::Point>>& defectContours, std::vector<std::vector<cv::Point>>& fittedEdges);
+
+	// 获取缺陷检测参数
+	double GetEdgeThreshold() const { return m_edgeThreshold; }
+	double GetMinDefectEdgeArea() const { return m_minDefectEdgeArea; }
+	int GetEdgeDilateIterations() const { return m_edgeDilateIterations; }
+
+	// 设置缺陷检测参数
+	void SetEdgeThreshold(double threshold) { m_edgeThreshold = threshold; }
+	void SetMinDefectEdgeArea(double area) { m_minDefectEdgeArea = area; }
+	void SetEdgeDilateIterations(int iterations) { m_edgeDilateIterations = iterations; }
+
+private:
+	// 边缘检测缺陷检测相关参数
+	double m_edgeThreshold = 30.0;        // 边缘检测阈值
+	double m_minDefectEdgeArea = 50.0;    // 最小缺陷边缘面积
+	int m_edgeDilateIterations = 2;       // 边缘膨胀迭代次数
 };
 
 #endif // DEFECTDETECTION_H
