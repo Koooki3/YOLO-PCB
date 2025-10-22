@@ -1111,11 +1111,7 @@ void MainWindow::on_GetLength_clicked()
             AppendLog(QString("目标%1 - 长度 (pixs) : %2").arg(i+1).arg((double)result.heights[i]), INFO);
             AppendLog(QString("目标%1 - 宽度 (pixs) : %2").arg(i+1).arg((double)result.widths[i]), INFO);
             AppendLog(QString("目标%1 - 倾角 (°) : %2").arg(i+1).arg((double)result.angles[i]), INFO);
-            AppendLog(QString("目标%1 - 图像已保存: ../Img/object0%2.jpg").arg(i+1).arg(i+1), INFO);
         }
-
-        // 多目标检长时不显示右上角叠加信息
-        // DrawOverlayOnDisplay2((double)result.heights[0], (double)result.widths[0], (double)result.angles[0]);
     }
     // 情况二: 如果已有裁剪图像, 处理裁剪后的图像
     else
@@ -2831,11 +2827,10 @@ void MainWindow::on_detect_clicked()
         AppendLog(QString("差异阈值: %1").arg(fileDetector.GetTemplateDiffThreshold()), INFO);
 
         // 日志每个框
-        for (size_t i=0; i<boxes.size(); ++i) 
+        for (size_t i=0; i<boxes.size(); ++i)
         {
             AppendLog(QString("缺陷框 %1: (x=%2, y=%3, w=%4, h=%5) 面积: %6").arg(i+1).arg(boxes[i].x).arg(boxes[i].y).arg(boxes[i].width).arg(boxes[i].height).arg(boxes[i].area()), INFO);
         }
-
-        // 如需同时叠加尺寸/角度的浮窗，可复用已有的 drawOverlayOnDisplay2()
     }
+    // 如需同时叠加尺寸/角度的浮窗，可复用已有的 drawOverlayOnDisplay2()
 }
