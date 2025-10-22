@@ -19,7 +19,7 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
-#include <opencv2/highgui.hpp>
+#include <opencv2/highgui.hpp>`
 #include <vector>
 #include <algorithm>
 
@@ -772,9 +772,6 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
     static Mat kernel;                        // 形态学核
     vector<vector<Point>> contours;           // 轮廓列表
     vector<Vec4i> hierarchy;                  // 轮廓层级
-    vector<vector<Point>> preservedContours;  // 保留的轮廓
-    vector<vector<Point>> filteredContours;   // 过滤的轮廓
-    vector<vector<Point>> finalContours;      // 最终处理的轮廓
     int thickness;                            // 绘制线宽
     RotatedRect rotatedRect;                  // 旋转矩形
     Size2f rotatedSize;                       // 旋转矩形尺寸
@@ -782,29 +779,29 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
     Point2f vertices[4];                      // 矩形顶点
     int thickBorder;                          // 边框厚度
     int targetIndex;                          // 目标序号
-    size_t i, j;                              // 循环索引
-    
-    if (input.empty()) 
+    size_t i;                                 // 循环索引
+
+    if (input.empty())
     {
         cerr << "图像读取失败" << endl;
         return result;
     }
 
     // 检查通道数，如果需要则转换为灰度图
-    if (input.channels() > 1) 
+    if (input.channels() > 1)
     {
         cvtColor(input, source, COLOR_BGR2GRAY);
-    } 
-    else 
+    }
+    else
     {
         source = input;
     }
 
     // 多阶段滤波
-    if (params.blurK >= 3) 
+    if (params.blurK >= 3)
     {
         k = (params.blurK % 2 == 0) ? params.blurK - 1 : params.blurK;
-        if (k >= 3) 
+        if (k >= 3)
         {
             Mat dst;
             bilateralFilter(source, dst, 5, 30, 2);  // 双边滤波
@@ -822,93 +819,8 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
     // 形态学操作
     morphologyEx(binary, binary, MORPH_DILATE, kernel);  // 仅膨胀操作
 
-    // 查找轮廓
+    // 查找轮廓 - 仅搜索最外层轮廓
     findContours(binary, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
-
-    // 按面积过滤轮廓
-    for (const auto& contour : contours) 
-    {
-        if (contourArea(contour) < params.areaMin) 
-        {
-            filteredContours.push_back(contour);
-        } 
-        else 
-        {
-            preservedContours.push_back(contour);
-        }
-    }
-
-    // 过滤被大轮廓完全包裹的小轮廓 - 改进算法
-    // 先按面积从大到小排序，然后优先处理大轮廓
-    finalContours.clear();
-    
-    // 创建轮廓索引和面积列表
-    vector<pair<size_t, double>> contourAreas;
-    for (i = 0; i < preservedContours.size(); i++) 
-    {
-        contourAreas.push_back(make_pair(i, contourArea(preservedContours[i])));
-    }
-    
-    // 按面积从大到小排序
-    sort(contourAreas.begin(), contourAreas.end(), 
-         [](const pair<size_t, double>& a, const pair<size_t, double>& b) {
-             return a.second > b.second;
-         });
-    
-    // 使用标记数组来记录哪些轮廓被排除
-    vector<bool> isExcluded(preservedContours.size(), false);
-    
-    // 从大到小处理轮廓
-    for (i = 0; i < contourAreas.size(); i++) 
-    {
-        size_t currentIdx = contourAreas[i].first;
-        
-        // 如果当前轮廓已经被排除，跳过
-        if (isExcluded[currentIdx]) 
-        {
-            continue;
-        }
-        
-        // 检查当前轮廓是否包含其他小轮廓
-        for (j = i + 1; j < contourAreas.size(); j++) 
-        {
-            size_t otherIdx = contourAreas[j].first;
-            
-            // 如果其他轮廓已经被排除，跳过
-            if (isExcluded[otherIdx]) 
-            {
-                continue;
-            }
-            
-            // 检查轮廓otherIdx是否被轮廓currentIdx完全包裹
-            Rect rectCurrent = boundingRect(preservedContours[currentIdx]);
-            Rect rectOther = boundingRect(preservedContours[otherIdx]);
-            
-            // 如果当前轮廓完全包含其他轮廓的边界框
-            if (rectCurrent.contains(rectOther.tl()) && rectCurrent.contains(rectOther.br())) 
-            {
-                // 进一步检查：其他轮廓的所有点是否都在当前轮廓内部
-                bool allPointsInside = true;
-                for (const Point& point : preservedContours[otherIdx]) 
-                {
-                    if (pointPolygonTest(preservedContours[currentIdx], point, false) <= 0) 
-                    {
-                        allPointsInside = false;
-                        break;
-                    }
-                }
-                
-                if (allPointsInside) 
-                {
-                    // 标记小轮廓为被排除
-                    isExcluded[otherIdx] = true;
-                }
-            }
-        }
-        
-        // 将当前轮廓添加到最终列表
-        finalContours.push_back(preservedContours[currentIdx]);
-    }
 
     // 转换为BGR用于彩色绘图
     cvtColor(source, colorImage, COLOR_GRAY2BGR);
@@ -917,179 +829,255 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
     thickness = round(source.cols * 0.002);
     thickBorder = static_cast<int>(thickness * 1);
 
-    // 处理所有最终保留的轮廓
-    targetIndex = 1;
-    vector<pair<vector<Point>, RotatedRect>> contourRects;
-    
-    // 第一步：收集所有轮廓和对应的旋转矩形
-    for (const auto& contour : finalContours) 
-    {
-        rotatedRect = minAreaRect(contour);
-        contourRects.push_back(make_pair(contour, rotatedRect));
-        
-        spring_length = max(rotatedRect.size.width, rotatedRect.size.height);
-        spring_width = min(rotatedRect.size.width, rotatedRect.size.height);
-    }
+    // 确保Img目录存在
+    CreateDirectory("../Img");
 
-    // 第二步：最终检查 - 确保没有遗漏的被包裹小轮廓
-    vector<bool> finalIsValid(contourRects.size(), true);
-    vector<int> finalOrder(contourRects.size());
-    
-    // 按面积从大到小排序
-    vector<pair<size_t, double>> finalContourAreas;
-    for (i = 0; i < contourRects.size(); i++) 
+    // 创建Canny边缘检测结果图像（与原图相同尺寸）
+    Mat cannyResult = Mat::zeros(input.size(), CV_8UC1);
+
+    // 存储轮廓信息和对应的ROI区域
+    struct ContourInfo {
+        vector<Point> contour;
+        RotatedRect rect;
+        Rect boundingBox;
+        int targetIndex;
+    };
+    vector<ContourInfo> contourInfos;
+
+    // 第一阶段：处理所有轮廓，收集信息并执行Canny边缘检测
+    targetIndex = 1;
+    for (i = 0; i < contours.size(); i++)
     {
-        finalContourAreas.push_back(make_pair(i, contourArea(contourRects[i].first)));
-    }
-    sort(finalContourAreas.begin(), finalContourAreas.end(), 
-         [](const pair<size_t, double>& a, const pair<size_t, double>& b) {
-             return a.second > b.second;
-         });
-    
-    // 最终检查：从大到小处理，排除被包裹的小轮廓
-    for (i = 0; i < finalContourAreas.size(); i++) 
-    {
-        size_t currentIdx = finalContourAreas[i].first;
-        
-        // 如果当前轮廓已经被标记为无效，跳过
-        if (!finalIsValid[currentIdx]) 
+        const auto& contour = contours[i];
+
+        // 面积过滤
+        if (contourArea(contour) < params.areaMin)
         {
             continue;
         }
-        
-        // 检查当前轮廓是否包含其他小轮廓
-        for (j = i + 1; j < finalContourAreas.size(); j++) 
+
+        // 计算最小外接矩形
+        rotatedRect = minAreaRect(contour);
+
+        // 获取ROI区域
+        Rect boundingBox = rotatedRect.boundingRect();
+        boundingBox = boundingBox & Rect(0, 0, input.cols, input.rows);
+
+        if (!boundingBox.empty() && boundingBox.width > 0 && boundingBox.height > 0)
         {
-            size_t otherIdx = finalContourAreas[j].first;
-            
-            // 如果其他轮廓已经被标记为无效，跳过
-            if (!finalIsValid[otherIdx]) 
+            // 保存目标图像
+            Mat targetImage = input(boundingBox).clone();
+            string filename = "../Img/object0" + to_string(targetIndex) + ".jpg";
+            bool saveSuccess = imwrite(filename, targetImage);
+            if (saveSuccess)
+            {
+                cout << "目标" << targetIndex << "图像已保存: " << filename << endl;
+            }
+            else
+            {
+                cerr << "保存目标" << targetIndex << "图像失败: " << filename << endl;
+            }
+
+            // 在ROI区域内进行Canny边缘检测
+            Mat roiImage;
+            if (binary.channels() > 1)
+            {
+                cvtColor(binary(boundingBox), roiImage, COLOR_BGR2GRAY);
+            }
+            else
+            {
+                roiImage = binary(boundingBox).clone();
+            }
+
+            Mat edges;
+            Canny(roiImage, edges, 100, 200, 3);
+
+            // 将边缘检测结果复制到Canny结果图像的对应位置
+            edges.copyTo(cannyResult(boundingBox));
+
+            cout << "目标" << targetIndex << "Canny边缘检测完成，ROI尺寸: "
+                 << boundingBox.width << "x" << boundingBox.height << endl;
+
+            // 保存轮廓信息
+            ContourInfo info;
+            info.contour = contour;
+            info.rect = rotatedRect;
+            info.boundingBox = boundingBox;
+            info.targetIndex = targetIndex;
+            contourInfos.push_back(info);
+
+            targetIndex++;
+        }
+    }
+
+    // 在Canny边缘检测结果基础上处理边缘
+    if (!cannyResult.empty())
+    {
+        // 创建轮廓掩码，用于排除与轮廓近似的边缘
+        Mat contourMask = Mat::zeros(input.size(), CV_8UC1);
+
+        // 绘制所有轮廓到掩码上（白色）
+        for (i = 0; i < contours.size(); i++)
+        {
+            const auto& contour = contours[i];
+            if (contourArea(contour) >= params.areaMin)
+            {
+                // 绘制轮廓到掩码，线宽稍微加粗以覆盖近似边缘
+                drawContours(contourMask, contours, i, Scalar(255), 3);
+            }
+        }
+
+        // 对轮廓掩码进行膨胀操作，确保覆盖所有近似边缘
+        Mat dilatedContourMask;
+        dilate(contourMask, dilatedContourMask, kernel, Point(-1, -1), 2);
+
+        // 从Canny结果中排除与轮廓近似的边缘
+        Mat filteredEdges;
+        bitwise_and(cannyResult, ~dilatedContourMask, filteredEdges);
+
+        // 查找剩余边缘的轮廓
+        vector<vector<Point>> edgeContours;
+        vector<Vec4i> edgeHierarchy;
+        findContours(filteredEdges, edgeContours, edgeHierarchy, RETR_LIST, CHAIN_APPROX_SIMPLE);
+
+        // 对每个边缘轮廓进行平滑拟合并绘制到原图
+        for (const auto& edgeContour : edgeContours)
+        {
+            // 过滤掉太小的边缘
+            if (contourArea(edgeContour) < 1)
             {
                 continue;
             }
-            
-            // 检查轮廓otherIdx是否被轮廓currentIdx完全包裹
-            Rect rectCurrent = boundingRect(contourRects[currentIdx].first);
-            Rect rectOther = boundingRect(contourRects[otherIdx].first);
-            
-            // 如果当前轮廓完全包含其他轮廓的边界框
-            if (rectCurrent.contains(rectOther.tl()) && rectCurrent.contains(rectOther.br())) 
+
+            // 多边形近似 - 平滑拟合
+            vector<Point> approxCurve;
+            double epsilon = 0.005 * arcLength(edgeContour, true);
+            approxPolyDP(edgeContour, approxCurve, epsilon, true);
+
+            // 如果近似后点数太少，使用原始轮廓
+            if (approxCurve.size() < 3)
             {
-                // 进一步检查：其他轮廓的所有点是否都在当前轮廓内部
-                bool allPointsInside = true;
-                for (const Point& point : contourRects[otherIdx].first) 
-                {
-                    if (pointPolygonTest(contourRects[currentIdx].first, point, false) <= 0) 
-                    {
-                        allPointsInside = false;
-                        break;
-                    }
-                }
-                
-                if (allPointsInside) 
-                {
-                    // 标记小轮廓为无效
-                    finalIsValid[otherIdx] = false;
-                }
+                approxCurve = edgeContour;
+            }
+
+            // 绘制平滑的红色边缘到原图
+            for (size_t j = 0; j < approxCurve.size(); j++)
+            {
+                size_t next = (j + 1) % approxCurve.size();
+                line(colorImage, approxCurve[j], approxCurve[next], Scalar(0, 0, 255), 2);
             }
         }
+
+        cout << "已处理 " << edgeContours.size() << " 个边缘轮廓，并用红色平滑线条显示" << endl;
+
+        // 第二阶段：绘制轮廓边界框和序号，根据是否存在非轮廓边缘决定颜色
+        for (const auto& info : contourInfos)
+        {
+            // 检查该轮廓ROI范围内是否存在非轮廓近似的边缘
+            Mat roiFilteredEdges = filteredEdges(info.boundingBox);
+            int nonZeroCount = countNonZero(roiFilteredEdges);
+
+            // 决定颜色：如果存在非轮廓边缘，使用红色；否则使用绿色
+            Scalar contourColor;
+            if (nonZeroCount > 0)
+            {
+                contourColor = Scalar(0, 0, 255);  // 红色 - 存在非轮廓边缘
+                cout << "目标" << info.targetIndex << " ROI内检测到非轮廓边缘，数量: " << nonZeroCount << endl;
+            }
+            else
+            {
+                contourColor = Scalar(0, 255, 0);  // 绿色 - 无非轮廓边缘
+            }
+
+            // 绘制边界框
+            info.rect.points(vertices);
+            for (int k = 0; k < 4; k++)
+            {
+                line(colorImage, vertices[k], vertices[(k+1)%4], contourColor, thickBorder);
+            }
+
+            // 在矩形左上角绘制序号
+            Point2f rectCenter = info.rect.center;
+            Size2f rectSize = info.rect.size;
+            Point textPosition;
+
+            // 计算文本位置（矩形左上角）
+            if (info.rect.angle < -45)
+            {
+                textPosition = Point(static_cast<int>(rectCenter.x - rectSize.width/2),
+                                    static_cast<int>(rectCenter.y - rectSize.height/2));
+            }
+            else
+            {
+                textPosition = Point(static_cast<int>(rectCenter.x - rectSize.height/2),
+                                    static_cast<int>(rectCenter.y - rectSize.width/2));
+            }
+
+            // 确保文本位置在图像范围内
+            textPosition.x = max(5, textPosition.x);
+            textPosition.y = max(20, textPosition.y);
+
+            // 绘制序号文本（使用与边界框相同的颜色）
+            putText(colorImage, to_string(info.targetIndex), textPosition, FONT_HERSHEY_SIMPLEX, 4, contourColor, 10);
+
+            // 计算尺寸并保存结果
+            spring_length = max(info.rect.size.width, info.rect.size.height);
+            spring_width = min(info.rect.size.width, info.rect.size.height);
+            angle = info.rect.angle;
+
+            result.widths.push_back(spring_width * bias);
+            result.heights.push_back(spring_length * bias);
+            result.angles.push_back(angle);
+        }
     }
-    
-    // 第三步：重新排序序号，只保留有效的轮廓
-    targetIndex = 1;
-    vector<double> finalWidths, finalHeights, finalAngles;
-    
-    // 确保Img目录存在
-    CreateDirectory("../Img");
-    
-    for (i = 0; i < finalContourAreas.size(); i++) 
+    else
     {
-        size_t currentIdx = finalContourAreas[i].first;
-        
-        // 只处理有效的轮廓
-        if (finalIsValid[currentIdx]) 
+        // 如果没有Canny结果，使用默认绿色绘制所有轮廓
+        for (const auto& info : contourInfos)
         {
             // 绘制边界框
-            rotatedRect = contourRects[currentIdx].second;
-            rotatedRect.points(vertices);
-            for (int k = 0; k < 4; k++) 
+            info.rect.points(vertices);
+            for (int k = 0; k < 4; k++)
             {
                 line(colorImage, vertices[k], vertices[(k+1)%4], Scalar(0, 255, 0), thickBorder);
             }
 
             // 在矩形左上角绘制序号
-            Point2f rectCenter = rotatedRect.center;
-            Size2f rectSize = rotatedRect.size;
+            Point2f rectCenter = info.rect.center;
+            Size2f rectSize = info.rect.size;
             Point textPosition;
-            
+
             // 计算文本位置（矩形左上角）
-            if (rotatedRect.angle < -45) 
+            if (info.rect.angle < -45)
             {
-                textPosition = Point(static_cast<int>(rectCenter.x - rectSize.width/2), 
+                textPosition = Point(static_cast<int>(rectCenter.x - rectSize.width/2),
                                     static_cast<int>(rectCenter.y - rectSize.height/2));
-            } 
-            else 
+            }
+            else
             {
-                textPosition = Point(static_cast<int>(rectCenter.x - rectSize.height/2), 
+                textPosition = Point(static_cast<int>(rectCenter.x - rectSize.height/2),
                                     static_cast<int>(rectCenter.y - rectSize.width/2));
             }
-            
+
             // 确保文本位置在图像范围内
             textPosition.x = max(5, textPosition.x);
             textPosition.y = max(20, textPosition.y);
-            
-            // 绘制序号文本 - 增大字体
-            putText(colorImage, to_string(targetIndex), textPosition, FONT_HERSHEY_SIMPLEX, 4, Scalar(0, 255, 0), 10);
 
-            // 输出检长结果到日志
-            spring_length = max(rotatedRect.size.width, rotatedRect.size.height);
-            spring_width = min(rotatedRect.size.width, rotatedRect.size.height);
-            angle = rotatedRect.angle;
-            
-            // 保存最终结果
-            finalWidths.push_back(spring_width*bias);
-            finalHeights.push_back(spring_length*bias);
-            finalAngles.push_back(angle);
+            // 绘制序号文本
+            putText(colorImage, to_string(info.targetIndex), textPosition, FONT_HERSHEY_SIMPLEX, 4, Scalar(0, 255, 0), 10);
 
-            result.widths.push_back(spring_width*bias);
-            result.heights.push_back(spring_length*bias);
+            // 计算尺寸并保存结果
+            spring_length = max(info.rect.size.width, info.rect.size.height);
+            spring_width = min(info.rect.size.width, info.rect.size.height);
+            angle = info.rect.angle;
+
+            result.widths.push_back(spring_width * bias);
+            result.heights.push_back(spring_length * bias);
             result.angles.push_back(angle);
-            
-            // 保存目标框选范围内的图像
-            // 使用旋转矩形的边界框来保存目标图像
-            rotatedRect = contourRects[currentIdx].second;
-            
-            // 获取旋转矩形的边界矩形
-            Rect boundingBox = rotatedRect.boundingRect();
-            
-            // 确保边界框在图像范围内
-            boundingBox = boundingBox & Rect(0, 0, input.cols, input.rows);
-            
-            if (!boundingBox.empty() && boundingBox.width > 0 && boundingBox.height > 0) 
-            {
-                // 从原始输入图像中提取目标区域
-                Mat targetImage = input(boundingBox).clone();
-                
-                // 生成文件名
-                string filename = "../Img/object0" + to_string(targetIndex) + ".jpg";
-                
-                // 保存目标图像
-                bool saveSuccess = imwrite(filename, targetImage);
-                if (saveSuccess) 
-                {
-                    cout << "目标" << targetIndex << "图像已保存: " << filename << endl;
-                } 
-                else 
-                {
-                    cerr << "保存目标" << targetIndex << "图像失败: " << filename << endl;
-                }
-            }
-            
-            targetIndex++;
         }
     }
 
-    if (finalWidths.empty()) 
+    if (result.widths.empty())
     {
         cerr << "未找到有效轮廓" << endl;
     }
