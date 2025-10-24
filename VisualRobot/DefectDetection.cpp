@@ -632,7 +632,10 @@ Mat DefectDetection::ComputeLBPHist(const Mat& gray) const
     
     // 使用多线程并行计算LBP
     int numThreads = std::thread::hardware_concurrency();
-    if (numThreads == 0) numThreads = 4;
+    if (numThreads == 0) 
+    {
+        numThreads = 4;
+    }
     
     vector<thread> threads;
     int rowsPerThread = gray.rows / numThreads;
@@ -915,16 +918,21 @@ bool DefectDetection::LoadTemplateLibrary(const std::string& templateDir)
     m_templateImages.clear();
     m_templateNames.clear();
     
-    try {
+    try 
+    {
         // 遍历模板目录中的所有图像文件
-        for (const auto& entry : std::filesystem::directory_iterator(templateDir)) {
-            if (entry.is_regular_file()) {
+        for (const auto& entry : std::filesystem::directory_iterator(templateDir)) 
+        {
+            if (entry.is_regular_file()) 
+            {
                 std::string ext = entry.path().extension().string();
                 // 检查是否为图像文件
-                if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp") {
+                if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp") 
+                {
                     // 读取模板图像
                     Mat templateImg = imread(entry.path().string(), IMREAD_GRAYSCALE);
-                    if (!templateImg.empty()) {
+                    if (!templateImg.empty()) 
+                    {
                         // 预处理模板图像
                         GaussianBlur(templateImg, templateImg, Size(3,3), 0);
                         
@@ -936,14 +944,17 @@ bool DefectDetection::LoadTemplateLibrary(const std::string& templateDir)
             }
         }
         
-        if (m_templateImages.empty()) {
+        if (m_templateImages.empty()) 
+        {
             return false;
         }
         
         m_templateLibraryLoaded = true;
         return true;
         
-    } catch (const std::exception& e) {
+    } 
+    catch (const std::exception& e) 
+    {
         return false;
     }
 }
@@ -951,19 +962,24 @@ bool DefectDetection::LoadTemplateLibrary(const std::string& templateDir)
 // 对缺陷区域进行分类
 std::string DefectDetection::ClassifyDefect(const cv::Mat& defectROI) const
 {
-    if (!m_templateLibraryLoaded || m_templateImages.empty()) {
+    if (!m_templateLibraryLoaded || m_templateImages.empty()) 
+    {
         return "Unknown";
     }
     
-    if (defectROI.empty()) {
+    if (defectROI.empty()) 
+    {
         return "Unknown";
     }
     
     // 预处理缺陷区域
     Mat defectGray;
-    if (defectROI.channels() == 3) {
+    if (defectROI.channels() == 3) 
+    {
         cvtColor(defectROI, defectGray, COLOR_BGR2GRAY);
-    } else {
+    } 
+    else 
+    {
         defectGray = defectROI.clone();
     }
     GaussianBlur(defectGray, defectGray, Size(3,3), 0);
@@ -972,7 +988,8 @@ std::string DefectDetection::ClassifyDefect(const cv::Mat& defectROI) const
     int bestIndex = -1;
     
     // 与所有模板进行匹配
-    for (size_t i = 0; i < m_templateImages.size(); ++i) {
+    for (size_t i = 0; i < m_templateImages.size(); ++i) 
+    {
         const Mat& templateImg = m_templateImages[i];
         
         // 调整缺陷区域大小以匹配模板
@@ -988,16 +1005,20 @@ std::string DefectDetection::ClassifyDefect(const cv::Mat& defectROI) const
         minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc);
         
         // 取最大相似度作为匹配分数
-        if (maxVal > bestScore) {
+        if (maxVal > bestScore) 
+        {
             bestScore = maxVal;
             bestIndex = static_cast<int>(i);
         }
     }
     
     // 检查是否超过阈值
-    if (bestIndex >= 0 && bestScore >= m_templateMatchThresh) {
+    if (bestIndex >= 0 && bestScore >= m_templateMatchThresh) 
+    {
         return m_templateNames[bestIndex];
-    } else {
+    } 
+    else 
+    {
         return "Unknown";
     }
 }
@@ -1015,12 +1036,14 @@ std::vector<std::string> DefectDetection::GetTemplateNames() const
 // 使用特征对齐进行图像配准
 bool DefectDetection::ComputeHomographyWithFeatureAlignment(const cv::Mat& currentBGR, cv::Mat& homography)
 {
-    if (!m_hasTemplate || m_templateBGR.empty()) {
+    if (!m_hasTemplate || m_templateBGR.empty()) 
+    {
         qDebug() << "尚未设置模板或模板为空";
         return false;
     }
 
-    if (currentBGR.empty()) {
+    if (currentBGR.empty()) 
+    {
         qDebug() << "当前图像为空";
         return false;
     }
@@ -1034,7 +1057,8 @@ bool DefectDetection::ComputeHomographyWithFeatureAlignment(const cv::Mat& curre
     // 使用快速对齐（匹配到足够内点时立即停止）
     AlignmentResult result = m_featureAlignment->FastAlignImages(currentBGR, m_templateBGR, params);
     
-    if (!result.success) {
+    if (!result.success) 
+    {
         qDebug() << "特征对齐失败，内点数量:" << result.inlierCount;
         return false;
     }
@@ -1051,19 +1075,22 @@ bool DefectDetection::ComputeHomographyWithFeatureAlignment(const cv::Mat& curre
 // 使用特征对齐重构图像
 cv::Mat DefectDetection::AlignAndWarpImage(const cv::Mat& currentBGR)
 {
-    if (!m_hasTemplate || m_templateBGR.empty()) {
+    if (!m_hasTemplate || m_templateBGR.empty()) 
+    {
         qDebug() << "尚未设置模板或模板为空";
         return cv::Mat();
     }
 
-    if (currentBGR.empty()) {
+    if (currentBGR.empty()) 
+    {
         qDebug() << "当前图像为空";
         return cv::Mat();
     }
 
     // 计算变换矩阵
     cv::Mat homography;
-    if (!ComputeHomographyWithFeatureAlignment(currentBGR, homography)) {
+    if (!ComputeHomographyWithFeatureAlignment(currentBGR, homography)) 
+    {
         qDebug() << "无法计算变换矩阵";
         return cv::Mat();
     }
@@ -1071,7 +1098,8 @@ cv::Mat DefectDetection::AlignAndWarpImage(const cv::Mat& currentBGR)
     // 重构图像
     cv::Mat alignedImage = m_featureAlignment->WarpImage(currentBGR, homography, m_templateBGR.size());
     
-    if (alignedImage.empty()) {
+    if (alignedImage.empty()) 
+    {
         qDebug() << "图像重构失败";
         return cv::Mat();
     }
@@ -1103,9 +1131,12 @@ bool DefectDetection::SetTemplateFromCurrent(const cv::Mat& currentFrame)
     m_templateGray = gray.clone();
     
     // 保存BGR模板用于特征对齐
-    if (currentFrame.channels() == 3) {
+    if (currentFrame.channels() == 3) 
+    {
         m_templateBGR = currentFrame.clone();
-    } else {
+    } 
+    else 
+    {
         cvtColor(currentFrame, m_templateBGR, COLOR_GRAY2BGR);
     }
     imwrite("../Img/templateBGR.jpg", m_templateBGR); 

@@ -39,59 +39,32 @@ public:
     ~FeatureAlignment();
 
     // 使用特征匹配对齐两幅图像
-    AlignmentResult AlignImages(
-        const cv::Mat& srcImage, 
-        const cv::Mat& dstImage,
-        const AlignmentParams& params = AlignmentParams());
+    AlignmentResult AlignImages(const cv::Mat& srcImage, const cv::Mat& dstImage, const AlignmentParams& params = AlignmentParams());
 
     // 使用特征匹配对齐两幅图像（灰度图版本）
-    AlignmentResult AlignImagesGray(
-        const cv::Mat& srcGray, 
-        const cv::Mat& dstGray,
-        const AlignmentParams& params = AlignmentParams());
+    AlignmentResult AlignImagesGray(const cv::Mat& srcGray, const cv::Mat& dstGray, const AlignmentParams& params = AlignmentParams());
 
     // 重构图像：根据变换矩阵将源图像变换到目标图像坐标系
-    cv::Mat WarpImage(
-        const cv::Mat& srcImage, 
-        const cv::Mat& transformMatrix,
-        const cv::Size& dstSize);
+    cv::Mat WarpImage(const cv::Mat& srcImage, const cv::Mat& transformMatrix, const cv::Size& dstSize);
 
     // 快速对齐：当匹配到足够内点时立即停止
-    AlignmentResult FastAlignImages(
-        const cv::Mat& srcImage, 
-        const cv::Mat& dstImage,
-        const AlignmentParams& params = AlignmentParams());
+    AlignmentResult FastAlignImages(const cv::Mat& srcImage, const cv::Mat& dstImage, const AlignmentParams& params = AlignmentParams());
 
     // 获取对齐状态信息
     QString GetAlignmentInfo(const AlignmentResult& result) const;
 
 private:
     // 特征检测和描述符提取
-    bool ExtractFeatures(
-        const cv::Mat& image,
-        std::vector<cv::KeyPoint>& keypoints,
-        cv::Mat& descriptors);
+    bool ExtractFeatures(const cv::Mat& image, std::vector<cv::KeyPoint>& keypoints, cv::Mat& descriptors);
 
     // 特征匹配
-    bool MatchFeatures(
-        const cv::Mat& descriptors1,
-        const cv::Mat& descriptors2,
-        std::vector<cv::DMatch>& matches);
+    bool MatchFeatures(const cv::Mat& descriptors1, const cv::Mat& descriptors2, std::vector<cv::DMatch>& matches);
 
     // 几何验证和变换矩阵计算
-    bool GeometricVerification(
-        const std::vector<cv::KeyPoint>& keypoints1,
-        const std::vector<cv::KeyPoint>& keypoints2,
-        const std::vector<cv::DMatch>& matches,
-        cv::Mat& transformMatrix,
-        std::vector<cv::DMatch>& inlierMatches,
-        const AlignmentParams& params);
+    bool GeometricVerification(const std::vector<cv::KeyPoint>& keypoints1, const std::vector<cv::KeyPoint>& keypoints2, const std::vector<cv::DMatch>& matches, cv::Mat& transformMatrix, std::vector<cv::DMatch>& inlierMatches, const AlignmentParams& params);
 
     // 计算重投影误差
-    double ComputeReprojectionError(
-        const std::vector<cv::Point2f>& points1,
-        const std::vector<cv::Point2f>& points2,
-        const cv::Mat& transformMatrix);
+    double ComputeReprojectionError(const std::vector<cv::Point2f>& points1, const std::vector<cv::Point2f>& points2, const cv::Mat& transformMatrix);
 
     // 特征检测器
     cv::Ptr<cv::Feature2D> m_featureDetector;

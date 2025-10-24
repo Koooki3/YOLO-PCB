@@ -132,14 +132,11 @@ void DLExample::SetupUI()
 void DLExample::ConnectSignals()
 {
     // 连接DLProcessor信号
-    connect(dlProcessor_, &DLProcessor::classificationComplete,
-            this, &DLExample::OnClassificationComplete);
+    connect(dlProcessor_, &DLProcessor::classificationComplete, this, &DLExample::OnClassificationComplete);
     
-    connect(dlProcessor_, &DLProcessor::batchProcessingComplete,
-            this, &DLExample::OnBatchProcessingComplete);
+    connect(dlProcessor_, &DLProcessor::batchProcessingComplete, this, &DLExample::OnBatchProcessingComplete);
     
-    connect(dlProcessor_, &DLProcessor::errorOccurred,
-            this, &DLExample::OnDLError);
+    connect(dlProcessor_, &DLProcessor::errorOccurred, this, &DLExample::OnDLError);
 }
 
 void DLExample::BrowseModel()
@@ -148,10 +145,7 @@ void DLExample::BrowseModel()
     QString fileName; // 选择的模型文件路径
     
     // 打开文件对话框选择模型文件
-    fileName = QFileDialog::getOpenFileName(this,
-        "选择深度学习模型文件",
-        "",
-        "模型文件 (*.onnx *.pb *.caffemodel *.weights);;所有文件 (*.*)");
+    fileName = QFileDialog::getOpenFileName(this, "选择深度学习模型文件", "", "模型文件 (*.onnx *.pb *.caffemodel *.weights);;所有文件 (*.*)");
     
     if (!fileName.isEmpty()) 
     {
@@ -165,10 +159,7 @@ void DLExample::BrowseLabels()
     QString fileName; // 选择的标签文件路径
     
     // 打开文件对话框选择标签文件
-    fileName = QFileDialog::getOpenFileName(this,
-        "选择类别标签文件",
-        "",
-        "文本文件 (*.txt);;所有文件 (*.*)");
+    fileName = QFileDialog::getOpenFileName(this, "选择类别标签文件", "", "文本文件 (*.txt);;所有文件 (*.*)");
     
     if (!fileName.isEmpty()) 
     {
@@ -312,9 +303,7 @@ void DLExample::SetParameters()
     dlProcessor_->SetInputSize(Size(inputSize, inputSize));
     
     // 更新状态显示
-    statusLabel_->setText(QString("参数已更新: 置信度=%1, 输入尺寸=%2x%2")
-                         .arg(confidence)
-                         .arg(inputSize));
+    statusLabel_->setText(QString("参数已更新: 置信度=%1, 输入尺寸=%2x%2").arg(confidence).arg(inputSize));
     statusLabel_->setStyleSheet("QLabel { color: blue; }");
 }
 
@@ -326,10 +315,7 @@ void DLExample::SelectImage()
     QPixmap scaledPixmap;   // 缩放后的图像像素映射
     
     // 打开文件对话框选择图像文件
-    fileName = QFileDialog::getOpenFileName(this,
-        "选择要分类的图像",
-        "",
-        "图像文件 (*.jpg *.jpeg *.png *.bmp *.tiff);;所有文件 (*.*)");
+    fileName = QFileDialog::getOpenFileName(this, "选择要分类的图像", "", "图像文件 (*.jpg *.jpeg *.png *.bmp *.tiff);;所有文件 (*.*)");
     
     if (!fileName.isEmpty()) 
     {
@@ -339,9 +325,7 @@ void DLExample::SelectImage()
         pixmap = QPixmap(fileName);
         if (!pixmap.isNull()) 
         {
-            scaledPixmap = pixmap.scaled(imageLabel_->size(), 
-                                               Qt::KeepAspectRatio, 
-                                               Qt::SmoothTransformation);
+            scaledPixmap = pixmap.scaled(imageLabel_->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
             imageLabel_->setPixmap(scaledPixmap);
             
             statusLabel_->setText("图像已加载: " + QFileInfo(fileName).fileName());
@@ -409,10 +393,7 @@ void DLExample::BatchClassify()
     }
     
     // 打开文件对话框选择多个图像文件
-    fileNames = QFileDialog::getOpenFileNames(this,
-        "选择要批量分类的图像",
-        "",
-        "图像文件 (*.jpg *.jpeg *.png *.bmp *.tiff)");
+    fileNames = QFileDialog::getOpenFileNames(this, "选择要批量分类的图像", "", "图像文件 (*.jpg *.jpeg *.png *.bmp *.tiff)");
     
     if (fileNames.isEmpty()) 
     {
@@ -459,9 +440,9 @@ void DLExample::OnClassificationComplete(const ClassificationResult& result)
     
     // 构建结果文本
     resultText = QString("分类结果:\n"
-                                "类别: %1 (ID: %2)\n"
-                                "置信度: %3\n"
-                                "状态: %4")
+                         "类别: %1 (ID: %2)\n"
+                         "置信度: %3\n"
+                         "状态: %4")
                         .arg(QString::fromStdString(result.className))
                         .arg(result.classId)
                         .arg(result.confidence, 0, 'f', 4)
@@ -501,10 +482,7 @@ void DLExample::OnBatchProcessingComplete(const vector<ClassificationResult>& re
         fileName = QFileInfo(batchFileNames_[i]).fileName();
         const auto& result = results[i];
         
-        resultText += QString("%1: %2 (%.3f)\n")
-                     .arg(fileName)
-                     .arg(QString::fromStdString(result.className))
-                     .arg(result.confidence);
+        resultText += QString("%1: %2 (%.3f)\n").arg(fileName).arg(QString::fromStdString(result.className)).arg(result.confidence);
     }
     
     // 显示结果
