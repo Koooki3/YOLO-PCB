@@ -895,8 +895,7 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
             // 将边缘检测结果复制到Canny结果图像的对应位置
             edges.copyTo(cannyResult(boundingBox));
 
-            cout << "目标" << targetIndex << "Canny边缘检测完成，ROI尺寸: "
-                 << boundingBox.width << "x" << boundingBox.height << endl;
+            cout << "目标" << targetIndex << "Canny边缘检测完成，ROI尺寸: " << boundingBox.width << "x" << boundingBox.height << endl;
 
             // 保存轮廓信息
             ContourInfo info;
@@ -1004,13 +1003,11 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
             // 计算文本位置（矩形左上角）
             if (info.rect.angle < -45)
             {
-                textPosition = Point(static_cast<int>(rectCenter.x - rectSize.width/2),
-                                    static_cast<int>(rectCenter.y - rectSize.height/2));
+                textPosition = Point(static_cast<int>(rectCenter.x - rectSize.width/2), static_cast<int>(rectCenter.y - rectSize.height/2));
             }
             else
             {
-                textPosition = Point(static_cast<int>(rectCenter.x - rectSize.height/2),
-                                    static_cast<int>(rectCenter.y - rectSize.width/2));
+                textPosition = Point(static_cast<int>(rectCenter.x - rectSize.height/2), static_cast<int>(rectCenter.y - rectSize.width/2));
             }
 
             // 确保文本位置在图像范围内
@@ -1050,13 +1047,11 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
             // 计算文本位置（矩形左上角）
             if (info.rect.angle < -45)
             {
-                textPosition = Point(static_cast<int>(rectCenter.x - rectSize.width/2),
-                                    static_cast<int>(rectCenter.y - rectSize.height/2));
+                textPosition = Point(static_cast<int>(rectCenter.x - rectSize.width/2), static_cast<int>(rectCenter.y - rectSize.height/2));
             }
             else
             {
-                textPosition = Point(static_cast<int>(rectCenter.x - rectSize.height/2),
-                                    static_cast<int>(rectCenter.y - rectSize.width/2));
+                textPosition = Point(static_cast<int>(rectCenter.x - rectSize.height/2), static_cast<int>(rectCenter.y - rectSize.width/2));
             }
 
             // 确保文本位置在图像范围内

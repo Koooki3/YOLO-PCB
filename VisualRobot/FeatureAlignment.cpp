@@ -28,15 +28,21 @@ AlignmentResult FeatureAlignment::AlignImages(
 
     // 转换为灰度图
     cv::Mat srcGray, dstGray;
-    if (srcImage.channels() == 3) {
+    if (srcImage.channels() == 3) 
+    {
         cv::cvtColor(srcImage, srcGray, cv::COLOR_BGR2GRAY);
-    } else {
+    } 
+    else 
+    {
         srcGray = srcImage.clone();
     }
     
-    if (dstImage.channels() == 3) {
+    if (dstImage.channels() == 3) 
+    {
         cv::cvtColor(dstImage, dstGray, cv::COLOR_BGR2GRAY);
-    } else {
+    } 
+    else 
+    {
         dstGray = dstImage.clone();
     }
 
@@ -54,7 +60,8 @@ AlignmentResult FeatureAlignment::AlignImagesGray(
 {
     AlignmentResult result;
     
-    if (srcGray.empty() || dstGray.empty()) {
+    if (srcGray.empty() || dstGray.empty()) 
+    {
         qDebug() << "输入图像为空";
         return result;
     }
@@ -63,8 +70,8 @@ AlignmentResult FeatureAlignment::AlignImagesGray(
     std::vector<cv::KeyPoint> keypoints1, keypoints2;
     cv::Mat descriptors1, descriptors2;
     
-    if (!ExtractFeatures(srcGray, keypoints1, descriptors1) ||
-        !ExtractFeatures(dstGray, keypoints2, descriptors2)) {
+    if (!ExtractFeatures(srcGray, keypoints1, descriptors1) || !ExtractFeatures(dstGray, keypoints2, descriptors2)) 
+    {
         qDebug() << "特征提取失败";
         return result;
     }
@@ -73,7 +80,8 @@ AlignmentResult FeatureAlignment::AlignImagesGray(
 
     // 2. 特征匹配
     std::vector<cv::DMatch> matches;
-    if (!MatchFeatures(descriptors1, descriptors2, matches)) {
+    if (!MatchFeatures(descriptors1, descriptors2, matches)) 
+    {
         qDebug() << "特征匹配失败";
         return result;
     }
@@ -84,8 +92,8 @@ AlignmentResult FeatureAlignment::AlignImagesGray(
     std::vector<cv::DMatch> inlierMatches;
     cv::Mat transformMatrix;
     
-    if (!GeometricVerification(keypoints1, keypoints2, matches, 
-                              transformMatrix, inlierMatches, params)) {
+    if (!GeometricVerification(keypoints1, keypoints2, matches, transformMatrix, inlierMatches, params)) 
+    {
         qDebug() << "几何验证失败";
         return result;
     }
@@ -99,17 +107,16 @@ AlignmentResult FeatureAlignment::AlignImagesGray(
     // 提取内点对应的特征点坐标
     result.srcPoints.reserve(inlierMatches.size());
     result.dstPoints.reserve(inlierMatches.size());
-    for (const auto& match : inlierMatches) {
+    for (const auto& match : inlierMatches) 
+    {
         result.srcPoints.push_back(keypoints1[match.queryIdx].pt);
         result.dstPoints.push_back(keypoints2[match.trainIdx].pt);
     }
     
     // 计算重投影误差
-    result.reprojectionError = ComputeReprojectionError(
-        result.srcPoints, result.dstPoints, transformMatrix);
+    result.reprojectionError = ComputeReprojectionError(result.srcPoints, result.dstPoints, transformMatrix);
 
-    qDebug() << "对齐成功 - 内点数量:" << result.inlierCount 
-             << "重投影误差:" << result.reprojectionError;
+    qDebug() << "对齐成功 - 内点数量:" << result.inlierCount  << "重投影误差:" << result.reprojectionError;
 
     return result;
 }
@@ -125,19 +132,26 @@ AlignmentResult FeatureAlignment::FastAlignImages(
 
     // 转换为灰度图
     cv::Mat srcGray, dstGray;
-    if (srcImage.channels() == 3) {
+    if (srcImage.channels() == 3) 
+    {
         cv::cvtColor(srcImage, srcGray, cv::COLOR_BGR2GRAY);
-    } else {
+    } 
+    else 
+    {
         srcGray = srcImage.clone();
     }
     
-    if (dstImage.channels() == 3) {
+    if (dstImage.channels() == 3) 
+    {
         cv::cvtColor(dstImage, dstGray, cv::COLOR_BGR2GRAY);
-    } else {
+    } 
+    else 
+    {
         dstGray = dstImage.clone();
     }
 
-    if (srcGray.empty() || dstGray.empty()) {
+    if (srcGray.empty() || dstGray.empty()) 
+    {
         qDebug() << "输入图像为空";
         return result;
     }
@@ -146,15 +160,16 @@ AlignmentResult FeatureAlignment::FastAlignImages(
     std::vector<cv::KeyPoint> keypoints1, keypoints2;
     cv::Mat descriptors1, descriptors2;
     
-    if (!ExtractFeatures(srcGray, keypoints1, descriptors1) ||
-        !ExtractFeatures(dstGray, keypoints2, descriptors2)) {
+    if (!ExtractFeatures(srcGray, keypoints1, descriptors1) || !ExtractFeatures(dstGray, keypoints2, descriptors2)) 
+    {
         qDebug() << "特征提取失败";
         return result;
     }
 
     // 2. 特征匹配
     std::vector<cv::DMatch> matches;
-    if (!MatchFeatures(descriptors1, descriptors2, matches)) {
+    if (!MatchFeatures(descriptors1, descriptors2, matches)) 
+    {
         qDebug() << "特征匹配失败";
         return result;
     }
@@ -163,32 +178,36 @@ AlignmentResult FeatureAlignment::FastAlignImages(
     std::vector<cv::DMatch> inlierMatches;
     cv::Mat transformMatrix;
     
-    if (matches.size() >= 4) {
+    if (matches.size() >= 4) 
+    {
         std::vector<cv::Point2f> points1, points2;
         points1.reserve(matches.size());
         points2.reserve(matches.size());
         
-        for (const auto& match : matches) {
+        for (const auto& match : matches) 
+        {
             points1.push_back(keypoints1[match.queryIdx].pt);
             points2.push_back(keypoints2[match.trainIdx].pt);
         }
         
         // 使用RANSAC计算单应性矩阵
         std::vector<uchar> inlierMask;
-        transformMatrix = cv::findHomography(points1, points2, cv::RANSAC, 
-                                           params.ransacReprojThresh, inlierMask,
-                                           params.maxIterations, params.confidence);
+        transformMatrix = cv::findHomography(points1, points2, cv::RANSAC, params.ransacReprojThresh, inlierMask, params.maxIterations, params.confidence);
         
-        if (!transformMatrix.empty()) {
+        if (!transformMatrix.empty()) 
+        {
             // 提取内点
-            for (size_t i = 0; i < inlierMask.size(); ++i) {
-                if (inlierMask[i]) {
+            for (size_t i = 0; i < inlierMask.size(); ++i) 
+            {
+                if (inlierMask[i]) 
+                {
                     inlierMatches.push_back(matches[i]);
                 }
             }
             
             // 检查是否达到最小内点要求
-            if (inlierMatches.size() >= static_cast<size_t>(params.minInliers)) {
+            if (inlierMatches.size() >= static_cast<size_t>(params.minInliers)) 
+            {
                 result.transformMatrix = transformMatrix;
                 result.matches = inlierMatches;
                 result.success = true;
@@ -197,19 +216,18 @@ AlignmentResult FeatureAlignment::FastAlignImages(
                 // 提取内点对应的特征点坐标
                 result.srcPoints.reserve(inlierMatches.size());
                 result.dstPoints.reserve(inlierMatches.size());
-                for (const auto& match : inlierMatches) {
+                for (const auto& match : inlierMatches) 
+                {
                     result.srcPoints.push_back(keypoints1[match.queryIdx].pt);
                     result.dstPoints.push_back(keypoints2[match.trainIdx].pt);
                 }
                 
-                result.reprojectionError = ComputeReprojectionError(
-                    result.srcPoints, result.dstPoints, transformMatrix);
+                result.reprojectionError = ComputeReprojectionError(result.srcPoints, result.dstPoints, transformMatrix);
             }
         }
     }
 
-    qDebug() << "快速对齐耗时:" << timer.elapsed() << "ms"
-             << "内点数量:" << result.inlierCount;
+    qDebug() << "快速对齐耗时:" << timer.elapsed() << "ms" << "内点数量:" << result.inlierCount;
     
     return result;
 }
@@ -219,17 +237,20 @@ cv::Mat FeatureAlignment::WarpImage(
     const cv::Mat& transformMatrix,
     const cv::Size& dstSize)
 {
-    if (srcImage.empty() || transformMatrix.empty()) {
+    if (srcImage.empty() || transformMatrix.empty()) 
+    {
         qDebug() << "输入图像或变换矩阵为空";
         return cv::Mat();
     }
     
     cv::Mat warpedImage;
-    try {
+    try 
+    {
         // 使用白色背景填充空白区域
-        cv::warpPerspective(srcImage, warpedImage, transformMatrix, dstSize,
-                           cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar(255, 255, 255));
-    } catch (const cv::Exception& e) {
+        cv::warpPerspective(srcImage, warpedImage, transformMatrix, dstSize, cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar(255, 255, 255));
+    } 
+    catch (const cv::Exception& e) 
+    {
         qDebug() << "图像变换失败:" << e.what();
         return cv::Mat();
     }
@@ -239,13 +260,12 @@ cv::Mat FeatureAlignment::WarpImage(
 
 QString FeatureAlignment::GetAlignmentInfo(const AlignmentResult& result) const
 {
-    if (!result.success) {
+    if (!result.success) 
+    {
         return "对齐失败";
     }
     
-    return QString("对齐成功 - 内点数量: %1, 重投影误差: %2")
-           .arg(result.inlierCount)
-           .arg(result.reprojectionError, 0, 'f', 3);
+    return QString("对齐成功 - 内点数量: %1, 重投影误差: %2").arg(result.inlierCount).arg(result.reprojectionError, 0, 'f', 3);
 }
 
 bool FeatureAlignment::ExtractFeatures(
@@ -253,14 +273,18 @@ bool FeatureAlignment::ExtractFeatures(
     std::vector<cv::KeyPoint>& keypoints,
     cv::Mat& descriptors)
 {
-    if (image.empty()) {
+    if (image.empty()) 
+    {
         return false;
     }
     
-    try {
+    try 
+    {
         m_featureDetector->detectAndCompute(image, cv::noArray(), keypoints, descriptors);
         return !keypoints.empty() && !descriptors.empty();
-    } catch (const cv::Exception& e) {
+    } 
+    catch (const cv::Exception& e) 
+    {
         qDebug() << "特征提取异常:" << e.what();
         return false;
     }
@@ -271,26 +295,31 @@ bool FeatureAlignment::MatchFeatures(
     const cv::Mat& descriptors2,
     std::vector<cv::DMatch>& matches)
 {
-    if (descriptors1.empty() || descriptors2.empty()) {
+    if (descriptors1.empty() || descriptors2.empty()) 
+    {
         return false;
     }
     
-    try {
+    try 
+    {
         // 使用KNN匹配
         std::vector<std::vector<cv::DMatch>> knnMatches;
         m_featureMatcher->knnMatch(descriptors1, descriptors2, knnMatches, 2);
         
         // 应用比率测试筛选优质匹配
         const float ratio_thresh = 0.7f;
-        for (const auto& knnMatch : knnMatches) {
-            if (knnMatch.size() == 2 && 
-                knnMatch[0].distance < ratio_thresh * knnMatch[1].distance) {
+        for (const auto& knnMatch : knnMatches) 
+        {
+            if (knnMatch.size() == 2 && knnMatch[0].distance < ratio_thresh * knnMatch[1].distance) 
+            {
                 matches.push_back(knnMatch[0]);
             }
         }
         
         return !matches.empty();
-    } catch (const cv::Exception& e) {
+    } 
+    catch (const cv::Exception& e) 
+    {
         qDebug() << "特征匹配异常:" << e.what();
         return false;
     }
@@ -304,7 +333,8 @@ bool FeatureAlignment::GeometricVerification(
     std::vector<cv::DMatch>& inlierMatches,
     const AlignmentParams& params)
 {
-    if (matches.size() < 4) {
+    if (matches.size() < 4) 
+    {
         qDebug() << "匹配点数量不足，需要至少4个点";
         return false;
     }
@@ -314,31 +344,34 @@ bool FeatureAlignment::GeometricVerification(
     points1.reserve(matches.size());
     points2.reserve(matches.size());
     
-    for (const auto& match : matches) {
+    for (const auto& match : matches) 
+    {
         points1.push_back(keypoints1[match.queryIdx].pt);
         points2.push_back(keypoints2[match.trainIdx].pt);
     }
     
     // 使用RANSAC计算单应性矩阵
     std::vector<uchar> inlierMask;
-    transformMatrix = cv::findHomography(points1, points2, cv::RANSAC, 
-                                       params.ransacReprojThresh, inlierMask,
-                                       params.maxIterations, params.confidence);
+    transformMatrix = cv::findHomography(points1, points2, cv::RANSAC, params.ransacReprojThresh, inlierMask, params.maxIterations, params.confidence);
     
-    if (transformMatrix.empty()) {
+    if (transformMatrix.empty()) 
+    {
         qDebug() << "单应性矩阵计算失败";
         return false;
     }
     
     // 提取内点
-    for (size_t i = 0; i < inlierMask.size(); ++i) {
-        if (inlierMask[i]) {
+    for (size_t i = 0; i < inlierMask.size(); ++i) 
+    {
+        if (inlierMask[i]) 
+        {
             inlierMatches.push_back(matches[i]);
         }
     }
     
     // 检查内点数量是否足够
-    if (inlierMatches.size() < static_cast<size_t>(params.minInliers)) {
+    if (inlierMatches.size() < static_cast<size_t>(params.minInliers)) 
+    {
         qDebug() << "内点数量不足，需要至少" << params.minInliers << "个，实际" << inlierMatches.size();
         return false;
     }
@@ -351,7 +384,8 @@ double FeatureAlignment::ComputeReprojectionError(
     const std::vector<cv::Point2f>& points2,
     const cv::Mat& transformMatrix)
 {
-    if (points1.empty() || points2.empty() || transformMatrix.empty()) {
+    if (points1.empty() || points2.empty() || transformMatrix.empty()) 
+    {
         return 0.0;
     }
     
@@ -359,7 +393,8 @@ double FeatureAlignment::ComputeReprojectionError(
     cv::perspectiveTransform(points1, transformedPoints, transformMatrix);
     
     double totalError = 0.0;
-    for (size_t i = 0; i < points2.size(); ++i) {
+    for (size_t i = 0; i < points2.size(); ++i) 
+    {
         double dx = points2[i].x - transformedPoints[i].x;
         double dy = points2[i].y - transformedPoints[i].y;
         totalError += std::sqrt(dx * dx + dy * dy);

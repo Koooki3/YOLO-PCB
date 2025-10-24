@@ -51,9 +51,7 @@ std::vector<cv::DMatch> featureDetector::FilterMatches(
     // 2. 应用比率测试进行初步筛选
     for (const auto& match : knnMatches)
     {
-        if (match[0].distance < params.ratioThresh * match[1].distance &&
-            validKeypoints1[match[0].queryIdx] &&
-            validKeypoints2[match[0].trainIdx])
+        if (match[0].distance < params.ratioThresh * match[1].distance && validKeypoints1[match[0].queryIdx] && validKeypoints2[match[0].trainIdx])
         {
             goodMatches.push_back(match[0]);
             points1.push_back(keypoints1[match[0].queryIdx].pt);
@@ -151,9 +149,7 @@ void featureDetector::TestFeatureDetection(const QString& imagePath1, const QStr
     goodMatches = FilterMatches(keypoints1, keypoints2, knnMatches, points1, points2, params);
 
     // 5. 绘制匹配结果
-    cv::drawMatches(image1, keypoints1, image2, keypoints2, goodMatches, imgMatches,
-                cv::Scalar::all(-1), cv::Scalar::all(-1),
-                std::vector<char>(), cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+    cv::drawMatches(image1, keypoints1, image2, keypoints2, goodMatches, imgMatches, cv::Scalar::all(-1), cv::Scalar::all(-1), std::vector<char>(), cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
 
     // 6. 如果有足够的匹配点，绘制变换关系
     if (points1.size() >= 4)
@@ -175,14 +171,10 @@ void featureDetector::TestFeatureDetection(const QString& imagePath1, const QStr
         cv::perspectiveTransform(objCorners, sceneCorners, H);
 
         // 在匹配图像上绘制边界框
-        cv::line(imgMatches, sceneCorners[0] + cv::Point2f(image1.cols, 0),
-             sceneCorners[1] + cv::Point2f(image1.cols, 0), cv::Scalar(0, 255, 0), 2);
-        cv::line(imgMatches, sceneCorners[1] + cv::Point2f(image1.cols, 0),
-             sceneCorners[2] + cv::Point2f(image1.cols, 0), cv::Scalar(0, 255, 0), 2);
-        cv::line(imgMatches, sceneCorners[2] + cv::Point2f(image1.cols, 0),
-             sceneCorners[3] + cv::Point2f(image1.cols, 0), cv::Scalar(0, 255, 0), 2);
-        cv::line(imgMatches, sceneCorners[3] + cv::Point2f(image1.cols, 0),
-             sceneCorners[0] + cv::Point2f(image1.cols, 0), cv::Scalar(0, 255, 0), 2);
+        cv::line(imgMatches, sceneCorners[0] + cv::Point2f(image1.cols, 0), sceneCorners[1] + cv::Point2f(image1.cols, 0), cv::Scalar(0, 255, 0), 2);
+        cv::line(imgMatches, sceneCorners[1] + cv::Point2f(image1.cols, 0), sceneCorners[2] + cv::Point2f(image1.cols, 0), cv::Scalar(0, 255, 0), 2);
+        cv::line(imgMatches, sceneCorners[2] + cv::Point2f(image1.cols, 0), sceneCorners[3] + cv::Point2f(image1.cols, 0), cv::Scalar(0, 255, 0), 2);
+        cv::line(imgMatches, sceneCorners[3] + cv::Point2f(image1.cols, 0), sceneCorners[0] + cv::Point2f(image1.cols, 0), cv::Scalar(0, 255, 0), 2);
     }
 
     // 7. 保存结果图像

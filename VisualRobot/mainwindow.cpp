@@ -86,14 +86,18 @@ MainWindow::MainWindow(QWidget *parent) :
     m_defectDetection = new DefectDetection();
     
     // 加载缺陷分类模板库
-    if (m_defectDetection->LoadTemplateLibrary("../Img/Templates")) {
+    if (m_defectDetection->LoadTemplateLibrary("../Img/Templates")) 
+    {
         AppendLog("缺陷分类模板库加载成功", INFO);
         auto templateNames = m_defectDetection->GetTemplateNames();
         AppendLog(QString("加载的模板类型: %1").arg(templateNames.size()), INFO);
-        for (const auto& name : templateNames) {
+        for (const auto& name : templateNames) 
+        {
             AppendLog(QString("模板: %1").arg(QString::fromStdString(name)), INFO);
         }
-    } else {
+    } 
+    else 
+    {
         AppendLog("缺陷分类模板库加载失败", WARNNING);
     }
 
@@ -2595,10 +2599,7 @@ void MainWindow::RealTimeDetectionThread()
             Point textOrg(b.x + 5, b.y + textSize.height + 5);
             
             // 绘制半透明背景
-            rectangle(draw, 
-                     Point(b.x, b.y), 
-                     Point(b.x + textSize.width + 10, b.y + textSize.height + 10),
-                     Scalar(0, 0, 0), -1);
+            rectangle(draw,  Point(b.x, b.y),  Point(b.x + textSize.width + 10, b.y + textSize.height + 10), Scalar(0, 0, 0), -1);
             
             // 绘制文本
             putText(draw, typeText.toStdString(), textOrg, fontFace, fontScale, Scalar(0, 255, 0), thickness);
