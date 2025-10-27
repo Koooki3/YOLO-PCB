@@ -149,6 +149,10 @@ private:
     double  m_diffThresh = 25.0;     // 差异二值阈值（配准后的 absdiff 后再高斯平滑）
     double  m_minDefectArea = 1200;  // 过滤小区域（像素），按你的分辨率可调
     int     m_orbFeatures = 1500;    // ORB特征点数量（配准用）
+    
+    // 几何参数变换系数
+    double  m_biasLength = 0.0;      // 长度变换系数
+    double  m_biasWidth = 0.0;       // 宽度变换系数
 
     // 将缓存的最新一帧转为BGR Mat（经SDK内存编码为JPEG后imdecode，稳妥）
     bool GrabLastFrameBGR(Mat& outBGR);

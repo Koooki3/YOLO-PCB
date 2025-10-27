@@ -1061,14 +1061,69 @@ void MainWindow::on_GetLength_clicked()
         }
 
         // 设置参数 (可根据需要修改) 
-        params.thresh = 127;
-        params.maxval = 255;
-        params.blurK = 5;
-        params.areaMin = 100.0;
+            params.thresh = 127;
+            params.maxval = 255;
+            params.blurK = 5;
+            params.areaMin = 100.0;
 
-        // 处理图像 - 使用多目标检长算法
-        bias = 1.0;
-        result = CalculateLengthMultiTarget(inputImage, params, bias);
+            // 询问用户是否导入新几何参数变换系数
+            QMessageBox::StandardButton importCoeff;
+            importCoeff = QMessageBox::question(this, "导入几何参数", "是否导入新几何参数变换系数？",
+                                               QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+
+            // 处理图像 - 使用多目标检长算法
+            if (importCoeff == QMessageBox::Yes) 
+            {
+                // 首先用bias=1.0计算得到像素数据
+                bias = 1.0;
+                result = CalculateLengthMultiTarget(inputImage, params, bias);
+
+                // 如果有检测到目标，计算统计平均值
+                if (!result.heights.empty() && !result.widths.empty()) 
+                {
+                    double avgHeight = 0.0, avgWidth = 0.0;
+                    for (size_t i = 0; i < result.heights.size(); i++) 
+                    {
+                        avgHeight += result.heights[i];
+                        avgWidth += result.widths[i];
+                    }
+                    avgHeight /= result.heights.size();
+                    avgWidth /= result.widths.size();
+
+                    // 弹出对话框让用户输入理想目标长宽参数
+                    bool okLength, okWidth;
+                    double idealLength = QInputDialog::getDouble(this, "输入理想长度", "请输入理想目标长度 (μm):", 100.0, 0.0, 10000.0, 2, &okLength);
+                    double idealWidth = 0.0;
+                    if (okLength) 
+                    {
+                        idealWidth = QInputDialog::getDouble(this, "输入理想宽度", "请输入理想目标宽度 (μm):", 100.0, 0.0, 10000.0, 2, &okWidth);
+                    }
+
+                    // 计算并更新变换系数
+                    if (okLength && okWidth && avgHeight > 0 && avgWidth > 0) 
+                    {
+                        m_biasLength = idealLength / avgHeight;
+                        m_biasWidth = idealWidth / avgWidth;
+                        AppendLog(QString("已更新几何参数变换系数 - 长度系数: %1, 宽度系数: %2").arg(m_biasLength).arg(m_biasWidth), INFO);
+                    }
+                }
+            } 
+            else 
+            {
+                // 如果不导入新系数，先判断是否已有系数
+                if (m_biasLength > 0 && m_biasWidth > 0) 
+                {
+                    // 已有系数，直接使用bias=1.0计算像素数据，后续手动转换
+                    bias = 1.0;
+                    result = CalculateLengthMultiTarget(inputImage, params, bias);
+                } 
+                else 
+                {
+                    // 没有系数，使用bias=1.0计算并输出像素数据
+                    bias = 1.0;
+                    result = CalculateLengthMultiTarget(inputImage, params, bias);
+                }
+            }
 
         // 保存输出图像
         if (!result.image.empty()) 
@@ -1112,9 +1167,23 @@ void MainWindow::on_GetLength_clicked()
         // 输出所有目标的检长结果到日志
         for (size_t i = 0; i < result.heights.size(); i++) 
         {
-            AppendLog(QString("目标%1 - 长度 (pixs) : %2").arg(i+1).arg((double)result.heights[i]), INFO);
-            AppendLog(QString("目标%1 - 宽度 (pixs) : %2").arg(i+1).arg((double)result.widths[i]), INFO);
-            AppendLog(QString("目标%1 - 倾角 (°) : %2").arg(i+1).arg((double)result.angles[i]), INFO);
+            // 判断是否有有效的变换系数
+            if (m_biasLength > 0 && m_biasWidth > 0) 
+            {
+                // 使用变换系数计算真实尺寸
+                double realLength = result.heights[i] * m_biasLength;
+                double realWidth = result.widths[i] * m_biasWidth;
+                AppendLog(QString("目标%1 - 长度 (μm) : %2").arg(i+1).arg(realLength), INFO);
+                AppendLog(QString("目标%1 - 宽度 (μm) : %2").arg(i+1).arg(realWidth), INFO);
+                AppendLog(QString("目标%1 - 倾角 (°) : %2").arg(i+1).arg((double)result.angles[i]), INFO);
+            } 
+            else 
+            {
+                // 没有变换系数，输出像素数据
+                AppendLog(QString("目标%1 - 长度 (pixs) : %2").arg(i+1).arg((double)result.heights[i]), INFO);
+                AppendLog(QString("目标%1 - 宽度 (pixs) : %2").arg(i+1).arg((double)result.widths[i]), INFO);
+                AppendLog(QString("目标%1 - 倾角 (°) : %2").arg(i+1).arg((double)result.angles[i]), INFO);
+            }
         }
     }
     // 情况二: 如果已有裁剪图像, 处理裁剪后的图像
@@ -1147,14 +1216,24 @@ void MainWindow::on_GetLength_clicked()
         }
 
         // 设置参数 (可根据需要修改) 
-        params.thresh = 127;
-        params.maxval = 255;
-        params.blurK = 5;
-        params.areaMin = 100.0;
+            params.thresh = 127;
+            params.maxval = 255;
+            params.blurK = 5;
+            params.areaMin = 100.0;
 
-        // 处理图像
-        bias = 1.0;
-        result = CalculateLength(inputImage, params, bias);
+            // 对于裁剪区域的处理，同样支持几何参数变换
+            if (m_biasLength > 0 && m_biasWidth > 0) 
+            {
+                // 已有系数，直接使用bias=1.0计算像素数据，后续手动转换
+                bias = 1.0;
+                result = CalculateLength(inputImage, params, bias);
+            } 
+            else 
+            {
+                // 没有系数，使用bias=1.0计算
+                bias = 1.0;
+                result = CalculateLength(inputImage, params, bias);
+            }
 
         // 保存输出图像
         if (!result.image.empty()) 
@@ -1194,9 +1273,24 @@ void MainWindow::on_GetLength_clicked()
 
         AppendLog("裁剪区域检测后图像显示成功", INFO);
         AppendLog("裁剪区域检长算法执行完成", INFO);
-        AppendLog(QString("裁剪区域物件长度 (pixs) : %1").arg((double)result.heights[0]), INFO);
-        AppendLog(QString("裁剪区域物件宽度 (pixs) : %1").arg((double)result.widths[0]), INFO);
-        AppendLog(QString("裁剪区域物件倾角 (°) : %1").arg((double)result.angles[0]), INFO);
+        
+        // 判断是否有有效的变换系数
+        if (m_biasLength > 0 && m_biasWidth > 0) 
+        {
+            // 使用变换系数计算真实尺寸
+            double realLength = result.heights[0] * m_biasLength;
+            double realWidth = result.widths[0] * m_biasWidth;
+            AppendLog(QString("裁剪区域物件长度 (μm) : %1").arg(realLength), INFO);
+            AppendLog(QString("裁剪区域物件宽度 (μm) : %1").arg(realWidth), INFO);
+            AppendLog(QString("裁剪区域物件倾角 (°) : %1").arg((double)result.angles[0]), INFO);
+        } 
+        else 
+        {
+            // 没有变换系数，输出像素数据
+            AppendLog(QString("裁剪区域物件长度 (pixs) : %1").arg((double)result.heights[0]), INFO);
+            AppendLog(QString("裁剪区域物件宽度 (pixs) : %1").arg((double)result.widths[0]), INFO);
+            AppendLog(QString("裁剪区域物件倾角 (°) : %1").arg((double)result.angles[0]), INFO);
+        }
 
         DrawOverlayOnDisplay2((double)result.heights[0], (double)result.widths[0], (double)result.angles[0]);
     }
@@ -1466,7 +1560,19 @@ void MainWindow::DrawOverlayOnDisplay2(double length, double width, double angle
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setRenderHint(QPainter::TextAntialiasing, true);
 
-    text = QString("长: %1 pixs\n宽: %2 pixs\n角度: %3 °").arg(length, 0, 'f', 3).arg(width, 0, 'f', 3).arg(angle, 0, 'f', 3);
+    // 根据是否有有效的变换系数选择显示单位
+    if (m_biasLength > 0 && m_biasWidth > 0) 
+    {
+        // 使用变换系数计算真实尺寸并显示μm单位
+        double realLength = length * m_biasLength;
+        double realWidth = width * m_biasWidth;
+        text = QString("长: %1 μm\n宽: %2 μm\n角度: %3 °").arg(realLength, 0, 'f', 3).arg(realWidth, 0, 'f', 3).arg(angle, 0, 'f', 3);
+    } 
+    else 
+    {
+        // 没有变换系数，显示像素数据
+        text = QString("长: %1 pixs\n宽: %2 pixs\n角度: %3 °").arg(length, 0, 'f', 3).arg(width, 0, 'f', 3).arg(angle, 0, 'f', 3);
+    }
 
     font.setPointSize(12); 
     font.setBold(true);
