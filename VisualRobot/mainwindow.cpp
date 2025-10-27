@@ -1068,8 +1068,7 @@ void MainWindow::on_GetLength_clicked()
 
             // 询问用户是否导入新几何参数变换系数
             QMessageBox::StandardButton importCoeff;
-            importCoeff = QMessageBox::question(this, "导入几何参数", "是否导入新几何参数变换系数？",
-                                               QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+            importCoeff = QMessageBox::question(this, "导入几何参数", "是否导入新几何参数变换系数？", QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
 
             // 处理图像 - 使用多目标检长算法
             if (importCoeff == QMessageBox::Yes) 
@@ -1428,7 +1427,7 @@ void MainWindow::on_genMatrix_clicked()
 //         AppendLog(QString("变换矩阵计算失败, 错误码:%1").arg(result), ERROR);
 //     }
 
-    // 新代码: 整合Undistort去畸变模块功能
+    // 整合Undistort去畸变模块功能
     // 设置棋盘格参数 (内角点数量)
     Size boardSize(6, 6);                                      // 宽度方向6个内角点，高度方向6个内角点
     float squareSize = 10.0f;                                  // 棋盘格方格实际大小，单位：毫米
@@ -1669,7 +1668,7 @@ void MainWindow::SetupPolygonDrawing()
     AppendLog("多边形绘制和矩形拖动功能已初始化, 当前模式: 多边形点击模式", INFO);
 }
 
-// 事件过滤器, 用于捕获widgetDisplay_2的鼠标点击和键盘事件
+// 事件过滤器，处理widgetDisplay_2的各种事件
 bool MainWindow::eventFilter(QObject* obj, QEvent* event)
 {
     // 变量定义
@@ -1678,7 +1677,23 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
 
     if (obj == ui->widgetDisplay_2) 
     {
-        if (event->type() == QEvent::MouseButtonPress) 
+        // 检查是否在实时缺陷检测模式下
+        if (m_realTimeDetectionRunning) 
+        {
+            // 实时缺陷检测模式下，不处理缩放和平移事件
+            return QMainWindow::eventFilter(obj, event);
+        }
+        
+        // 滚轮事件处理
+        if (event->type() == QEvent::Wheel) 
+        {
+            // 处理滚轮事件
+            QWheelEvent* wheelEvent = static_cast<QWheelEvent*>(event);
+            HandleWheelEvent(wheelEvent);
+            return true;
+        }
+        // 鼠标按下事件处理
+        else if (event->type() == QEvent::MouseButtonPress) 
         {
             mouseEvent = static_cast<QMouseEvent*>(event);
             if (mouseEvent->button() == Qt::LeftButton) 
@@ -1694,7 +1709,14 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
                 }
                 return true;
             }
+            else if (mouseEvent->button() == Qt::RightButton) 
+            {
+                // 右键用于平移
+                HandleMousePressForPan(mouseEvent);
+                return true;
+            }
         }
+        // 鼠标移动事件处理
         else if (event->type() == QEvent::MouseMove) 
         {
             mouseEvent = static_cast<QMouseEvent*>(event);
@@ -1703,7 +1725,13 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
                 HandleMouseMoveOnDisplay2(mouseEvent->pos());
                 return true;
             }
+            else if (m_isPanning) 
+            {
+                HandleMouseMoveForPan(mouseEvent);
+                return true;
+            }
         }
+        // 鼠标释放事件处理
         else if (event->type() == QEvent::MouseButtonRelease) 
         {
             mouseEvent = static_cast<QMouseEvent*>(event);
@@ -1712,7 +1740,13 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
                 HandleMouseReleaseOnDisplay2(mouseEvent->pos());
                 return true;
             }
+            else if (mouseEvent->button() == Qt::RightButton && m_isPanning) 
+            {
+                HandleMouseReleaseForPan(mouseEvent);
+                return true;
+            }
         }
+        // 键盘事件处理
         else if (event->type() == QEvent::KeyPress) 
         {
             QKeyEvent* keyEvent = static_cast<QKeyEvent*>(event);
@@ -1729,6 +1763,12 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
             else if (keyEvent->key() == Qt::Key_Space) 
             {
                 HandleSpaceKeyPress();
+                return true;
+            }
+            else if (keyEvent->key() == Qt::Key_R && (keyEvent->modifiers() & Qt::ControlModifier)) 
+            {
+                // Ctrl+R 重置缩放
+                ResetZoom();
                 return true;
             }
         }
@@ -2235,9 +2275,10 @@ void MainWindow::HandleQKeyPress()
             m_realTimeDetectionRunning = false;
             AppendLog("已按Q键退出实时检测模式", INFO);
             
-            // 清空widgetDisplay_2内容
+            // 清空widgetDisplay_2内容并重置缩放
             QMetaObject::invokeMethod(this, [this]() {
                 ui->widgetDisplay_2->clear();
+                ResetZoom(); // 重置缩放
                 AppendLog("已清空实时检测显示", INFO);
             }, Qt::QueuedConnection);
         }
@@ -2853,7 +2894,8 @@ void MainWindow::on_detect_clicked()
         
         // 读取模板图像
         Mat templateBGR = imread("../Img/templateBGR.jpg");
-        if (templateBGR.empty()) {
+        if (templateBGR.empty()) 
+        {
             AppendLog("错误: 无法加载模板图像: ../Img/templateBGR.jpg", ERROR);
             return;
         }
@@ -2861,7 +2903,8 @@ void MainWindow::on_detect_clicked()
         
         // 读取重构后的待检测图像
         Mat testImage = imread("../Img/alignedBGR.jpg");
-        if (testImage.empty()) {
+        if (testImage.empty()) 
+        {
             AppendLog("错误: 无法加载待检测图像: ../Img/alignedBGR.jpg", ERROR);
             return;
         }
@@ -2871,7 +2914,8 @@ void MainWindow::on_detect_clicked()
         DefectDetection fileDetector;
         
         // 设置模板
-        if (!fileDetector.SetTemplateFromFile("../Img/templateBGR.jpg")) {
+        if (!fileDetector.SetTemplateFromFile("../Img/templateBGR.jpg")) 
+        {
             AppendLog("错误: 无法设置模板图像", ERROR);
             return;
         }
@@ -2887,7 +2931,8 @@ void MainWindow::on_detect_clicked()
         
         Mat fileHomography;
         vector<DMatch> fileDebugMatches;
-        if (!fileDetector.ComputeHomography(testGray, fileHomography, &fileDebugMatches)) {
+        if (!fileDetector.ComputeHomography(testGray, fileHomography, &fileDebugMatches)) 
+        {
             AppendLog("ORB方法配准失败，无法进行缺陷检测", ERROR);
             return;
         }
@@ -2902,7 +2947,8 @@ void MainWindow::on_detect_clicked()
 
         // 绘制检测结果
         Mat resultImage = testImage.clone();
-        for (size_t i = 0; i < boxes.size(); i++) {
+        for (size_t i = 0; i < boxes.size(); i++) 
+        {
             Rect rect = boxes[i];
         }
 
@@ -2940,4 +2986,148 @@ void MainWindow::on_detect_clicked()
         }
     }
     // 如需同时叠加尺寸/角度的浮窗，可复用已有的 drawOverlayOnDisplay2()
+}
+
+// 处理滚轮事件
+void MainWindow::HandleWheelEvent(QWheelEvent* event)
+{
+    // 检查是否有图片显示
+    if (!ui->widgetDisplay_2->pixmap() || ui->widgetDisplay_2->pixmap()->isNull())
+    {
+        return;
+    }
+    
+    // 获取鼠标位置
+    QPoint pos = event->position().toPoint();
+    
+    // 计算缩放因子
+    double scaleFactor = 1.0;
+    if (event->angleDelta().y() > 0)
+    {
+        scaleFactor = 1.1; // 放大
+    }
+    else
+    {
+        scaleFactor = 0.9; // 缩小
+    }
+    
+    // 应用缩放
+    ScaleImage(scaleFactor);
+}
+
+// 缩放图像
+void MainWindow::ScaleImage(double factor)
+{
+    // 检查是否有图片显示
+    if (!ui->widgetDisplay_2->pixmap() || ui->widgetDisplay_2->pixmap()->isNull())
+    {
+        return;
+    }
+    
+    // 计算新的缩放因子
+    double newScaleFactor = m_scaleFactor * factor;
+    
+    // 限制缩放范围
+    if (newScaleFactor < m_minScaleFactor)
+    {
+        newScaleFactor = m_minScaleFactor;
+    }
+    else if (newScaleFactor > m_maxScaleFactor)
+    {
+        newScaleFactor = m_maxScaleFactor;
+    }
+    
+    // 更新缩放因子
+    m_scaleFactor = newScaleFactor;
+    
+    // 获取当前显示的pixmap
+    QPixmap currentPixmap = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue);
+    
+    // 计算原始pixmap的尺寸
+    QSize originalSize = m_originalPixmap.isNull() ? currentPixmap.size() : m_originalPixmap.size();
+    
+    // 计算缩放后的尺寸
+    QSize scaledSize = originalSize * m_scaleFactor;
+    
+    // 缩放pixmap
+    QPixmap scaledPixmap;
+    if (!m_originalPixmap.isNull())
+    {
+        scaledPixmap = m_originalPixmap.scaled(scaledSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    }
+    else
+    {
+        scaledPixmap = currentPixmap.scaled(scaledSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    }
+    
+    // 显示缩放后的pixmap
+    ui->widgetDisplay_2->setPixmap(scaledPixmap);
+    ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
+    
+    // 记录缩放信息
+    AppendLog(QString("图像缩放: %1%").arg(m_scaleFactor * 100, 0, 'f', 1), INFO);
+}
+
+// 重置缩放
+void MainWindow::ResetZoom()
+{
+    m_scaleFactor = 1.0;
+    
+    if (!m_originalPixmap.isNull())
+    {
+        // 使用原始pixmap重置显示
+        QPixmap scaledPixmap = m_originalPixmap.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        ui->widgetDisplay_2->setPixmap(scaledPixmap);
+        ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
+    }
+    else if (ui->widgetDisplay_2->pixmap() && !ui->widgetDisplay_2->pixmap()->isNull())
+    {
+        // 直接缩放当前pixmap以适应窗口
+        QPixmap scaledPixmap = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue).scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        ui->widgetDisplay_2->setPixmap(scaledPixmap);
+        ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
+    }
+    
+    AppendLog("图像缩放已重置", INFO);
+}
+
+// 处理鼠标按下用于平移
+void MainWindow::HandleMousePressForPan(QMouseEvent* event)
+{
+    // 检查是否有图片显示
+    if (!ui->widgetDisplay_2->pixmap() || ui->widgetDisplay_2->pixmap()->isNull())
+        return;
+    
+    // 设置平移状态
+    m_isPanning = true;
+    m_lastPanPos = event->pos();
+    
+    // 设置鼠标形状
+    ui->widgetDisplay_2->setCursor(Qt::ClosedHandCursor);
+}
+
+// 处理鼠标移动用于平移
+void MainWindow::HandleMouseMoveForPan(QMouseEvent* event)
+{
+    if (!m_isPanning)
+    {
+        return;
+    }
+    
+    // 计算位移
+    QPoint delta = event->pos() - m_lastPanPos;
+    m_lastPanPos = event->pos();
+    
+    // 这里可以实现平移逻辑，暂时先简单处理
+    // 实际平移需要结合QPixmap::scaled和QPainter进行绘制
+    
+    // 注意：真正的平移实现需要更复杂的绘制逻辑
+    // 当前实现仅作为示例框架
+}
+
+// 处理鼠标释放结束平移
+void MainWindow::HandleMouseReleaseForPan(QMouseEvent* event)
+{
+    m_isPanning = false;
+    ui->widgetDisplay_2->setCursor(Qt::ArrowCursor);
 }
