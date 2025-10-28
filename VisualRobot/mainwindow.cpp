@@ -37,6 +37,7 @@
 #include <QTextStream>
 #include "Undistort.h"
 #include "DefectDetection.h"
+#include <QInputDialog>
 
 #define ERROR 2
 #define WARNNING 1
@@ -866,7 +867,7 @@ void MainWindow::on_pushButton_clicked()
         if (loadSuccess)
         {
             AppendLog("去畸变参数载入成功", INFO);
-            Mat undistort = calibrator.undistortImage(capture, false);
+            Mat undistort = calibrator.undistortImage(capture, true);
             if (!undistort.empty())
             {
                 imwrite("../Img/capture.jpg", undistort);
@@ -1091,11 +1092,11 @@ void MainWindow::on_GetLength_clicked()
 
                     // 弹出对话框让用户输入理想目标长宽参数
                     bool okLength, okWidth;
-                    double idealLength = QInputDialog::getDouble(this, "输入理想长度", "请输入理想目标长度 (μm):", 100.0, 0.0, 10000.0, 2, &okLength);
+                    double idealLength = QInputDialog::getDouble(this, "输入理想长度", "请输入理想目标长度 (μm):", 100.0, 0.0, 10000000.0, 2, &okLength);
                     double idealWidth = 0.0;
                     if (okLength) 
                     {
-                        idealWidth = QInputDialog::getDouble(this, "输入理想宽度", "请输入理想目标宽度 (μm):", 100.0, 0.0, 10000.0, 2, &okWidth);
+                        idealWidth = QInputDialog::getDouble(this, "输入理想宽度", "请输入理想目标宽度 (μm):", 100.0, 0.0, 10000000.0, 2, &okWidth);
                     }
 
                     // 计算并更新变换系数
@@ -1448,9 +1449,9 @@ void MainWindow::on_genMatrix_clicked()
 
     // 处理文件夹中的所有图像
     processedCount = calibrator.processImagesFromFolder(imageFolder, false);
-    if (processedCount < 10)
+    if (processedCount < 3)
     {
-        AppendLog(QString("需要至少10张有效图像进行校准, 当前只有 %1 张").arg(processedCount), WARNNING);
+        AppendLog(QString("需要至少3张有效图像进行校准, 当前只有 %1 张").arg(processedCount), WARNNING);
         return;
     }
 

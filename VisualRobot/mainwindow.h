@@ -199,6 +199,4 @@ private slots:
     void updateSharpnessDisplay(double sharpness);
 };
 
-};
-
 #endif // MAINWINDOW_H
