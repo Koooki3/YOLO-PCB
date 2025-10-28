@@ -866,7 +866,7 @@ void MainWindow::on_pushButton_clicked()
         if (loadSuccess)
         {
             AppendLog("去畸变参数载入成功", INFO);
-            Mat undistort = calibrator.undistortImage(capture, true);
+            Mat undistort = calibrator.undistortImage(capture, false);
             if (!undistort.empty())
             {
                 imwrite("../Img/capture.jpg", undistort);
