@@ -137,9 +137,9 @@ int CameraCalibrator::processImagesFromFolder(const string& folderPath, bool sho
 // 执行相机校准
 double CameraCalibrator::calibrate()
 {
-    if (imagePoints.size() < 3)
+    if (imagePoints.size() < 10)
     {
-        cerr << "需要至少3张有效图像进行校准，当前只有 " << imagePoints.size() << " 张" << endl;
+        cerr << "需要至少10张有效图像进行校准，当前只有 " << imagePoints.size() << " 张" << endl;
         return -1;
     }
 
@@ -157,61 +157,6 @@ double CameraCalibrator::calibrate()
     return reprojectionError;
 }
 
-// 使用最近像素颜色填充图像边缘的黑色区域
-void fillBlackBorderWithNearestPixels(Mat& image)
-{
-    // 创建一个掩码，标记黑色像素（值为0）
-    Mat gray;
-    cvtColor(image, gray, COLOR_BGR2GRAY);
-    Mat mask = (gray == 0);
-
-    // 查找非黑色区域的边界
-    Mat kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
-    Mat dilatedMask;
-    dilate(mask, dilatedMask, kernel);
-    
-    // 获取边缘像素（膨胀后的掩码与原始掩码的差）
-    Mat edgeMask = dilatedMask - mask;
-
-    // 对于每个边缘像素，找到最近的非黑色像素并填充
-    for (int i = 0; i < image.rows; i++)
-    {
-        for (int j = 0; j < image.cols; j++)
-        {
-            if (mask.at<uchar>(i, j)) // 如果是黑色像素
-            {
-                // 搜索最近的非黑色像素
-                bool found = false;
-                int searchRadius = 1;
-                while (searchRadius < max(image.rows, image.cols) && !found)
-                {
-                    // 在搜索半径范围内查找非黑色像素
-                    for (int di = -searchRadius; di <= searchRadius && !found; di++)
-                    {
-                        for (int dj = -searchRadius; dj <= searchRadius && !found; dj++)
-                        {
-                            int ni = i + di;
-                            int nj = j + dj;
-                            
-                            // 检查边界
-                            if (ni >= 0 && ni < image.rows && nj >= 0 && nj < image.cols)
-                            {
-                                if (!mask.at<uchar>(ni, nj)) // 找到非黑色像素
-                                {
-                                    // 复制颜色值
-                                    image.at<Vec3b>(i, j) = image.at<Vec3b>(ni, nj);
-                                    found = true;
-                                }
-                            }
-                        }
-                    }
-                    searchRadius++;
-                }
-            }
-        }
-    }
-}
-
 // 校正单张图像
 Mat CameraCalibrator::undistortImage(const Mat& inputImage, bool crop)
 {
@@ -223,17 +168,12 @@ Mat CameraCalibrator::undistortImage(const Mat& inputImage, bool crop)
     // 校正图像
     undistort(inputImage, undistorted, cameraMatrix, distCoeffs, newCameraMatrix);
 
-    // 如果需要裁剪黑边
+    // 如果需要，裁剪黑边
     if (crop)
     {
         Rect roi;
         getOptimalNewCameraMatrix(cameraMatrix, distCoeffs, imageSize, 0, imageSize, &roi);
         undistorted = undistorted(roi);
-    }
-    else
-    {
-        // 不裁剪，而是使用最近像素颜色填充黑边
-        fillBlackBorderWithNearestPixels(undistorted);
     }
 
     return undistorted;

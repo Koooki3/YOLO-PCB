@@ -35,9 +35,9 @@
 #include <QPainterPath>
 #include <QElapsedTimer>
 #include <QTextStream>
+#include <QInputDialog>
 #include "Undistort.h"
 #include "DefectDetection.h"
-#include <QInputDialog>
 
 #define ERROR 2
 #define WARNNING 1
@@ -1069,7 +1069,8 @@ void MainWindow::on_GetLength_clicked()
 
             // 询问用户是否导入新几何参数变换系数
             QMessageBox::StandardButton importCoeff;
-            importCoeff = QMessageBox::question(this, "导入几何参数", "是否导入新几何参数变换系数？", QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+            importCoeff = QMessageBox::question(this, "导入几何参数", "是否导入新几何参数变换系数？",
+                                               QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
 
             // 处理图像 - 使用多目标检长算法
             if (importCoeff == QMessageBox::Yes) 
@@ -1092,11 +1093,11 @@ void MainWindow::on_GetLength_clicked()
 
                     // 弹出对话框让用户输入理想目标长宽参数
                     bool okLength, okWidth;
-                    double idealLength = QInputDialog::getDouble(this, "输入理想长度", "请输入理想目标长度 (μm):", 100.0, 0.0, 10000000.0, 2, &okLength);
+                    double idealLength = QInputDialog::getDouble(this, "输入理想长度", "请输入理想目标长度 (μm):", 100.0, 0.0, 10000.0, 2, &okLength);
                     double idealWidth = 0.0;
                     if (okLength) 
                     {
-                        idealWidth = QInputDialog::getDouble(this, "输入理想宽度", "请输入理想目标宽度 (μm):", 100.0, 0.0, 10000000.0, 2, &okWidth);
+                        idealWidth = QInputDialog::getDouble(this, "输入理想宽度", "请输入理想目标宽度 (μm):", 100.0, 0.0, 10000.0, 2, &okWidth);
                     }
 
                     // 计算并更新变换系数
@@ -1428,7 +1429,7 @@ void MainWindow::on_genMatrix_clicked()
 //         AppendLog(QString("变换矩阵计算失败, 错误码:%1").arg(result), ERROR);
 //     }
 
-    // 整合Undistort去畸变模块功能
+    // 新代码: 整合Undistort去畸变模块功能
     // 设置棋盘格参数 (内角点数量)
     Size boardSize(6, 6);                                      // 宽度方向6个内角点，高度方向6个内角点
     float squareSize = 10.0f;                                  // 棋盘格方格实际大小，单位：毫米
@@ -1449,9 +1450,9 @@ void MainWindow::on_genMatrix_clicked()
 
     // 处理文件夹中的所有图像
     processedCount = calibrator.processImagesFromFolder(imageFolder, false);
-    if (processedCount < 3)
+    if (processedCount < 10)
     {
-        AppendLog(QString("需要至少3张有效图像进行校准, 当前只有 %1 张").arg(processedCount), WARNNING);
+        AppendLog(QString("需要至少10张有效图像进行校准, 当前只有 %1 张").arg(processedCount), WARNNING);
         return;
     }
 
@@ -1669,7 +1670,7 @@ void MainWindow::SetupPolygonDrawing()
     AppendLog("多边形绘制和矩形拖动功能已初始化, 当前模式: 多边形点击模式", INFO);
 }
 
-// 事件过滤器，处理widgetDisplay_2的各种事件
+// 事件过滤器, 用于捕获widgetDisplay_2的鼠标点击和键盘事件
 bool MainWindow::eventFilter(QObject* obj, QEvent* event)
 {
     // 变量定义
@@ -1678,7 +1679,6 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
 
     if (obj == ui->widgetDisplay_2) 
     {
-        // 鼠标按下事件处理
         if (event->type() == QEvent::MouseButtonPress) 
         {
             mouseEvent = static_cast<QMouseEvent*>(event);
@@ -1696,7 +1696,6 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
                 return true;
             }
         }
-        // 鼠标移动事件处理
         else if (event->type() == QEvent::MouseMove) 
         {
             mouseEvent = static_cast<QMouseEvent*>(event);
@@ -1706,7 +1705,6 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
                 return true;
             }
         }
-        // 鼠标释放事件处理
         else if (event->type() == QEvent::MouseButtonRelease) 
         {
             mouseEvent = static_cast<QMouseEvent*>(event);
@@ -1716,7 +1714,6 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
                 return true;
             }
         }
-        // 键盘事件处理
         else if (event->type() == QEvent::KeyPress) 
         {
             QKeyEvent* keyEvent = static_cast<QKeyEvent*>(event);
@@ -1801,7 +1798,7 @@ void MainWindow::HandleMouseClickOnDisplay2(const QPoint& pos)
     // 保存原始图片 (如果尚未保存) 
     if (!m_isImageLoaded) 
     {
-
+        m_originalPixmap = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue);
         m_isImageLoaded = true;
     }
     
@@ -1812,7 +1809,7 @@ void MainWindow::HandleMouseClickOnDisplay2(const QPoint& pos)
     m_polygonPoints.append(imagePoint);
     
     // 在图片上显示点击点
-    currentPixmap = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue).copy();
+    currentPixmap = m_originalPixmap.copy();
     painter.begin(&currentPixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
     
@@ -1869,7 +1866,7 @@ QPoint MainWindow::ConvertToImageCoordinates(const QPoint& widgetPoint)
     }
     
     // 获取原始图像尺寸
-    originalSize = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue).size();
+    originalSize = m_originalPixmap.size();
     if (originalSize.isEmpty()) 
     {
         originalSize = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue).size();
@@ -1938,7 +1935,7 @@ void MainWindow::DrawPolygonOnImage()
     }
     
     // 恢复原始图片
-    currentPixmap = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue).copy();
+    currentPixmap = m_originalPixmap.copy();
     painter.begin(&currentPixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
     
@@ -2013,7 +2010,7 @@ void MainWindow::CropImageToPolygon()
     }
 
     // 将QPixmap转换为QImage
-    originalImage = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue).toImage();
+    originalImage = m_originalPixmap.toImage();
 
     // 计算多边形的边界框
     for (const QPoint& point : m_polygonPoints) 
@@ -2178,8 +2175,11 @@ QColor MainWindow::SampleBorderColor(const QImage& image, const QPolygon& polygo
 // 清除多边形显示
 void MainWindow::ClearPolygonDisplay()
 {
-    // 重置显示
-    ui->widgetDisplay_2->update();
+    // 恢复原始图片显示
+    if (!m_originalPixmap.isNull()) 
+    {
+        ui->widgetDisplay_2->setPixmap(m_originalPixmap);
+    }
     
     // 重置状态
     m_polygonPoints.clear();
@@ -2204,7 +2204,11 @@ void MainWindow::HandleEscKeyPress()
         m_rectCompleted = false;
         m_isDragging = false;
         
-
+        // 恢复原始图片显示
+        if (!m_originalPixmap.isNull()) 
+        {
+            ui->widgetDisplay_2->setPixmap(m_originalPixmap);
+        }
         
         AppendLog("已清空所有已选点和矩形框", INFO);
     }
@@ -2256,7 +2260,11 @@ void MainWindow::SwitchSelectionMode()
     m_rectCompleted = false;
     m_isDragging = false;
     
-
+    // 恢复原始图片显示
+    if (!m_originalPixmap.isNull()) 
+    {
+        ui->widgetDisplay_2->setPixmap(m_originalPixmap);
+    }
     
     // 记录模式切换
     if (m_useRectangleMode) 
@@ -2282,9 +2290,10 @@ void MainWindow::HandleMousePressOnDisplay2(const QPoint& pos)
     // 让widgetDisplay_2获得焦点, 以便接收键盘事件
     ui->widgetDisplay_2->setFocus();
     
-    // 设置加载状态
-    if (!m_isImageLoaded)
+    // 保存原始图片（如果尚未保存）
+    if (!m_isImageLoaded) 
     {
+        m_originalPixmap = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue);
         m_isImageLoaded = true;
     }
     
@@ -2307,7 +2316,7 @@ void MainWindow::HandleMouseMoveOnDisplay2(const QPoint& pos)
     m_dragEndPoint = pos;
     
     // 显示矩形预览
-    QPixmap currentPixmap = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue).copy();
+    QPixmap currentPixmap = m_originalPixmap.copy();
     QPainter painter(&currentPixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
     
@@ -2359,8 +2368,8 @@ void MainWindow::HandleMouseReleaseOnDisplay2(const QPoint& pos)
     if (m_selectedRect.width() < 10 || m_selectedRect.height() < 10) 
     {
         AppendLog("选择的矩形区域太小, 请重新选择", WARNNING);
-        // 重置显示
-        ui->widgetDisplay_2->update();
+        // 恢复原始图片
+        ui->widgetDisplay_2->setPixmap(m_originalPixmap);
         return;
     }
     
@@ -2379,8 +2388,8 @@ void MainWindow::DrawRectangleOnImage()
         return;
     }
     
-    // 获取当前图片
-    QPixmap currentPixmap = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue).copy();
+    // 恢复原始图片
+    QPixmap currentPixmap = m_originalPixmap.copy();
     QPainter painter(&currentPixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
     
@@ -2420,7 +2429,7 @@ void MainWindow::CropImageToRectangle()
     }
     
     // 将QPixmap转换为QImage
-    QImage originalImage = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue).toImage();
+    QImage originalImage = m_originalPixmap.toImage();
     
     // 确保矩形区域在图像范围内
     QRect validRect = m_selectedRect.intersected(QRect(0, 0, originalImage.width(), originalImage.height()));
@@ -2845,8 +2854,7 @@ void MainWindow::on_detect_clicked()
         
         // 读取模板图像
         Mat templateBGR = imread("../Img/templateBGR.jpg");
-        if (templateBGR.empty()) 
-        {
+        if (templateBGR.empty()) {
             AppendLog("错误: 无法加载模板图像: ../Img/templateBGR.jpg", ERROR);
             return;
         }
@@ -2854,8 +2862,7 @@ void MainWindow::on_detect_clicked()
         
         // 读取重构后的待检测图像
         Mat testImage = imread("../Img/alignedBGR.jpg");
-        if (testImage.empty()) 
-        {
+        if (testImage.empty()) {
             AppendLog("错误: 无法加载待检测图像: ../Img/alignedBGR.jpg", ERROR);
             return;
         }
@@ -2865,8 +2872,7 @@ void MainWindow::on_detect_clicked()
         DefectDetection fileDetector;
         
         // 设置模板
-        if (!fileDetector.SetTemplateFromFile("../Img/templateBGR.jpg")) 
-        {
+        if (!fileDetector.SetTemplateFromFile("../Img/templateBGR.jpg")) {
             AppendLog("错误: 无法设置模板图像", ERROR);
             return;
         }
@@ -2882,8 +2888,7 @@ void MainWindow::on_detect_clicked()
         
         Mat fileHomography;
         vector<DMatch> fileDebugMatches;
-        if (!fileDetector.ComputeHomography(testGray, fileHomography, &fileDebugMatches)) 
-        {
+        if (!fileDetector.ComputeHomography(testGray, fileHomography, &fileDebugMatches)) {
             AppendLog("ORB方法配准失败，无法进行缺陷检测", ERROR);
             return;
         }
@@ -2898,8 +2903,7 @@ void MainWindow::on_detect_clicked()
 
         // 绘制检测结果
         Mat resultImage = testImage.clone();
-        for (size_t i = 0; i < boxes.size(); i++) 
-        {
+        for (size_t i = 0; i < boxes.size(); i++) {
             Rect rect = boxes[i];
         }
 
