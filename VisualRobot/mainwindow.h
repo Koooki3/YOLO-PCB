@@ -81,7 +81,7 @@ private:
 
     // 多边形绘制功能相关
     QVector<QPoint> m_polygonPoints;   // 存储多边形点坐标
-    QPixmap m_originalPixmap;          // 原始图片
+
     bool m_isImageLoaded;              // 标记是否有图片加载
     bool m_polygonCompleted;           // 标记多边形是否完成绘制
     QPixmap m_croppedPixmap;           // 裁剪后的图片
@@ -98,13 +98,6 @@ private:
     // 实时检测相关
     bool m_realTimeDetectionRunning;
     QMutex m_realTimeDetectionMutex;
-
-    // 缩放和平移功能相关
-    double m_scaleFactor = 1.0;        // 当前缩放因子
-    double m_minScaleFactor = 0.1;     // 最小缩放因子
-    double m_maxScaleFactor = 5.0;     // 最大缩放因子
-    QPoint m_lastPanPos;               // 上次平移位置
-    bool m_isPanning = false;          // 是否正在平移
 
     // 辅助方法
     void ShowErrorMsg(QString csMessage, unsigned int nErrorNum);
@@ -128,14 +121,6 @@ private:
     void HandleMouseMoveOnDisplay2(const QPoint& pos);                      // 处理鼠标移动
     void HandleMouseReleaseOnDisplay2(const QPoint& pos);                   // 处理鼠标释放
 
-    // 平移相关事件处理
-    void HandleMousePressForPan(QMouseEvent* event);                        // 处理鼠标按下用于平移
-    void HandleMouseMoveForPan(QMouseEvent* event);                         // 处理鼠标移动用于平移
-    void HandleMouseReleaseForPan(QMouseEvent* event);                      // 处理鼠标释放结束平移
-
-    // 滚轮事件处理
-    void HandleWheelEvent(QWheelEvent* event);                              // 处理滚轮事件
-
     // 键盘事件处理
     void keyPressEvent(QKeyEvent *event) override;
     void HandleEnterKeyPress();                                             // 处理Enter键按下
@@ -151,8 +136,6 @@ private:
     void DrawRectangleOnImage();                                            // 绘制矩形区域
     void CropImageToPolygon();                                              // 裁剪多边形区域图像
     void CropImageToRectangle();                                            // 裁剪矩形区域图像
-    void ScaleImage(double factor);                                         // 缩放图像
-    void ResetZoom();                                                       // 重置缩放
 
     // 坐标转换
     QPoint ConvertToImageCoordinates(const QPoint& widgetPoint);            // 坐标转换
