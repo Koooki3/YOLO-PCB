@@ -157,25 +157,62 @@ double CameraCalibrator::calibrate()
     return reprojectionError;
 }
 
-// 校正单张图像
-Mat CameraCalibrator::undistortImage(const Mat& inputImage, bool crop)
+// 校正单张图像（优化版本，避免黑边问题）
+// 参数说明：
+// - inputImage: 输入的畸变图像
+// - crop: 是否裁剪到原始图像大小
+// - borderSize: 扩展边界的大小，默认为100像素
+// - borderMode: 边界填充模式，默认为BORDER_REPLICATE
+Mat CameraCalibrator::undistortImage(const Mat& inputImage, bool crop, int borderSize, int borderMode)
 {
     Mat undistorted;
-
-    // 获取优化后的新相机矩阵
-    Mat newCameraMatrix = getOptimalNewCameraMatrix(cameraMatrix, distCoeffs, imageSize, 1.0, imageSize);
-
-    // 校正图像
-    undistort(inputImage, undistorted, cameraMatrix, distCoeffs, newCameraMatrix);
-
-    // 如果需要，裁剪黑边
-    if (crop)
+    
+    // 检查输入图像是否为空
+    if (inputImage.empty()) 
     {
-        Rect roi;
-        getOptimalNewCameraMatrix(cameraMatrix, distCoeffs, imageSize, 0, imageSize, &roi);
-        undistorted = undistorted(roi);
+        cerr << "输入图像为空" << endl;
+        return undistorted;
     }
-
+    
+    // 方案：使用扩展边界+remap方法避免黑边问题
+    // 1. 扩展输入图像边界，确保所有目标像素都能找到对应的源像素
+    Mat extendedImage;
+    copyMakeBorder(inputImage, extendedImage, borderSize, borderSize, borderSize, borderSize, borderMode);
+    
+    // 2. 为扩展后的图像准备新的相机矩阵和尺寸
+    Size extendedSize = extendedImage.size();
+    Mat extendedCameraMatrix = cameraMatrix.clone();
+    // 调整相机矩阵的光心坐标，考虑扩展的边界
+    extendedCameraMatrix.at<double>(0, 2) += borderSize;
+    extendedCameraMatrix.at<double>(1, 2) += borderSize;
+    
+    // 3. 获取优化后的新相机矩阵（alpha=1.0保留完整图像）
+    Mat newCameraMatrix = getOptimalNewCameraMatrix(extendedCameraMatrix, distCoeffs, extendedSize, 1.0, extendedSize);
+    
+    // 4. 生成映射数组
+    Mat mapX, mapY;
+    initUndistortRectifyMap(
+        extendedCameraMatrix, distCoeffs, Mat(), 
+        newCameraMatrix, extendedSize, CV_32FC1, mapX, mapY
+    );
+    
+    // 5. 使用remap进行去畸变，指定边界模式
+    Mat remappedImage;
+    remap(extendedImage, remappedImage, mapX, mapY, INTER_LINEAR, borderMode);
+    
+    // 6. 处理裁剪选项
+    if (crop) 
+    {
+        // 计算裁剪区域（不包括扩展的边界）
+        Rect roi(borderSize, borderSize, inputImage.cols, inputImage.rows);
+        undistorted = remappedImage(roi);
+    } 
+    else 
+    {
+        // 完整的去畸变图像
+        undistorted = remappedImage;
+    }
+    
     return undistorted;
 }
 
