@@ -39,25 +39,67 @@ VisualRobot/
 │   ├── Halcon.cpp                 # Halcon 功能实现
 │   └── Halcon.h                   # Halcon 功能头文件
 ├── Img/                           # 图像资源目录
+│   ├── Templates/                 # 模板图像目录
+│   │   ├── template01.jpg         # 模板图像1
+│   │   ├── template02.jpg         # 模板图像2
+│   │   ├── template03.jpg         # 模板图像3
+│   │   └── template04.jpg         # 模板图像4
+│   ├── alignedBGR.jpg             # 对齐后的BGR图像
 │   ├── capture.jpg                # 相机采集的原始图像
 │   ├── cat.jpg                    # 猫示例图像
 │   ├── circle_detected.jpg        # 圆形检测的结果图像
 │   ├── cropped_polygon.jpg        # 多边形裁剪结果图像
+│   ├── detection_result.jpg       # 检测结果图像
 │   ├── dog.jpg                    # 狗示例图像
+│   ├── templateBGR.jpg            # 模板BGR图像
 │   ├── test1.jpg                  # 测试图像1
 │   ├── test2.jpg                  # 测试图像2
 │   ├── test3.jpg                  # 测试图像3
 │   ├── test4.jpg                  # 测试图像4
-│   ├── undistorted_processed.jpg  # 去畸变处理后的图像
-│   └── undistorted.jpg            # 去畸变原始图像
-├── ImgData/                       # 图像数据目录（标定图像等）
+│   ├── undistorted.jpg            # 去畸变原始图像
+│   └── undistorted_processed.jpg  # 去畸变处理后的图像
+├── ImgData/                       # 图像数据目录
+│   ├── 1.jpg                      # 标定图像1
+│   ├── 1_processed.jpg            # 处理后的标定图像1
+│   ├── 2.jpg                      # 标定图像2
+│   ├── 2_processed.jpg            # 处理后的标定图像2
+│   ├── 3.jpg                      # 标定图像3
+│   ├── 3_processed.jpg            # 处理后的标定图像3
+│   ├── 4.jpg                      # 标定图像4
+│   ├── 4_processed.jpg            # 处理后的标定图像4
+│   ├── 5.jpg                      # 标定图像5
+│   ├── 5_processed.jpg            # 处理后的标定图像5
+│   ├── 6.jpg                      # 标定图像6
+│   ├── 6_processed.jpg            # 处理后的标定图像6
+│   ├── 7.jpg                      # 标定图像7
+│   ├── 7_processed.jpg            # 处理后的标定图像7
+│   ├── 8.jpg                      # 标定图像8
+│   ├── 8_processed.jpg            # 处理后的标定图像8
+│   ├── 9.jpg                      # 标定图像9
+│   ├── 9_processed.jpg            # 处理后的标定图像9
+│   ├── 10.jpg                     # 标定图像10
+│   ├── 10_processed.jpg           # 处理后的标定图像10
+│   ├── 11.jpg                     # 标定图像11
+│   ├── 11_processed.jpg           # 处理后的标定图像11
+│   ├── 12.jpg                     # 标定图像12
+│   ├── 12_processed.jpg           # 处理后的标定图像12
+│   ├── 13.jpg                     # 标定图像13
+│   ├── 13_processed.jpg           # 处理后的标定图像13
+│   ├── 14.jpg                     # 标定图像14
+│   ├── 14_processed.jpg           # 处理后的标定图像14
+│   ├── 15.jpg                     # 标定图像15
+│   ├── 15_processed.jpg           # 处理后的标定图像15
+│   ├── 16.jpg                     # 标定图像16
+│   ├── 16_processed.jpg           # 处理后的标定图像16
+│   ├── 17.jpg                     # 标定图像17
+│   └── 17_processed.jpg           # 处理后的标定图像17
 ├── Test/                          # 测试代码目录
 │   ├── feature_alignment_test.cpp # 特征对齐测试
 │   ├── feature_detect_benchmark.cpp # 特征检测性能测试
-│   ├── neu_pipeline.cpp          # NEU 缺陷检测流水线
-│   ├── neu_visual.py             # NEU 可视化工具
-│   ├── README_NEU.md             # NEU 测试说明
-│   └── TestBench.cpp             # 测试基准
+│   ├── neu_pipeline.cpp           # NEU 缺陷检测流水线
+│   ├── neu_visual.py              # NEU 可视化工具
+│   ├── README_NEU.md              # NEU 测试说明
+│   └── TestBench.cpp              # 测试基准
 ├── VisualRobot/                   # 核心源代码目录
 │   ├── DataProcessor.cpp          # 数据处理实现（图像增强、特征提取等）
 │   ├── DataProcessor.h            # 数据处理头文件
@@ -89,15 +131,22 @@ VisualRobot/
 │   ├── VisualRobot_zh_EN.qm       # 编译后的翻译文件
 │   ├── VisualRobot_zh_EN.ts       # 中英文翻译源文件
 │   ├── VisualRobot.pro            # Qt 项目配置文件
-│   └── VisualRobot.pro.user       # Qt 项目用户配置
+│   ├── VisualRobot.pro.user       # Qt 项目用户配置
+│   ├── style.qss                  # 样式表文件
+│   └── styles.qrc                 # 样式资源文件
+├── YOLO.zip                       # YOLO模型压缩包
 ├── calibration_parameters.yml     # 相机标定参数文件
 ├── detectedImg.jpg                # 最新检测结果图像
 ├── feature_matches.jpg            # 特征匹配结果图像
+├── log/                           # 系统日志目录
+│   ├── log_20250930_153826.txt    # 系统运行日志文件1
+│   └── log_20251009_164950.txt    # 系统运行日志文件2
 ├── matrix.bin                     # 系统配置矩阵文件
+├── models/                        # 模型目录
+│   └── pca_explained_variance.csv # PCA解释方差文件
 ├── test.jpg                       # 测试图像
-├── README.md                      # 项目说明文档
-└── log/                           # 系统日志目录
-    └── log_*.txt                  # 系统运行日志文件
+├── 最新成果测试.png               # 最新成果测试图像
+└── README.md                      # 项目说明文档
 ```
 
 ### 目录说明
@@ -115,6 +164,7 @@ VisualRobot/
 - **图像去畸变** - `Undistort.*` 相机畸变校正处理
 - **用户界面** - `mainwindow.*` 主窗口实现，包含界面逻辑
 - **系统统计** - `mainwindow_systemstats.cpp` 系统统计界面实现
+- **界面样式** - `style.qss` 和 `styles.qrc` 用于界面外观定制
 
 #### 📂 Halcon 代码 (HalconCode/)
 
@@ -141,9 +191,14 @@ VisualRobot/
 
 #### 📂 图像资源 (Img/)
 
+- **模板图像** - `Templates/` 目录包含多种模板图像用于匹配和检测
 - 测试图像文件
 - 示例图像
 - 处理结果图像
+
+#### 📂 图像数据 (ImgData/)
+
+- 包含多组标定图像及其处理后的结果，用于相机标定和图像质量评估
 
 ### 关键文件说明
 
@@ -155,6 +210,8 @@ VisualRobot/
 - `Halcon.cpp/.h` - Halcon 图像处理功能集成
 - `Undistort.cpp/.h` - 相机畸变校正处理模块
 - `DefectDetection.cpp/.h` - 缺陷检测系统，支持PCA降维和SVM分类
+- `YOLO.zip` - 包含YOLO目标检测模型的压缩包
+- `models/pca_explained_variance.csv` - 存储PCA分析的解释方差数据
 
 ## 💡 核心模块
 
@@ -284,8 +341,8 @@ sudo apt-get install cmake
 ### 2. 配置项目
 ```bash
 # 克隆项目
-git clone https://jihulab.com/visualteam/VisualRobot.git
-cd VisualRobot
+git clone https://gitee.com/kooki3/visual-robot.git
+cd visual-robot
 ```
 
 ## 🚀 编译与运行
@@ -416,6 +473,6 @@ make
 
 ---
 
-**最后更新日期：2025年10月22日**
+**最后更新日期：2025年10月30日**
 
-**项目仓库：https://jihulab.com/visualteam/VisualRobot.git**
+**项目仓库：https://gitee.com/kooki3/visual-robot.git**
