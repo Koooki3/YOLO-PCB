@@ -40,8 +40,13 @@ public:
     // 执行相机校准
     double calibrate();
 
-    // 校正单张图像
-    Mat undistortImage(const Mat& inputImage, bool crop = true);
+    // 校正单张图像（优化版本，避免黑边问题）
+    // 参数说明：
+    // - inputImage: 输入的畸变图像
+    // - crop: 是否裁剪到原始图像大小
+    // - borderSize: 扩展边界的大小，默认为100像素
+    // - borderMode: 边界填充模式，默认为BORDER_REPLICATE
+    Mat undistortImage(const Mat& inputImage, bool crop = true, int borderSize = 100, int borderMode = BORDER_REPLICATE);
 
     // 保存校准参数到文件
     bool saveCalibration(const string& filename);

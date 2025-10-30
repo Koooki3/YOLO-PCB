@@ -172,6 +172,12 @@ private:
     void RealTimeDetectionThread();
     void StartRealTimeDetection();
     void HandleQKeyPress(); // 处理Q键, 退出实时检测模式
+    
+    // 日志优化相关
+    int m_lastDefectCount;        // 上次记录的缺陷数量
+    QTime m_lastLogTime;          // 上次记录日志的时间
+    QTime m_stableStateStartTime; // 当前稳定状态开始时间
+    bool m_isStableState;         // 是否处于稳定状态
 };
 
 #endif // MAINWINDOW_H

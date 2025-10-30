@@ -128,6 +128,12 @@ MainWindow::MainWindow(QWidget *parent) :
     
     // 初始化多边形绘制功能
     SetupPolygonDrawing();
+    
+    // 日志优化相关初始化
+    m_lastDefectCount = -1;  // -1 表示首次运行
+    m_lastLogTime = QTime::currentTime();
+    m_stableStateStartTime = QTime::currentTime();
+    m_isStableState = false;
 }
 
 MainWindow::~MainWindow()
@@ -867,7 +873,7 @@ void MainWindow::on_pushButton_clicked()
         if (loadSuccess)
         {
             AppendLog("去畸变参数载入成功", INFO);
-            Mat undistort = calibrator.undistortImage(capture, true);
+            Mat undistort = calibrator.undistortImage(capture, true, 100, BORDER_REPLICATE);
             if (!undistort.empty())
             {
                 imwrite("../Img/capture.jpg", undistort);
@@ -1062,69 +1068,68 @@ void MainWindow::on_GetLength_clicked()
         }
 
         // 设置参数 (可根据需要修改) 
-            params.thresh = 127;
-            params.maxval = 255;
-            params.blurK = 5;
-            params.areaMin = 100.0;
+        params.thresh = 127;
+        params.maxval = 255;
+        params.blurK = 5;
+        params.areaMin = 100.0;
 
-            // 询问用户是否导入新几何参数变换系数
-            QMessageBox::StandardButton importCoeff;
-            importCoeff = QMessageBox::question(this, "导入几何参数", "是否导入新几何参数变换系数？",
-                                               QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        // 询问用户是否导入新几何参数变换系数
+        QMessageBox::StandardButton importCoeff;
+        importCoeff = QMessageBox::question(this, "导入几何参数", "是否导入新几何参数变换系数？", QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
 
-            // 处理图像 - 使用多目标检长算法
-            if (importCoeff == QMessageBox::Yes) 
+        // 处理图像 - 使用多目标检长算法
+        if (importCoeff == QMessageBox::Yes) 
+        {
+            // 首先用bias=1.0计算得到像素数据
+            bias = 1.0;
+            result = CalculateLengthMultiTarget(inputImage, params, bias);
+
+            // 如果有检测到目标，计算统计平均值
+            if (!result.heights.empty() && !result.widths.empty()) 
             {
-                // 首先用bias=1.0计算得到像素数据
+                double avgHeight = 0.0, avgWidth = 0.0;
+                for (size_t i = 0; i < result.heights.size(); i++) 
+                {
+                    avgHeight += result.heights[i];
+                    avgWidth += result.widths[i];
+                }
+                avgHeight /= result.heights.size();
+                avgWidth /= result.widths.size();
+
+                // 弹出对话框让用户输入理想目标长宽参数
+                bool okLength, okWidth;
+                double idealLength = QInputDialog::getDouble(this, "输入理想长度", "请输入理想目标长度 (μm):", 100.0, 0.0, 10000.0, 2, &okLength);
+                double idealWidth = 0.0;
+                if (okLength) 
+                {
+                    idealWidth = QInputDialog::getDouble(this, "输入理想宽度", "请输入理想目标宽度 (μm):", 100.0, 0.0, 10000.0, 2, &okWidth);
+                }
+
+                // 计算并更新变换系数
+                if (okLength && okWidth && avgHeight > 0 && avgWidth > 0) 
+                {
+                    m_biasLength = idealLength / avgHeight;
+                    m_biasWidth = idealWidth / avgWidth;
+                    AppendLog(QString("已更新几何参数变换系数 - 长度系数: %1, 宽度系数: %2").arg(m_biasLength).arg(m_biasWidth), INFO);
+                }
+            }
+        } 
+        else 
+        {
+            // 如果不导入新系数，先判断是否已有系数
+            if (m_biasLength > 0 && m_biasWidth > 0) 
+            {
+                // 已有系数，直接使用bias=1.0计算像素数据，后续手动转换
                 bias = 1.0;
                 result = CalculateLengthMultiTarget(inputImage, params, bias);
-
-                // 如果有检测到目标，计算统计平均值
-                if (!result.heights.empty() && !result.widths.empty()) 
-                {
-                    double avgHeight = 0.0, avgWidth = 0.0;
-                    for (size_t i = 0; i < result.heights.size(); i++) 
-                    {
-                        avgHeight += result.heights[i];
-                        avgWidth += result.widths[i];
-                    }
-                    avgHeight /= result.heights.size();
-                    avgWidth /= result.widths.size();
-
-                    // 弹出对话框让用户输入理想目标长宽参数
-                    bool okLength, okWidth;
-                    double idealLength = QInputDialog::getDouble(this, "输入理想长度", "请输入理想目标长度 (μm):", 100.0, 0.0, 10000.0, 2, &okLength);
-                    double idealWidth = 0.0;
-                    if (okLength) 
-                    {
-                        idealWidth = QInputDialog::getDouble(this, "输入理想宽度", "请输入理想目标宽度 (μm):", 100.0, 0.0, 10000.0, 2, &okWidth);
-                    }
-
-                    // 计算并更新变换系数
-                    if (okLength && okWidth && avgHeight > 0 && avgWidth > 0) 
-                    {
-                        m_biasLength = idealLength / avgHeight;
-                        m_biasWidth = idealWidth / avgWidth;
-                        AppendLog(QString("已更新几何参数变换系数 - 长度系数: %1, 宽度系数: %2").arg(m_biasLength).arg(m_biasWidth), INFO);
-                    }
-                }
             } 
             else 
             {
-                // 如果不导入新系数，先判断是否已有系数
-                if (m_biasLength > 0 && m_biasWidth > 0) 
-                {
-                    // 已有系数，直接使用bias=1.0计算像素数据，后续手动转换
-                    bias = 1.0;
-                    result = CalculateLengthMultiTarget(inputImage, params, bias);
-                } 
-                else 
-                {
-                    // 没有系数，使用bias=1.0计算并输出像素数据
-                    bias = 1.0;
-                    result = CalculateLengthMultiTarget(inputImage, params, bias);
-                }
+                // 没有系数，使用bias=1.0计算并输出像素数据
+                bias = 1.0;
+                result = CalculateLengthMultiTarget(inputImage, params, bias);
             }
+        }
 
         // 保存输出图像
         if (!result.image.empty()) 
@@ -1217,24 +1222,24 @@ void MainWindow::on_GetLength_clicked()
         }
 
         // 设置参数 (可根据需要修改) 
-            params.thresh = 127;
-            params.maxval = 255;
-            params.blurK = 5;
-            params.areaMin = 100.0;
+        params.thresh = 127;
+        params.maxval = 255;
+        params.blurK = 5;
+        params.areaMin = 100.0;
 
-            // 对于裁剪区域的处理，同样支持几何参数变换
-            if (m_biasLength > 0 && m_biasWidth > 0) 
-            {
-                // 已有系数，直接使用bias=1.0计算像素数据，后续手动转换
-                bias = 1.0;
-                result = CalculateLength(inputImage, params, bias);
-            } 
-            else 
-            {
-                // 没有系数，使用bias=1.0计算
-                bias = 1.0;
-                result = CalculateLength(inputImage, params, bias);
-            }
+        // 对于裁剪区域的处理，同样支持几何参数变换
+        if (m_biasLength > 0 && m_biasWidth > 0) 
+        {
+            // 已有系数，直接使用bias=1.0计算像素数据，后续手动转换
+            bias = 1.0;
+            result = CalculateLength(inputImage, params, bias);
+        } 
+        else 
+        {
+            // 没有系数，使用bias=1.0计算
+            bias = 1.0;
+            result = CalculateLength(inputImage, params, bias);
+        }
 
         // 保存输出图像
         if (!result.image.empty()) 
@@ -2712,12 +2717,45 @@ void MainWindow::RealTimeDetectionThread()
             putText(draw, typeText.toStdString(), textOrg, fontFace, fontScale, Scalar(0, 255, 0), thickness);
             
             // 记录分类结果
-            AppendLog(QString("缺陷框 %1: 类型=%2").arg(i+1).arg(typeText), INFO);
+            // 只在非稳定状态下记录具体缺陷类型，避免日志过多
+            if (!m_isStableState || QTime::currentTime().msecsTo(m_lastLogTime) > 60000) 
+            { // 每分钟记录一次详细信息
+                QMetaObject::invokeMethod(this, [this, i, typeText]() {
+                    AppendLog(QString("缺陷框 %1: 类型=%2").arg(i+1).arg(typeText), INFO);
+                }, Qt::QueuedConnection);
+            }
         }
 
         // 在图像上显示检测信息
         QString infoText = QString("REALTIME DETECTION - DEFECTS: %1").arg(boxes.size());
         putText(draw, infoText.toStdString(), Point(100, 150), FONT_HERSHEY_SIMPLEX, 4, Scalar(0, 255, 0), 10);
+        
+        // 优化日志记录：仅在缺陷数发生变化并保持2秒以上时记录
+        int currentDefectCount = boxes.size();
+        QTime currentTime = QTime::currentTime();
+        
+        // 在主线程中处理日志逻辑
+        QMetaObject::invokeMethod(this, [this, currentDefectCount, currentTime]() {
+            // 如果是首次运行或者缺陷数量发生变化
+            if (m_lastDefectCount == -1 || m_lastDefectCount != currentDefectCount) 
+            {
+                // 更新状态为非稳定，并记录开始时间
+                m_isStableState = false;
+                m_stableStateStartTime = currentTime;
+                m_lastDefectCount = currentDefectCount;
+            } 
+            else 
+            {
+                // 检查当前状态是否已经稳定2秒以上
+                if (!m_isStableState && m_stableStateStartTime.secsTo(currentTime) >= 2) 
+                {
+                    // 状态稳定，记录日志
+                    m_isStableState = true;
+                    AppendLog(QString("实时检测 - 缺陷数量稳定为: %1 个，已持续 2 秒以上").arg(currentDefectCount), INFO);
+                    m_lastLogTime = currentTime;
+                }
+            }
+        }, Qt::QueuedConnection);
 
         // 展示到 widgetDisplay_2
         QPixmap pm = MatToQPixmap(draw);
@@ -2752,6 +2790,12 @@ void MainWindow::StartRealTimeDetection()
     QThread* thread = QThread::create([this]() { RealTimeDetectionThread(); });
     connect(thread, &QThread::finished, thread, &QThread::deleteLater);
     thread->start();
+    
+    // 重置日志状态变量
+    m_lastDefectCount = -1;
+    m_lastLogTime = QTime::currentTime();
+    m_stableStateStartTime = QTime::currentTime();
+    m_isStableState = false;
 
     AppendLog("实时缺陷检测已启动", INFO);
 }
@@ -2854,7 +2898,8 @@ void MainWindow::on_detect_clicked()
         
         // 读取模板图像
         Mat templateBGR = imread("../Img/templateBGR.jpg");
-        if (templateBGR.empty()) {
+        if (templateBGR.empty()) 
+        {
             AppendLog("错误: 无法加载模板图像: ../Img/templateBGR.jpg", ERROR);
             return;
         }
@@ -2862,7 +2907,8 @@ void MainWindow::on_detect_clicked()
         
         // 读取重构后的待检测图像
         Mat testImage = imread("../Img/alignedBGR.jpg");
-        if (testImage.empty()) {
+        if (testImage.empty()) 
+        {
             AppendLog("错误: 无法加载待检测图像: ../Img/alignedBGR.jpg", ERROR);
             return;
         }
@@ -2872,7 +2918,8 @@ void MainWindow::on_detect_clicked()
         DefectDetection fileDetector;
         
         // 设置模板
-        if (!fileDetector.SetTemplateFromFile("../Img/templateBGR.jpg")) {
+        if (!fileDetector.SetTemplateFromFile("../Img/templateBGR.jpg")) 
+        {
             AppendLog("错误: 无法设置模板图像", ERROR);
             return;
         }
@@ -2888,7 +2935,8 @@ void MainWindow::on_detect_clicked()
         
         Mat fileHomography;
         vector<DMatch> fileDebugMatches;
-        if (!fileDetector.ComputeHomography(testGray, fileHomography, &fileDebugMatches)) {
+        if (!fileDetector.ComputeHomography(testGray, fileHomography, &fileDebugMatches)) 
+        {
             AppendLog("ORB方法配准失败，无法进行缺陷检测", ERROR);
             return;
         }
@@ -2903,7 +2951,8 @@ void MainWindow::on_detect_clicked()
 
         // 绘制检测结果
         Mat resultImage = testImage.clone();
-        for (size_t i = 0; i < boxes.size(); i++) {
+        for (size_t i = 0; i < boxes.size(); i++) 
+        {
             Rect rect = boxes[i];
         }
 
