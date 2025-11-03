@@ -20,7 +20,8 @@ int main() {
     Mat templateImg = imread(templatePath);
     Mat testImg = imread(testPath);
     
-    if (templateImg.empty() || testImg.empty()) {
+    if (templateImg.empty() || testImg.empty()) 
+    {
         cout << "无法读取测试图像，请检查文件路径" << endl;
         return -1;
     }
@@ -39,7 +40,8 @@ int main() {
     // 测试快速对齐
     AlignmentResult result = alignment.FastAlignImages(testImg, templateImg, params);
     
-    if (result.success) {
+    if (result.success) 
+    {
         cout << "特征对齐成功!" << endl;
         cout << "内点数量: " << result.inlierCount << endl;
         cout << "重投影误差: " << result.reprojectionError << endl;
@@ -48,16 +50,21 @@ int main() {
         // 测试图像重构
         Mat alignedImage = alignment.WarpImage(testImg, result.transformMatrix, templateImg.size());
         
-        if (!alignedImage.empty()) {
+        if (!alignedImage.empty()) 
+        {
             cout << "图像重构成功，尺寸: " << alignedImage.cols << "x" << alignedImage.rows << endl;
             
             // 保存结果
             imwrite("../Img/aligned_result.jpg", alignedImage);
             cout << "对齐结果已保存到: ../Img/aligned_result.jpg" << endl;
-        } else {
+        } 
+        else 
+        {
             cout << "图像重构失败" << endl;
         }
-    } else {
+    } 
+    else 
+    {
         cout << "特征对齐失败" << endl;
         cout << "内点数量: " << result.inlierCount << endl;
     }

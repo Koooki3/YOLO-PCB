@@ -18,7 +18,7 @@ FeatureAlignment::~FeatureAlignment()
 }
 
 AlignmentResult FeatureAlignment::AlignImages(
-    const cv::Mat& srcImage, 
+    const cv::Mat& srcImage,
     const cv::Mat& dstImage,
     const AlignmentParams& params)
 {
