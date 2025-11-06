@@ -18,6 +18,7 @@
 #include "FeatureAlignment.h"
 #include <QMutex>
 #include <QThread>
+#include <QTime>
 
 using namespace std;
 using namespace cv;

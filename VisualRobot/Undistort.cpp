@@ -137,9 +137,9 @@ int CameraCalibrator::processImagesFromFolder(const string& folderPath, bool sho
 // 执行相机校准
 double CameraCalibrator::calibrate()
 {
-    if (imagePoints.size() < 10)
+    if (imagePoints.size() < 3)
     {
-        cerr << "需要至少10张有效图像进行校准，当前只有 " << imagePoints.size() << " 张" << endl;
+        cerr << "需要至少3张有效图像进行校准，当前只有 " << imagePoints.size() << " 张" << endl;
         return -1;
     }
 
