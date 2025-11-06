@@ -1063,9 +1063,6 @@ void MainWindow::on_GetLength_clicked()
     // 仅当 m_hasCroppedImage 为 false 时使用原始全图进行识别
     if (!m_hasCroppedImage)
     {
-        QElapsedTimer timer;     // 计时器
-        timer.start();           // 开始计时
-
         ClearPolygonDisplay();
         
         inputPath = "/home/orangepi/Desktop/VisualRobot_Local/Img/capture.jpg";
@@ -1096,7 +1093,12 @@ void MainWindow::on_GetLength_clicked()
         {
             // 首先用bias=1.0计算得到像素数据
             bias = 1.0;
-            result = CalculateLengthMultiTarget(inputImage, params, bias);
+
+            QElapsedTimer timer;     // 计时器
+            timer.start();           // 开始计时
+            result = CalculateLength(inputImage, params, bias);
+            qint64 elapsed = timer.elapsed(); // 获取经过的时间 (毫秒)
+            AppendLog(QString("图像处理时间 (毫秒) : %1").arg(elapsed), INFO);
 
             // 如果有检测到目标，计算统计平均值
             if (!result.heights.empty() && !result.widths.empty()) 
@@ -1135,13 +1137,23 @@ void MainWindow::on_GetLength_clicked()
             {
                 // 已有系数，直接使用bias=1.0计算像素数据，后续手动转换
                 bias = 1.0;
-                result = CalculateLengthMultiTarget(inputImage, params, bias);
+
+                QElapsedTimer timer;     // 计时器
+                timer.start();           // 开始计时
+                result = CalculateLength(inputImage, params, bias);
+                qint64 elapsed = timer.elapsed(); // 获取经过的时间 (毫秒)
+                AppendLog(QString("图像处理时间 (毫秒) : %1").arg(elapsed), INFO);
             } 
             else 
             {
                 // 没有系数，使用bias=1.0计算并输出像素数据
                 bias = 1.0;
-                result = CalculateLengthMultiTarget(inputImage, params, bias);
+
+                QElapsedTimer timer;     // 计时器
+                timer.start();           // 开始计时
+                result = CalculateLength(inputImage, params, bias);
+                qint64 elapsed = timer.elapsed(); // 获取经过的时间 (毫秒)
+                AppendLog(QString("图像处理时间 (毫秒) : %1").arg(elapsed), INFO);
             }
         }
 
@@ -1164,9 +1176,6 @@ void MainWindow::on_GetLength_clicked()
             cerr << "处理后的图像为空, 无法保存" << endl;
             return;
         }
-
-        qint64 elapsed = timer.elapsed(); // 获取经过的时间 (毫秒) 
-        AppendLog(QString("图像处理时间 (毫秒) : %1").arg(elapsed), INFO);
 
         // 加载图片
         pixmap = QPixmap(output);
@@ -1469,9 +1478,9 @@ void MainWindow::on_genMatrix_clicked()
 
     // 处理文件夹中的所有图像
     processedCount = calibrator.processImagesFromFolder(imageFolder, false);
-    if (processedCount < 10)
+    if (processedCount < 3)
     {
-        AppendLog(QString("需要至少10张有效图像进行校准, 当前只有 %1 张").arg(processedCount), WARNNING);
+        AppendLog(QString("需要至少3张有效图像进行校准, 当前只有 %1 张").arg(processedCount), WARNNING);
         return;
     }
 

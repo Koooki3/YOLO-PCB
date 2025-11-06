@@ -35,7 +35,7 @@
        <x>0</x>
        <y>0</y>
        <width>296</width>
-       <height>775</height>
+       <height>778</height>
       </rect>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout" stretch="1,0,0">
@@ -49,6 +49,9 @@
        <number>12</number>
       </property>
       <property name="rightMargin">
+       <number>12</number>
+      </property>
+      <property name="bottomMargin">
        <number>12</number>
       </property>
       <item>
