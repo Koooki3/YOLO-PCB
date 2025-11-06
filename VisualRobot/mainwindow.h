@@ -178,6 +178,11 @@ private:
     QTime m_lastLogTime;          // 上次记录日志的时间
     QTime m_stableStateStartTime; // 当前稳定状态开始时间
     bool m_isStableState;         // 是否处于稳定状态
+    
+    // 设备热拔插自动枚举相关
+    QTimer* m_deviceEnumTimer;    // 定时器用于自动枚举设备
+    int m_lastDeviceCount;        // 上次枚举的设备数量
+    void autoEnumDevices();       // 自动枚举设备的槽函数
 };
 
 #endif // MAINWINDOW_H

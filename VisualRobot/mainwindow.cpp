@@ -36,6 +36,7 @@
 #include <QElapsedTimer>
 #include <QTextStream>
 #include <QInputDialog>
+#include <QTimer>
 #include "Undistort.h"
 #include "DefectDetection.h"
 
@@ -73,6 +74,16 @@ MainWindow::MainWindow(QWidget *parent) :
     m_pcMyCamera = NULL;
     m_bGrabbing = false;
     m_hWnd = (void*)ui->widgetDisplay->winId();
+    
+    // 初始化设备热拔插自动枚举相关变量
+    m_deviceEnumTimer = new QTimer(this);
+    m_lastDeviceCount = 0;
+    
+    // 连接定时器信号到槽函数
+    connect(m_deviceEnumTimer, &QTimer::timeout, this, &MainWindow::autoEnumDevices);
+    
+    // 启动定时器，每2秒自动枚举一次设备
+    m_deviceEnumTimer->start(2000);
 
     // 初始化系统监控
     m_sysMonitor = new SystemMonitor(this);
@@ -134,6 +145,9 @@ MainWindow::MainWindow(QWidget *parent) :
     m_lastLogTime = QTime::currentTime();
     m_stableStateStartTime = QTime::currentTime();
     m_isStableState = false;
+    
+    // 初始时执行一次设备枚举
+    on_bnEnum_clicked();
 }
 
 MainWindow::~MainWindow()
@@ -2990,4 +3004,40 @@ void MainWindow::on_detect_clicked()
         }
     }
     // 如需同时叠加尺寸/角度的浮窗，可复用已有的 drawOverlayOnDisplay2()
+}
+
+// 设备热拔插自动枚举槽函数
+void MainWindow::autoEnumDevices()
+{
+    // 只有在没有打开相机的情况下才进行自动枚举
+    if (m_pcMyCamera && m_pcMyCamera->IsDeviceConnected())
+    {
+        return;
+    }
+
+    // 临时存储设备信息
+    MV_CC_DEVICE_INFO_LIST stDevList;
+    memset(&stDevList, 0, sizeof(MV_CC_DEVICE_INFO_LIST));
+    
+    // 枚举设备
+    int nRet = CMvCamera::EnumDevices(MV_GIGE_DEVICE | MV_USB_DEVICE | MV_GENTL_CAMERALINK_DEVICE | MV_GENTL_CXP_DEVICE | MV_GENTL_XOF_DEVICE, &stDevList);
+    
+    if (MV_OK != nRet)
+    {
+        // 枚举失败，不做处理，避免频繁日志
+        return;
+    }
+    
+    // 检查设备数量是否变化
+    if (stDevList.nDeviceNum != m_lastDeviceCount)
+    {
+        // 设备数量变化，更新设备列表
+        AppendLog(QString("设备数量变化: %1 -> %2，自动更新设备列表").arg(m_lastDeviceCount).arg(stDevList.nDeviceNum), INFO);
+        
+        // 调用现有的枚举设备按钮的槽函数
+        on_bnEnum_clicked();
+        
+        // 更新上次设备数量
+        m_lastDeviceCount = stDevList.nDeviceNum;
+    }
 }
