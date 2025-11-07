@@ -57,12 +57,12 @@ public:
     static void TestFeatureDetectionParallel(const QString& imagePath1, const QString& imagePath2);
 
     // 批量特征检测 - 并行处理多对图像
-    static std::vector<ParallelResult> BatchFeatureDetection(
+    std::vector<ParallelResult> BatchFeatureDetection(
         const std::vector<std::pair<QString, QString>>& imagePairs,
         const FeatureParams_optimize& params);
 
     // 异步特征检测 - 非阻塞版本
-    static std::future<ParallelResult> AsyncFeatureDetection(
+    std::future<ParallelResult> AsyncFeatureDetection(
         const QString& imagePath1, 
         const QString& imagePath2,
         const FeatureParams_optimize& params);

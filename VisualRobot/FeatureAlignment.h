@@ -86,8 +86,6 @@ private:
     FeatureType m_featureType;
     // SIFT检测器
     cv::Ptr<cv::SIFT> m_siftDetector;
-    // SURF检测器
-    cv::Ptr<cv::SURF> m_surfDetector;
     // ORB检测器
     cv::Ptr<cv::ORB> m_orbDetector;
     // AKAZE检测器

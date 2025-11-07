@@ -7,7 +7,6 @@ FeatureAlignment::FeatureAlignment()
 {
     // 初始化特征检测器
     m_siftDetector = cv::SIFT::create();
-    m_surfDetector = cv::SURF::create();
     m_orbDetector = cv::ORB::create(500, 1.2f, 8, 31, 0, 2, cv::ORB::HARRIS_SCORE, 31, 20);
     m_akazeDetector = cv::AKAZE::create();
     
@@ -38,12 +37,6 @@ void FeatureAlignment::UpdateFeatureDetector()
     {
         m_featureDetector = m_siftDetector;
         // SIFT使用FLANN匹配器
-        m_featureMatcher = cv::DescriptorMatcher::create(cv::DescriptorMatcher::FLANNBASED);
-    }
-    else if (m_featureType == FeatureType::SURF)
-    {
-        m_featureDetector = m_surfDetector;
-        // SURF使用FLANN匹配器
         m_featureMatcher = cv::DescriptorMatcher::create(cv::DescriptorMatcher::FLANNBASED);
     }
     else if (m_featureType == FeatureType::ORB)
