@@ -12,7 +12,6 @@ using namespace std;
 enum class FeatureType
 {
     SIFT,
-    SURF,
     ORB,
     AKAZE
 };
@@ -53,7 +52,6 @@ public:
 private:
     mt19937 rng_;
     Ptr<SIFT> siftDetector_;
-    Ptr<SURF> surfDetector_;
     Ptr<ORB> orbDetector_;
     Ptr<AKAZE> akazeDetector_;
     FeatureType currentFeatureType_;
