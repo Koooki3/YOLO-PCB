@@ -5,11 +5,64 @@
 
 FeatureAlignment::FeatureAlignment()
 {
-    // 初始化SIFT特征检测器
-    m_featureDetector = cv::SIFT::create();
+    // 初始化特征检测器
+    m_siftDetector = cv::SIFT::create();
+    m_surfDetector = cv::SURF::create();
+    m_orbDetector = cv::ORB::create(500, 1.2f, 8, 31, 0, 2, cv::ORB::HARRIS_SCORE, 31, 20);
+    m_akazeDetector = cv::AKAZE::create();
     
-    // 初始化FLANN特征匹配器
-    m_featureMatcher = cv::DescriptorMatcher::create(cv::DescriptorMatcher::FLANNBASED);
+    // 默认使用SIFT特征提取器
+    m_featureType = FeatureType::SIFT;
+    
+    // 初始化并更新特征检测器和匹配器
+    UpdateFeatureDetector();
+}
+
+void FeatureAlignment::SetFeatureType(FeatureType type)
+{
+    if (m_featureType != type)
+    {
+        m_featureType = type;
+        UpdateFeatureDetector();
+    }
+}
+
+FeatureType FeatureAlignment::GetFeatureType() const
+{
+    return m_featureType;
+}
+
+void FeatureAlignment::UpdateFeatureDetector()
+{
+    if (m_featureType == FeatureType::SIFT)
+    {
+        m_featureDetector = m_siftDetector;
+        // SIFT使用FLANN匹配器
+        m_featureMatcher = cv::DescriptorMatcher::create(cv::DescriptorMatcher::FLANNBASED);
+    }
+    else if (m_featureType == FeatureType::SURF)
+    {
+        m_featureDetector = m_surfDetector;
+        // SURF使用FLANN匹配器
+        m_featureMatcher = cv::DescriptorMatcher::create(cv::DescriptorMatcher::FLANNBASED);
+    }
+    else if (m_featureType == FeatureType::ORB)
+    {
+        m_featureDetector = m_orbDetector;
+        // ORB使用汉明距离匹配器
+        m_featureMatcher = cv::DescriptorMatcher::create(cv::DescriptorMatcher::BRUTEFORCE_HAMMING);
+    }
+    else if (m_featureType == FeatureType::AKAZE)
+    {
+        m_featureDetector = m_akazeDetector;
+        // AKAZE使用汉明距离匹配器
+        m_featureMatcher = cv::DescriptorMatcher::create(cv::DescriptorMatcher::BRUTEFORCE_HAMMING);
+    }
+    else
+    {
+        m_featureDetector = m_siftDetector;
+        m_featureMatcher = cv::DescriptorMatcher::create(cv::DescriptorMatcher::FLANNBASED);
+    }
 }
 
 FeatureAlignment::~FeatureAlignment()
@@ -66,6 +119,13 @@ AlignmentResult FeatureAlignment::AlignImagesGray(
         return result;
     }
 
+    // 保存使用的特征提取器类型
+    result.featureType = params.featureType;
+    
+    // 临时保存当前特征类型，然后设置为参数中指定的类型
+    FeatureType originalType = m_featureType;
+    SetFeatureType(params.featureType);
+
     // 1. 特征检测和描述符提取
     std::vector<cv::KeyPoint> keypoints1, keypoints2;
     cv::Mat descriptors1, descriptors2;
@@ -73,6 +133,8 @@ AlignmentResult FeatureAlignment::AlignImagesGray(
     if (!ExtractFeatures(srcGray, keypoints1, descriptors1) || !ExtractFeatures(dstGray, keypoints2, descriptors2)) 
     {
         qDebug() << "特征提取失败";
+        // 恢复原始特征类型
+        SetFeatureType(originalType);
         return result;
     }
 
@@ -83,6 +145,8 @@ AlignmentResult FeatureAlignment::AlignImagesGray(
     if (!MatchFeatures(descriptors1, descriptors2, matches)) 
     {
         qDebug() << "特征匹配失败";
+        // 恢复原始特征类型
+        SetFeatureType(originalType);
         return result;
     }
 
@@ -95,6 +159,8 @@ AlignmentResult FeatureAlignment::AlignImagesGray(
     if (!GeometricVerification(keypoints1, keypoints2, matches, transformMatrix, inlierMatches, params)) 
     {
         qDebug() << "几何验证失败";
+        // 恢复原始特征类型
+        SetFeatureType(originalType);
         return result;
     }
 
@@ -117,6 +183,9 @@ AlignmentResult FeatureAlignment::AlignImagesGray(
     result.reprojectionError = ComputeReprojectionError(result.srcPoints, result.dstPoints, transformMatrix);
 
     qDebug() << "对齐成功 - 内点数量:" << result.inlierCount  << "重投影误差:" << result.reprojectionError;
+    
+    // 恢复原始特征类型
+    SetFeatureType(originalType);
 
     return result;
 }
@@ -129,6 +198,13 @@ AlignmentResult FeatureAlignment::FastAlignImages(
     AlignmentResult result;
     QElapsedTimer timer;
     timer.start();
+
+    // 保存使用的特征提取器类型
+    result.featureType = params.featureType;
+    
+    // 临时保存当前特征类型，然后设置为参数中指定的类型
+    FeatureType originalType = m_featureType;
+    SetFeatureType(params.featureType);
 
     // 转换为灰度图
     cv::Mat srcGray, dstGray;
@@ -153,6 +229,8 @@ AlignmentResult FeatureAlignment::FastAlignImages(
     if (srcGray.empty() || dstGray.empty()) 
     {
         qDebug() << "输入图像为空";
+        // 恢复原始特征类型
+        SetFeatureType(originalType);
         return result;
     }
 
@@ -163,6 +241,8 @@ AlignmentResult FeatureAlignment::FastAlignImages(
     if (!ExtractFeatures(srcGray, keypoints1, descriptors1) || !ExtractFeatures(dstGray, keypoints2, descriptors2)) 
     {
         qDebug() << "特征提取失败";
+        // 恢复原始特征类型
+        SetFeatureType(originalType);
         return result;
     }
 
@@ -171,6 +251,8 @@ AlignmentResult FeatureAlignment::FastAlignImages(
     if (!MatchFeatures(descriptors1, descriptors2, matches)) 
     {
         qDebug() << "特征匹配失败";
+        // 恢复原始特征类型
+        SetFeatureType(originalType);
         return result;
     }
 
@@ -227,6 +309,9 @@ AlignmentResult FeatureAlignment::FastAlignImages(
         }
     }
 
+    // 恢复原始特征类型
+    SetFeatureType(originalType);
+    
     qDebug() << "快速对齐耗时:" << timer.elapsed() << "ms" << "内点数量:" << result.inlierCount;
     
     return result;

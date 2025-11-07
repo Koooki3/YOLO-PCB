@@ -8,12 +8,27 @@
 using namespace cv;
 using namespace std;
 
+// 特征提取器类型枚举
+enum class FeatureType
+{
+    SIFT,
+    SURF,
+    ORB,
+    AKAZE
+};
+
 class DataProcessor : public QObject
 {
     Q_OBJECT
 
 public:
     explicit DataProcessor(QObject *parent = nullptr);
+    
+    // 设置特征提取器类型
+    void SetFeatureType(FeatureType type);
+    
+    // 获取当前特征提取器类型
+    FeatureType GetFeatureType() const;
     
     // 预处理方法
     Mat NormalizeImage(const Mat& input, double targetMean, double targetStd);
@@ -38,6 +53,13 @@ public:
 private:
     mt19937 rng_;
     Ptr<SIFT> siftDetector_;
+    Ptr<SURF> surfDetector_;
+    Ptr<ORB> orbDetector_;
+    Ptr<AKAZE> akazeDetector_;
+    FeatureType currentFeatureType_;
+    
+    // 初始化特征检测器
+    void InitializeDetectors();
     
     // 辅助函数
     double RandomDouble(double min, double max);
