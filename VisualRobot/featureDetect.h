@@ -7,15 +7,17 @@
 #include <vector>
 #include <QString>
 #include <QDebug>
+#include "DataProcessor.h"
 
 // 特征识别参数结构体
 struct FeatureParams
 {
-    float ratioThresh = 0.7f;        // SIFT匹配比率阈值
+    float ratioThresh = 0.7f;        // 匹配比率阈值
     float responseThresh = 0.0f;      // 特征点响应值阈值
     float ransacReprojThresh = 3.0f;  // RANSAC重投影阈值
     int minInliers = 10;             // 最小内点数量
     bool useRansac = true;           // 是否使用RANSAC验证
+    FeatureType featureType = FeatureType::SIFT; // 特征提取器类型，可选择SIFT、SURF、ORB或AKAZE
 };
 
 class featureDetector

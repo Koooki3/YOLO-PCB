@@ -130,7 +130,10 @@ void featureDetector::TestFeatureDetection(const QString& imagePath1, const QStr
     standardized1 = dataProcessor.StandardizeImage(image1);
     standardized2 = dataProcessor.StandardizeImage(image2);
 
-    // 2. 提取特征
+    // 2. 设置特征提取器类型
+    dataProcessor.SetFeatureType(params.featureType);
+
+    // 3. 提取特征
     keypoints1 = dataProcessor.DetectKeypoints(standardized1, descriptors1);
     keypoints2 = dataProcessor.DetectKeypoints(standardized2, descriptors2);
 
@@ -180,7 +183,20 @@ void featureDetector::TestFeatureDetection(const QString& imagePath1, const QStr
     // 7. 保存结果图像
     cv::imwrite("../feature_matches.jpg", imgMatches);
 
-    // 8. 输出匹配信息
+    // 输出匹配信息
+    QString featureTypeName;
+    if (params.featureType == FeatureType::SIFT) {
+        featureTypeName = "SIFT";
+    } else if (params.featureType == FeatureType::SURF) {
+        featureTypeName = "SURF";
+    } else if (params.featureType == FeatureType::ORB) {
+        featureTypeName = "ORB";
+    } else if (params.featureType == FeatureType::AKAZE) {
+        featureTypeName = "AKAZE";
+    } else {
+        featureTypeName = "未知";
+    }
+    qDebug() << "使用特征提取器:" << featureTypeName;
     qDebug() << "Total keypoints in image1:" << keypoints1.size();
     qDebug() << "Total keypoints in image2:" << keypoints2.size();
     qDebug() << "Initial matches:" << knnMatches.size();

@@ -12,26 +12,30 @@
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
+#include "DataProcessor.h" // 包含FeatureType枚举
 
 // 特征识别参数结构体
 struct FeatureParams_optimize
 {
-    float ratioThresh = 0.85f;        // SIFT匹配比率阈值
+    float ratioThresh = 0.85f;        // 特征匹配比率阈值
     float responseThresh = 0.1f;      // 特征点响应值阈值
     float ransacReprojThresh = 3.0f;  // RANSAC重投影阈值
     int minInliers = 10;             // 最小内点数量
     bool useRansac = true;           // 是否使用RANSAC验证
     int numThreads = 4;              // 并行线程数
-    bool enableParallel = true;      // 启用并行计算
+    bool enableParallel = true;      // 是否启用并行处理
+    FeatureType featureType = FeatureType::SIFT; // 特征提取器类型，可选择SIFT、SURF、ORB或AKAZE
 };
 
 // 并行处理结果结构体
 struct ParallelResult
 {
-    std::vector<cv::DMatch> matches;
-    std::vector<cv::Point2f> points1;
-    std::vector<cv::Point2f> points2;
-    bool success = false;
+    std::vector<cv::DMatch> matches;  // 匹配结果
+    std::vector<cv::Point2f> points1; // 图像1的特征点
+    std::vector<cv::Point2f> points2; // 图像2的特征点
+    bool success = false;             // 是否成功
+    FeatureType featureType = FeatureType::SIFT; // 使用的特征提取器类型（SIFT、SURF或ORB）
+    qint64 processingTime = 0;        // 处理时间（毫秒）
 };
 
 class FeatureDetectorOptimized
