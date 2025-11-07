@@ -14,10 +14,33 @@ DataProcessor::DataProcessor(QObject *parent)
 
 void DataProcessor::InitializeDetectors()
 {
-    siftDetector_ = SIFT::create();
-    surfDetector_ = SURF::create();
-    orbDetector_ = ORB::create(500, 1.2f, 8, 31, 0, 2, ORB::HARRIS_SCORE, 31, 20);
-    akazeDetector_ = AKAZE::create();
+    try {
+        siftDetector_ = SIFT::create();
+    } catch (const cv::Exception& e) {
+        qDebug() << "警告: 无法初始化SIFT检测器:" << e.what();
+    }
+    
+    try {
+        // 在新版本OpenCV中，SURF可能需要xfeatures2d模块
+        surfDetector_ = SURF::create();
+    } catch (const cv::Exception& e) {
+        qDebug() << "警告: 无法初始化SURF检测器:" << e.what();
+        qDebug() << "提示: SURF在OpenCV 4.x中需要xfeatures2d模块，建议使用SIFT、ORB或AKAZE替代";
+        // 设置为nullptr而不是抛出异常
+        surfDetector_ = nullptr;
+    }
+    
+    try {
+        orbDetector_ = ORB::create(500, 1.2f, 8, 31, 0, 2, ORB::HARRIS_SCORE, 31, 20);
+    } catch (const cv::Exception& e) {
+        qDebug() << "警告: 无法初始化ORB检测器:" << e.what();
+    }
+    
+    try {
+        akazeDetector_ = AKAZE::create();
+    } catch (const cv::Exception& e) {
+        qDebug() << "警告: 无法初始化AKAZE检测器:" << e.what();
+    }
 }
 
 void DataProcessor::SetFeatureType(FeatureType type)
@@ -118,26 +141,54 @@ vector<KeyPoint> DataProcessor::DetectKeypoints(const Mat& input, Mat& descripto
     // 定义局部变量
     vector<KeyPoint> keypoints;  // 检测到的关键点集合
 
-    // 根据当前选择的特征提取器类型进行检测
-    if (currentFeatureType_ == FeatureType::SURF)
-    {
-        // 使用SURF检测器检测关键点并计算描述符
-        surfDetector_->detectAndCompute(input, Mat(), keypoints, descriptors);
-    }
-    else if (currentFeatureType_ == FeatureType::ORB)
-    {
-        // 使用ORB检测器检测关键点并计算描述符
-        orbDetector_->detectAndCompute(input, Mat(), keypoints, descriptors);
-    }
-    else if (currentFeatureType_ == FeatureType::AKAZE)
-    {
-        // 使用AKAZE检测器检测关键点并计算描述符
-        akazeDetector_->detectAndCompute(input, Mat(), keypoints, descriptors);
-    }
-    else
-    {
-        // 默认使用SIFT检测器
-        siftDetector_->detectAndCompute(input, Mat(), keypoints, descriptors);
+    try {
+        // 根据当前选择的特征提取器类型进行检测
+        if (currentFeatureType_ == FeatureType::SURF)
+        {
+            if (surfDetector_) {
+                // 使用SURF检测器检测关键点并计算描述符
+                surfDetector_->detectAndCompute(input, Mat(), keypoints, descriptors);
+            } else {
+                qDebug() << "错误: SURF检测器不可用，可能需要安装OpenCV的xfeatures2d模块";
+                // 如果SURF不可用，尝试使用ORB作为替代
+                qDebug() << "尝试使用ORB作为替代...";
+                if (orbDetector_) {
+                    orbDetector_->detectAndCompute(input, Mat(), keypoints, descriptors);
+                }
+            }
+        }
+        else if (currentFeatureType_ == FeatureType::ORB)
+        {
+            if (orbDetector_) {
+                // 使用ORB检测器检测关键点并计算描述符
+                orbDetector_->detectAndCompute(input, Mat(), keypoints, descriptors);
+            } else {
+                qDebug() << "错误: ORB检测器未初始化";
+            }
+        }
+        else if (currentFeatureType_ == FeatureType::AKAZE)
+        {
+            if (akazeDetector_) {
+                // 使用AKAZE检测器检测关键点并计算描述符
+                akazeDetector_->detectAndCompute(input, Mat(), keypoints, descriptors);
+            } else {
+                qDebug() << "错误: AKAZE检测器未初始化";
+            }
+        }
+        else
+        {
+            if (siftDetector_) {
+                // 默认使用SIFT检测器
+                siftDetector_->detectAndCompute(input, Mat(), keypoints, descriptors);
+            } else {
+                qDebug() << "错误: SIFT检测器未初始化";
+            }
+        }
+    } catch (const cv::Exception& e) {
+        qDebug() << "特征提取过程中发生异常:" << e.what();
+        // 清空返回值，避免使用无效数据
+        keypoints.clear();
+        descriptors = Mat();
     }
     
     return keypoints;
