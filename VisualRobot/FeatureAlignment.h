@@ -19,7 +19,7 @@ struct AlignmentParams
     int numThreads = 4;               // 并行线程数
     int maxIterations = 1000;         // 最大迭代次数
     double confidence = 0.99;         // 置信度
-    FeatureType featureType = FeatureType::SIFT; // 特征提取器类型
+    FeatureType featureType = FeatureType::SIFT; // 特征提取器类型（SIFT、ORB或AKAZE）
 };
 
 // 对齐结果结构体

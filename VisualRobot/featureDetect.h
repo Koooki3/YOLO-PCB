@@ -17,7 +17,7 @@ struct FeatureParams
     float ransacReprojThresh = 3.0f;  // RANSAC重投影阈值
     int minInliers = 10;             // 最小内点数量
     bool useRansac = true;           // 是否使用RANSAC验证
-    FeatureType featureType = FeatureType::SIFT; // 特征提取器类型，可选择SIFT、SURF、ORB或AKAZE
+    FeatureType featureType = FeatureType::SIFT; // 特征提取器类型，可选择SIFT、ORB或AKAZE
 };
 
 class featureDetector
