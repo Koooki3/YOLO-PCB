@@ -7,8 +7,27 @@ using namespace cv;
 DataProcessor::DataProcessor(QObject *parent)
     : QObject(parent)
     , rng_(random_device{}())
+    , currentFeatureType_(FeatureType::SIFT)
+{
+    InitializeDetectors();
+}
+
+void DataProcessor::InitializeDetectors()
 {
     siftDetector_ = SIFT::create();
+    surfDetector_ = SURF::create();
+    orbDetector_ = ORB::create(500, 1.2f, 8, 31, 0, 2, ORB::HARRIS_SCORE, 31, 20);
+    akazeDetector_ = AKAZE::create();
+}
+
+void DataProcessor::SetFeatureType(FeatureType type)
+{
+    currentFeatureType_ = type;
+}
+
+FeatureType DataProcessor::GetFeatureType() const
+{
+    return currentFeatureType_;
 }
 
 Mat DataProcessor::NormalizeImage(const Mat& input, double targetMean, double targetStd)
@@ -99,8 +118,27 @@ vector<KeyPoint> DataProcessor::DetectKeypoints(const Mat& input, Mat& descripto
     // 定义局部变量
     vector<KeyPoint> keypoints;  // 检测到的关键点集合
 
-    // 使用SIFT检测器检测关键点并计算描述符
-    siftDetector_->detectAndCompute(input, Mat(), keypoints, descriptors);
+    // 根据当前选择的特征提取器类型进行检测
+    if (currentFeatureType_ == FeatureType::SURF)
+    {
+        // 使用SURF检测器检测关键点并计算描述符
+        surfDetector_->detectAndCompute(input, Mat(), keypoints, descriptors);
+    }
+    else if (currentFeatureType_ == FeatureType::ORB)
+    {
+        // 使用ORB检测器检测关键点并计算描述符
+        orbDetector_->detectAndCompute(input, Mat(), keypoints, descriptors);
+    }
+    else if (currentFeatureType_ == FeatureType::AKAZE)
+    {
+        // 使用AKAZE检测器检测关键点并计算描述符
+        akazeDetector_->detectAndCompute(input, Mat(), keypoints, descriptors);
+    }
+    else
+    {
+        // 默认使用SIFT检测器
+        siftDetector_->detectAndCompute(input, Mat(), keypoints, descriptors);
+    }
     
     return keypoints;
 }

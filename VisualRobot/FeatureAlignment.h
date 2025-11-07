@@ -8,6 +8,7 @@
 #include <QString>
 #include <QDebug>
 #include "featureDetect_optimized.h"
+#include "DataProcessor.h" // 包含FeatureType枚举
 
 // 特征对齐参数结构体
 struct AlignmentParams
@@ -18,6 +19,7 @@ struct AlignmentParams
     int numThreads = 4;               // 并行线程数
     int maxIterations = 1000;         // 最大迭代次数
     double confidence = 0.99;         // 置信度
+    FeatureType featureType = FeatureType::SIFT; // 特征提取器类型
 };
 
 // 对齐结果结构体
@@ -30,6 +32,7 @@ struct AlignmentResult
     bool success = false;             // 是否成功
     int inlierCount = 0;              // 内点数量
     double reprojectionError = 0.0;   // 重投影误差
+    FeatureType featureType = FeatureType::SIFT; // 使用的特征提取器类型
 };
 
 class FeatureAlignment
@@ -37,6 +40,12 @@ class FeatureAlignment
 public:
     FeatureAlignment();
     ~FeatureAlignment();
+
+    // 设置特征提取器类型
+    void SetFeatureType(FeatureType type);
+    
+    // 获取当前特征提取器类型
+    FeatureType GetFeatureType() const;
 
     // 使用特征匹配对齐两幅图像
     AlignmentResult AlignImages(const cv::Mat& srcImage, const cv::Mat& dstImage, const AlignmentParams& params = AlignmentParams());
@@ -65,11 +74,24 @@ private:
 
     // 计算重投影误差
     double ComputeReprojectionError(const std::vector<cv::Point2f>& points1, const std::vector<cv::Point2f>& points2, const cv::Mat& transformMatrix);
+    
+    // 更新特征检测器
+    void UpdateFeatureDetector();
 
     // 特征检测器
     cv::Ptr<cv::Feature2D> m_featureDetector;
     // 特征匹配器
     cv::Ptr<cv::DescriptorMatcher> m_featureMatcher;
+    // 当前特征提取器类型
+    FeatureType m_featureType;
+    // SIFT检测器
+    cv::Ptr<cv::SIFT> m_siftDetector;
+    // SURF检测器
+    cv::Ptr<cv::SURF> m_surfDetector;
+    // ORB检测器
+    cv::Ptr<cv::ORB> m_orbDetector;
+    // AKAZE检测器
+    cv::Ptr<cv::AKAZE> m_akazeDetector;
 };
 
 #endif // FEATUREALIGNMENT_H

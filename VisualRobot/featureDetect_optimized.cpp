@@ -355,25 +355,116 @@ std::vector<cv::DMatch> FeatureDetectorOptimized::ParallelRANSAC(
 
 void FeatureDetectorOptimized::TestFeatureDetectionParallel(const QString& imagePath1, const QString& imagePath2)
 {
-    QElapsedTimer totalTimer;
-    totalTimer.start();
-
     FeatureParams_optimize params;
     params.enableParallel = true;
     params.numThreads = std::thread::hardware_concurrency();
 
-    auto result = ProcessImagePair(imagePath1, imagePath2, params);
+    // 测试SIFT特征提取器
+    params.featureType = FeatureType::SIFT;
+    QElapsedTimer siftTimer;
+    siftTimer.start();
+    auto siftResult = ProcessImagePair(imagePath1, imagePath2, params);
+    qint64 siftTime = siftTimer.elapsed();
 
-    if (result.success) 
+    // 测试SURF特征提取器
+    params.featureType = FeatureType::SURF;
+    QElapsedTimer surfTimer;
+    surfTimer.start();
+    auto surfResult = ProcessImagePair(imagePath1, imagePath2, params);
+    qint64 surfTime = surfTimer.elapsed();
+
+    // 测试ORB特征提取器
+    params.featureType = FeatureType::ORB;
+    QElapsedTimer orbTimer;
+    orbTimer.start();
+    auto orbResult = ProcessImagePair(imagePath1, imagePath2, params);
+    qint64 orbTime = orbTimer.elapsed();
+
+    // 测试AKAZE特征提取器
+    params.featureType = FeatureType::AKAZE;
+    QElapsedTimer akazeTimer;
+    akazeTimer.start();
+    auto akazeResult = ProcessImagePair(imagePath1, imagePath2, params);
+    qint64 akazeTime = akazeTimer.elapsed();
+
+    // 输出对比结果
+    qDebug() << "\n===== 特征提取器性能对比 =====";
+    
+    qDebug() << "\nSIFT特征提取器:";
+    if (siftResult.success) 
     {
-        qDebug() << "Parallel Feature Detection Completed in" << totalTimer.elapsed() << "ms";
-        qDebug() << "Good matches:" << result.matches.size();
-        qDebug() << "Inlier points:" << result.points1.size();
+        qDebug() << "  完成时间:" << siftTime << "ms";
+        qDebug() << "  好匹配数量:" << siftResult.matches.size();
+        qDebug() << "  内点数量:" << siftResult.points1.size();
     } 
     else 
     {
-        qDebug() << "Parallel Feature Detection Failed";
+        qDebug() << "  检测失败";
     }
+
+    qDebug() << "\nSURF特征提取器:";
+    if (surfResult.success) 
+    {
+        qDebug() << "  完成时间:" << surfTime << "ms";
+        qDebug() << "  好匹配数量:" << surfResult.matches.size();
+        qDebug() << "  内点数量:" << surfResult.points1.size();
+    } 
+    else 
+    {
+        qDebug() << "  检测失败";
+    }
+
+    qDebug() << "\nORB特征提取器:";
+    if (orbResult.success) 
+    {
+        qDebug() << "  完成时间:" << orbTime << "ms";
+        qDebug() << "  好匹配数量:" << orbResult.matches.size();
+        qDebug() << "  内点数量:" << orbResult.points1.size();
+    } 
+    else 
+    {
+        qDebug() << "  检测失败";
+    }
+
+    qDebug() << "\nAKAZE特征提取器:";
+    if (akazeResult.success) 
+    {
+        qDebug() << "  完成时间:" << akazeTime << "ms";
+        qDebug() << "  好匹配数量:" << akazeResult.matches.size();
+        qDebug() << "  内点数量:" << akazeResult.points1.size();
+    } 
+    else 
+    {
+        qDebug() << "  检测失败";
+    }
+
+    // 性能比较
+    qDebug() << "\n性能比较:";
+    if (siftResult.success && surfResult.success) {
+        double surfSpeedup = static_cast<double>(siftTime) / surfTime;
+        qDebug() << "  SURF相对SIFT的速度提升:" << QString::number(surfSpeedup, 'f', 2) << "倍";
+    }
+    if (siftResult.success && orbResult.success) {
+        double orbSpeedup = static_cast<double>(siftTime) / orbTime;
+        qDebug() << "  ORB相对SIFT的速度提升:" << QString::number(orbSpeedup, 'f', 2) << "倍";
+    }
+    if (surfResult.success && orbResult.success) {
+        double orbRelSurfSpeedup = static_cast<double>(surfTime) / orbTime;
+        qDebug() << "  ORB相对SURF的速度提升:" << QString::number(orbRelSurfSpeedup, 'f', 2) << "倍";
+    }
+    if (siftResult.success && akazeResult.success) {
+        double akazeRelSiftSpeedup = static_cast<double>(siftTime) / akazeTime;
+        qDebug() << "  AKAZE相对SIFT的速度提升:" << QString::number(akazeRelSiftSpeedup, 'f', 2) << "倍";
+    }
+    if (surfResult.success && akazeResult.success) {
+        double akazeRelSurfSpeedup = static_cast<double>(surfTime) / akazeTime;
+        qDebug() << "  AKAZE相对SURF的速度提升:" << QString::number(akazeRelSurfSpeedup, 'f', 2) << "倍";
+    }
+    if (orbResult.success && akazeResult.success) {
+        double akazeRelOrbSpeedup = static_cast<double>(orbTime) / akazeTime;
+        qDebug() << "  AKAZE相对ORB的速度提升:" << QString::number(akazeRelOrbSpeedup, 'f', 2) << "倍";
+    }
+    qDebug() << "==============================\n";
 }
 
 // 修复：移除类作用域限定
@@ -383,17 +474,25 @@ ParallelResult FeatureDetectorOptimized::ProcessImagePair(
     const FeatureParams_optimize& params)
 {
     ParallelResult result;
+    QElapsedTimer timer;
+    timer.start();
 
-    DataProcessor dataProcessor;
+    // 读取图像
     cv::Mat image1 = cv::imread(imagePath1.toStdString());
     cv::Mat image2 = cv::imread(imagePath2.toStdString());
 
     if (image1.empty() || image2.empty()) 
     {
         qDebug() << "Error: Could not read the images";
+        result.success = false;
         return result;
     }
 
+    // 图像预处理
+    DataProcessor dataProcessor;
+    // 设置特征提取器类型
+    dataProcessor.SetFeatureType(params.featureType);
+    
     // 并行图像预处理和特征提取
     std::future<cv::Mat> futureStandardized1 = std::async(std::launch::async, [&dataProcessor, image1]() { return dataProcessor.StandardizeImage(image1); });
     std::future<cv::Mat> futureStandardized2 = std::async(std::launch::async, [&dataProcessor, image2]() { return dataProcessor.StandardizeImage(image2); });
@@ -426,6 +525,12 @@ ParallelResult FeatureDetectorOptimized::ProcessImagePair(
     result.matches = FilterMatchesParallel(keypoints1, keypoints2, knnMatches, result.points1, result.points2, params);
 
     result.success = true;
+    // 记录处理时间和特征类型
+    result.processingTime = timer.elapsed();
+    result.featureType = params.featureType;
+    
+    LogPerformanceMetrics("ProcessImagePair", result.processingTime);
+    
     return result;
 }
 
@@ -443,7 +548,7 @@ std::vector<ParallelResult> FeatureDetectorOptimized::BatchFeatureDetection(
     // 并行处理所有图像对
     for (const auto& pair : imagePairs) 
     {
-        futures.push_back(std::async(std::launch::async, ProcessImagePair, pair.first, pair.second, params));
+        futures.push_back(std::async(std::launch::async, &FeatureDetectorOptimized::ProcessImagePair, this, pair.first, pair.second, params));
     }
 
     // 收集结果
@@ -462,7 +567,7 @@ std::future<ParallelResult> FeatureDetectorOptimized::AsyncFeatureDetection(
     const QString& imagePath2,
     const FeatureParams_optimize& params)
 {
-    return std::async(std::launch::async, ProcessImagePair, imagePath1, imagePath2, params);
+    return std::async(std::launch::async, &FeatureDetectorOptimized::ProcessImagePair, this, imagePath1, imagePath2, params);
 }
 
 void FeatureDetectorOptimized::LogPerformanceMetrics(const QString& operation, qint64 elapsedMs)
