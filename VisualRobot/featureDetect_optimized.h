@@ -24,7 +24,7 @@ struct FeatureParams_optimize
     bool useRansac = true;           // 是否使用RANSAC验证
     int numThreads = 4;              // 并行线程数
     bool enableParallel = true;      // 是否启用并行处理
-    FeatureType featureType = FeatureType::SIFT; // 特征提取器类型，可选择SIFT、SURF、ORB或AKAZE
+    FeatureType featureType = FeatureType::SIFT; // 特征提取器类型，可选择SIFT、ORB或AKAZE
 };
 
 // 并行处理结果结构体

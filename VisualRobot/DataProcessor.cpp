@@ -20,15 +20,7 @@ void DataProcessor::InitializeDetectors()
         qDebug() << "警告: 无法初始化SIFT检测器:" << e.what();
     }
     
-    try {
-        // 在新版本OpenCV中，SURF可能需要xfeatures2d模块
-        surfDetector_ = SURF::create();
-    } catch (const cv::Exception& e) {
-        qDebug() << "警告: 无法初始化SURF检测器:" << e.what();
-        qDebug() << "提示: SURF在OpenCV 4.x中需要xfeatures2d模块，建议使用SIFT、ORB或AKAZE替代";
-        // 设置为nullptr而不是抛出异常
-        surfDetector_ = nullptr;
-    }
+
     
     try {
         orbDetector_ = ORB::create(500, 1.2f, 8, 31, 0, 2, ORB::HARRIS_SCORE, 31, 20);
@@ -143,21 +135,7 @@ vector<KeyPoint> DataProcessor::DetectKeypoints(const Mat& input, Mat& descripto
 
     try {
         // 根据当前选择的特征提取器类型进行检测
-        if (currentFeatureType_ == FeatureType::SURF)
-        {
-            if (surfDetector_) {
-                // 使用SURF检测器检测关键点并计算描述符
-                surfDetector_->detectAndCompute(input, Mat(), keypoints, descriptors);
-            } else {
-                qDebug() << "错误: SURF检测器不可用，可能需要安装OpenCV的xfeatures2d模块";
-                // 如果SURF不可用，尝试使用ORB作为替代
-                qDebug() << "尝试使用ORB作为替代...";
-                if (orbDetector_) {
-                    orbDetector_->detectAndCompute(input, Mat(), keypoints, descriptors);
-                }
-            }
-        }
-        else if (currentFeatureType_ == FeatureType::ORB)
+        if (currentFeatureType_ == FeatureType::ORB)
         {
             if (orbDetector_) {
                 // 使用ORB检测器检测关键点并计算描述符

@@ -402,18 +402,6 @@ void FeatureDetectorOptimized::TestFeatureDetectionParallel(const QString& image
         qDebug() << "  检测失败";
     }
 
-    qDebug() << "\nSURF特征提取器:";
-    if (surfResult.success) 
-    {
-        qDebug() << "  完成时间:" << surfTime << "ms";
-        qDebug() << "  好匹配数量:" << surfResult.matches.size();
-        qDebug() << "  内点数量:" << surfResult.points1.size();
-    } 
-    else 
-    {
-        qDebug() << "  检测失败";
-    }
-
     qDebug() << "\nORB特征提取器:";
     if (orbResult.success) 
     {

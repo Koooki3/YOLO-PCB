@@ -91,16 +91,7 @@ private:
         std::cout << "\n--- SIFT特征提取器 ---" << std::endl;
         TestFeatureExtractor(imagePath1, imagePath2, FeatureType::SIFT);
         
-        // 测试SURF特征提取器 (可能需要特殊处理)
-        try {
-            std::cout << "\n--- SURF特征提取器 ---" << std::endl;
-            // 尝试创建SURF检测器检查可用性
-            cv::Ptr<cv::SURF> testSurf = cv::SURF::create();
-            TestFeatureExtractor(imagePath1, imagePath2, FeatureType::SURF);
-        } catch (const cv::Exception& e) {
-            std::cout << "SURF特征提取器不可用: " << e.what() << std::endl;
-            std::cout << "请确保已安装OpenCV的xfeatures2d模块" << std::endl;
-        }
+    
         
         // 测试ORB特征提取器
         std::cout << "\n--- ORB特征提取器 ---" << std::endl;
@@ -114,10 +105,6 @@ private:
     }
     
     static void TestFeatureExtractor(const std::string& imagePath1, const std::string& imagePath2, FeatureType featureType) {
-        // 检查SURF是否可用（在新版本OpenCV中，SURF可能需要xfeatures2d模块）
-        if (featureType == FeatureType::SURF) {
-            std::cout << "警告: SURF特征提取器可能在当前OpenCV版本中不可用，需要xfeatures2d模块支持" << std::endl;
-        }
         
         // 设置特征检测参数
         FeatureParams params;
@@ -336,7 +323,7 @@ void TestAsyncProcessing() {
 int main() {
     std::cout << "特征提取算法测试工具" << std::endl;
     std::cout << "=======================================" << std::endl;
-    std::cout << "本工具将对指定的两幅图像使用SIFT、SURF、ORB和AKAZE四种特征提取算法进行测试" << std::endl;
+    std::cout << "本工具将对指定的两幅图像使用SIFT、ORB和AKAZE三种特征提取算法进行测试" << std::endl;
     std::cout << "并生成每种算法的特征点连线图像和处理性能数据" << std::endl;
     std::cout << "=======================================" << std::endl;
 
