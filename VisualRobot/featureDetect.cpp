@@ -187,9 +187,7 @@ void featureDetector::TestFeatureDetection(const QString& imagePath1, const QStr
     QString featureTypeName;
     if (params.featureType == FeatureType::SIFT) {
         featureTypeName = "SIFT";
-    } else if (params.featureType == FeatureType::SURF) {
-        featureTypeName = "SURF";
-    } else if (params.featureType == FeatureType::ORB) {
+    }else if (params.featureType == FeatureType::ORB) {
         featureTypeName = "ORB";
     } else if (params.featureType == FeatureType::AKAZE) {
         featureTypeName = "AKAZE";
