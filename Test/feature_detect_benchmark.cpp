@@ -7,6 +7,7 @@
 #include <QString>
 #include "featureDetect.h"
 #include "featureDetect_optimized.h"
+#include "DataProcessor.h"
 
 class FeatureDetectBenchmark {
 public:
@@ -90,9 +91,16 @@ private:
         std::cout << "\n--- SIFT特征提取器 ---" << std::endl;
         TestFeatureExtractor(imagePath1, imagePath2, FeatureType::SIFT);
         
-        // 测试SURF特征提取器
-        std::cout << "\n--- SURF特征提取器 ---" << std::endl;
-        TestFeatureExtractor(imagePath1, imagePath2, FeatureType::SURF);
+        // 测试SURF特征提取器 (可能需要特殊处理)
+        try {
+            std::cout << "\n--- SURF特征提取器 ---" << std::endl;
+            // 尝试创建SURF检测器检查可用性
+            cv::Ptr<cv::SURF> testSurf = cv::SURF::create();
+            TestFeatureExtractor(imagePath1, imagePath2, FeatureType::SURF);
+        } catch (const cv::Exception& e) {
+            std::cout << "SURF特征提取器不可用: " << e.what() << std::endl;
+            std::cout << "请确保已安装OpenCV的xfeatures2d模块" << std::endl;
+        }
         
         // 测试ORB特征提取器
         std::cout << "\n--- ORB特征提取器 ---" << std::endl;
@@ -106,87 +114,136 @@ private:
     }
     
     static void TestFeatureExtractor(const std::string& imagePath1, const std::string& imagePath2, FeatureType featureType) {
+        // 检查SURF是否可用（在新版本OpenCV中，SURF可能需要xfeatures2d模块）
+        if (featureType == FeatureType::SURF) {
+            std::cout << "警告: SURF特征提取器可能在当前OpenCV版本中不可用，需要xfeatures2d模块支持" << std::endl;
+        }
+        
         // 设置特征检测参数
         FeatureParams params;
         params.featureType = featureType;
         params.useRansac = true;
         params.minInliers = 10;
-        params.matchRatioThreshold = 0.7f;  // 匹配比率阈值
+        params.ratioThresh = 0.7f;  // 匹配比率阈值
+        
+        // 创建DataProcessor实例
+        DataProcessor dataProcessor;
+        dataProcessor.SetFeatureType(featureType);
+        
+        // 读取图像
+        cv::Mat image1 = cv::imread(imagePath1);
+        cv::Mat image2 = cv::imread(imagePath2);
+        
+        if (image1.empty() || image2.empty()) {
+            std::cout << "错误: 无法读取图像文件" << std::endl;
+            return;
+        }
         
         // 记录开始时间
         auto start = std::chrono::high_resolution_clock::now();
         
-        // 调用特征检测函数
-        FeatureDetectionResult result = featureDetector::DetectFeatures(
-            QString::fromStdString(imagePath1),
-            QString::fromStdString(imagePath2),
-            params
-        );
+        // 图像预处理
+        cv::Mat standardized1 = dataProcessor.StandardizeImage(image1);
+        cv::Mat standardized2 = dataProcessor.StandardizeImage(image2);
         
-        // 记录结束时间
-        auto end = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+        // 提取特征
+        std::vector<cv::KeyPoint> keypoints1;
+        std::vector<cv::KeyPoint> keypoints2;
+        cv::Mat descriptors1;
+        cv::Mat descriptors2;
+        std::vector<std::vector<cv::DMatch>> knnMatches;
+        std::vector<cv::Point2f> points1;
+        std::vector<cv::Point2f> points2;
+        std::vector<cv::DMatch> goodMatches;
         
-        // 输出结果
-        std::cout << "处理时间: " << duration.count() << " ms" << std::endl;
-        std::cout << "特征点数量1: " << result.keypoints1.size() << std::endl;
-        std::cout << "特征点数量2: " << result.keypoints2.size() << std::endl;
-        std::cout << "匹配点数量: " << result.matches.size() << std::endl;
-        std::cout << "内点数量: " << result.inliers.size() << std::endl;
-        
-        // 绘制特征点连线并保存结果
-        if (result.success) {
-            cv::Mat img1 = cv::imread(imagePath1);
-            cv::Mat img2 = cv::imread(imagePath2);
+        try {
+            keypoints1 = dataProcessor.DetectKeypoints(standardized1, descriptors1);
+            keypoints2 = dataProcessor.DetectKeypoints(standardized2, descriptors2);
             
-            if (!img1.empty() && !img2.empty()) {
-                // 获取特征提取器名称
-                std::string featureName;
-                if (featureType == FeatureType::SIFT) featureName = "SIFT";
-                else if (featureType == FeatureType::SURF) featureName = "SURF";
-                else if (featureType == FeatureType::ORB) featureName = "ORB";
-                else if (featureType == FeatureType::AKAZE) featureName = "AKAZE";
+            if (keypoints1.empty() || keypoints2.empty() || descriptors1.empty() || descriptors2.empty()) {
+                std::cout << "错误: 无法提取足够的特征点或描述符" << std::endl;
+                return;
+            }
+            
+            // 特征匹配
+            cv::Ptr<cv::DescriptorMatcher> matcher;
+            
+            // 根据特征类型选择合适的匹配器
+            if (featureType == FeatureType::ORB || featureType == FeatureType::AKAZE) {
+                matcher = cv::DescriptorMatcher::create(cv::DescriptorMatcher::BRUTEFORCE_HAMMING);
+            } else {
+                matcher = cv::DescriptorMatcher::create(cv::DescriptorMatcher::FLANNBASED);
+            }
+            
+            matcher->knnMatch(descriptors1, descriptors2, knnMatches, 2);
+            
+            // 筛选匹配点
+            goodMatches = featureDetector::FilterMatches(
+                keypoints1, keypoints2, knnMatches, points1, points2, params);
+            
+            // 记录结束时间
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+            
+            // 输出结果
+            std::cout << "处理时间: " << duration.count() << " ms" << std::endl;
+            std::cout << "特征点数量1: " << keypoints1.size() << std::endl;
+            std::cout << "特征点数量2: " << keypoints2.size() << std::endl;
+            std::cout << "匹配点数量: " << goodMatches.size() << std::endl;
+            std::cout << "内点数量: " << points1.size() << std::endl;
+            
+            // 获取特征提取器名称
+            std::string featureName;
+            if (featureType == FeatureType::SIFT) featureName = "SIFT";
+            else if (featureType == FeatureType::SURF) featureName = "SURF";
+            else if (featureType == FeatureType::ORB) featureName = "ORB";
+            else if (featureType == FeatureType::AKAZE) featureName = "AKAZE";
+            
+            // 绘制匹配结果
+            cv::Mat matchImage;
+            cv::drawMatches(
+                image1, keypoints1,
+                image2, keypoints2,
+                goodMatches,
+                matchImage,
+                cv::Scalar::all(-1), cv::Scalar::all(-1),
+                std::vector<char>(), cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS
+            );
+            
+            // 保存匹配结果图像
+            std::string outputPath = "../feature_matches_" + featureName + ".jpg";
+            if (cv::imwrite(outputPath, matchImage)) {
+                std::cout << "特征点连线图像已保存至: " << outputPath << std::endl;
+            } else {
+                std::cout << "警告: 无法保存特征点连线图像" << std::endl;
+            }
+            
+            // 如果有内点，绘制内点连线
+            if (!points1.empty()) {
+                cv::Mat inlierImage;
+                // 由于FilterMatches已经返回内点的匹配，我们可以直接使用goodMatches
+                std::vector<cv::DMatch> inlierMatches = goodMatches;
                 
-                // 绘制匹配结果
-                cv::Mat matchImage;
                 cv::drawMatches(
-                    img1, result.keypoints1,
-                    img2, result.keypoints2,
-                    result.matches,
-                    matchImage,
-                    cv::Scalar::all(-1), cv::Scalar::all(-1),
+                    image1, keypoints1,
+                    image2, keypoints2,
+                    inlierMatches,
+                    inlierImage,
+                    cv::Scalar::all(-1), cv::Scalar(0, 255, 0),
                     std::vector<char>(), cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS
                 );
                 
-                // 保存匹配结果图像
-                std::string outputPath = "../feature_matches_" + featureName + ".jpg";
-                cv::imwrite(outputPath, matchImage);
-                std::cout << "特征点连线图像已保存至: " << outputPath << std::endl;
-                
-                // 如果有内点，绘制内点连线
-                if (!result.inliers.empty()) {
-                    cv::Mat inlierImage;
-                    std::vector<cv::DMatch> inlierMatches;
-                    for (size_t i = 0; i < result.inliers.size(); i++) {
-                        inlierMatches.push_back(result.matches[result.inliers[i]]);
-                    }
-                    
-                    cv::drawMatches(
-                        img1, result.keypoints1,
-                        img2, result.keypoints2,
-                        inlierMatches,
-                        inlierImage,
-                        cv::Scalar::all(-1), cv::Scalar(0, 255, 0),
-                        std::vector<char>(), cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS
-                    );
-                    
-                    std::string inlierPath = "../feature_inliers_" + featureName + ".jpg";
-                    cv::imwrite(inlierPath, inlierImage);
+                std::string inlierPath = "../feature_inliers_" + featureName + ".jpg";
+                if (cv::imwrite(inlierPath, inlierImage)) {
                     std::cout << "内点连线图像已保存至: " << inlierPath << std::endl;
+                } else {
+                    std::cout << "警告: 无法保存内点连线图像" << std::endl;
                 }
             }
-        } else {
-            std::cout << "特征检测失败!" << std::endl;
+        } catch (const cv::Exception& e) {
+            std::cout << "错误: 特征提取失败 - " << e.what() << std::endl;
+        } catch (const std::exception& e) {
+            std::cout << "错误: 处理异常 - " << e.what() << std::endl;
         }
     }
     
