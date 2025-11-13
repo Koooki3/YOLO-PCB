@@ -8,6 +8,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QProgressBar>
+#include <QComboBox>
 #include <opencv2/opencv.hpp>
 
 using namespace cv;
@@ -17,6 +18,11 @@ DLExample::DLExample(QWidget *parent)
     : QWidget(parent)
     , dlProcessor_(new DLProcessor(this))
     , isModelLoaded_(false)
+    , quantizationType_(nullptr)
+    , calibrationImagesBtn_(nullptr)
+    , quantizeBtn_(nullptr)
+    , quantizationStatusLabel_(nullptr)
+    , calibrationImages_()
 {
     SetupUI();
     ConnectSignals();
@@ -68,6 +74,14 @@ void DLExample::SetupUI()
     
     // 参数设置区域
     QHBoxLayout* paramLayout = new QHBoxLayout();
+    
+    // 任务类型选择
+    paramLayout->addWidget(new QLabel("任务类型:"));
+    taskTypeComboBox_ = new QComboBox();
+    taskTypeComboBox_->addItems({"图像分类", "目标检测", "实例分割"});
+    connect(taskTypeComboBox_, &QComboBox::currentIndexChanged, this, &DLExample::OnTaskTypeChanged);
+    paramLayout->addWidget(taskTypeComboBox_);
+    
     paramLayout->addWidget(new QLabel("置信度阈值:"));
     confidenceEdit_ = new QLineEdit("0.5");
     confidenceEdit_->setMaximumWidth(80);
@@ -85,6 +99,30 @@ void DLExample::SetupUI()
     paramLayout->addStretch();
     mainLayout->addLayout(paramLayout);
     
+    // 模型量化设置区域
+    QHBoxLayout* quantLayout = new QHBoxLayout();
+    quantLayout->addWidget(new QLabel("量化类型:"));
+    
+    quantizationType_ = new QComboBox();
+    quantizationType_->addItems({"None", "FP16", "INT8", "UINT8"});
+    quantLayout->addWidget(quantizationType_);
+    
+    calibrationImagesBtn_ = new QPushButton("选择校准图像");
+    connect(calibrationImagesBtn_, &QPushButton::clicked, this, &DLExample::SelectCalibrationImages);
+    quantLayout->addWidget(calibrationImagesBtn_);
+    
+    quantizeBtn_ = new QPushButton("量化模型");
+    connect(quantizeBtn_, &QPushButton::clicked, this, &DLExample::QuantizeModel);
+    quantLayout->addWidget(quantizeBtn_);
+    
+    quantLayout->addStretch();
+    mainLayout->addLayout(quantLayout);
+    
+    // 量化状态显示
+    quantizationStatusLabel_ = new QLabel("未量化");
+    quantizationStatusLabel_->setStyleSheet("QLabel { color: blue; font-style: italic; }");
+    mainLayout->addWidget(quantizationStatusLabel_);
+    
     // 图像处理区域
     QHBoxLayout* imageLayout = new QHBoxLayout();
     
@@ -92,13 +130,13 @@ void DLExample::SetupUI()
     connect(selectImageBtn, &QPushButton::clicked, this, &DLExample::SelectImage);
     imageLayout->addWidget(selectImageBtn);
     
-    QPushButton* classifyBtn = new QPushButton("开始分类");
-    connect(classifyBtn, &QPushButton::clicked, this, &DLExample::ClassifyImage);
-    imageLayout->addWidget(classifyBtn);
+    classifyBtn_ = new QPushButton("开始分类");
+    connect(classifyBtn_, &QPushButton::clicked, this, &DLExample::ProcessImage);
+    imageLayout->addWidget(classifyBtn_);
     
-    QPushButton* batchBtn = new QPushButton("批量分类");
-    connect(batchBtn, &QPushButton::clicked, this, &DLExample::BatchClassify);
-    imageLayout->addWidget(batchBtn);
+    batchBtn_ = new QPushButton("批量分类");
+    connect(batchBtn_, &QPushButton::clicked, this, &DLExample::BatchProcess);
+    imageLayout->addWidget(batchBtn_);
     
     imageLayout->addStretch();
     mainLayout->addLayout(imageLayout);
@@ -133,9 +171,8 @@ void DLExample::ConnectSignals()
 {
     // 连接DLProcessor信号
     connect(dlProcessor_, &DLProcessor::classificationComplete, this, &DLExample::OnClassificationComplete);
-    
+    connect(dlProcessor_, &DLProcessor::processingComplete, this, &DLExample::OnProcessingComplete);
     connect(dlProcessor_, &DLProcessor::batchProcessingComplete, this, &DLExample::OnBatchProcessingComplete);
-    
     connect(dlProcessor_, &DLProcessor::errorOccurred, this, &DLExample::OnDLError);
 }
 
@@ -259,6 +296,12 @@ void DLExample::LoadModel()
         }
         
         resultLabel_->setText("模型已加载，可以开始分类");
+        
+        // 重置量化状态
+        quantizationStatusLabel_->setText("未量化");
+        quantizationStatusLabel_->setStyleSheet("QLabel { color: blue; font-style: italic; }");
+        quantizationType_->setCurrentIndex(0);
+        calibrationImages_.clear();
     } 
     else 
     {
@@ -504,4 +547,288 @@ void DLExample::OnDLError(const QString& error)
     
     // 隐藏进度条
     progressBar_->setVisible(false);
+}
+
+void DLExample::SelectCalibrationImages()
+{
+    // 变量定义
+    QStringList fileNames;    // 选择的文件列表
+    
+    // 打开文件对话框选择多个图像文件
+    fileNames = QFileDialog::getOpenFileNames(this, "选择校准图像", "", "图像文件 (*.jpg *.jpeg *.png *.bmp *.tiff)");
+    
+    if (!fileNames.isEmpty())
+    {
+        calibrationImages_ = fileNames;
+        statusLabel_->setText(QString("已选择 %1 张校准图像").arg(calibrationImages_.size()));
+        statusLabel_->setStyleSheet("QLabel { color: blue; }");
+    }
+}
+
+void DLExample::QuantizeModel()
+{
+    // 变量定义
+    QString quantType;       // 量化类型
+    vector<Mat> calibImages; // 校准图像列表
+    bool success;            // 量化是否成功
+    
+    // 检查模型是否已加载
+    if (!isModelLoaded_)
+    {
+        QMessageBox::warning(this, "警告", "请先加载模型！");
+        return;
+    }
+    
+    // 获取量化类型
+    quantType = quantizationType_->currentText();
+    if (quantType == "None")
+    {
+        QMessageBox::warning(this, "警告", "请选择有效的量化类型！");
+        return;
+    }
+    
+    // 检查是否需要校准图像
+    if ((quantType == "INT8" || quantType == "UINT8") && calibrationImages_.isEmpty())
+    {
+        QMessageBox::warning(this, "警告", "INT8/UINT8量化需要校准图像，请先选择校准图像！");
+        return;
+    }
+    
+    // 加载校准图像
+    if (quantType == "INT8" || quantType == "UINT8")
+    {
+        statusLabel_->setText("正在准备校准图像...");
+        statusLabel_->setStyleSheet("QLabel { color: orange; }");
+        
+        for (const QString& fileName : calibrationImages_)
+        {
+            Mat image = imread(fileName.toStdString());
+            if (!image.empty())
+            {
+                calibImages.push_back(image);
+            }
+        }
+        
+        if (calibImages.empty())
+        {
+            QMessageBox::warning(this, "错误", "无法加载有效的校准图像！");
+            return;
+        }
+    }
+    
+    // 开始量化
+    statusLabel_->setText("正在量化模型...");
+    statusLabel_->setStyleSheet("QLabel { color: orange; }");
+    
+    // 执行量化
+    success = dlProcessor_->QuantizeModel(quantType.toStdString(), calibImages);
+    
+    if (success)
+    {
+        // 更新状态
+        statusLabel_->setText("模型量化成功");
+        statusLabel_->setStyleSheet("QLabel { color: green; }");
+        
+        quantizationStatusLabel_->setText(QString("已量化 (" + quantType + ")"));
+        quantizationStatusLabel_->setStyleSheet("QLabel { color: green; font-style: italic; font-weight: bold; }");
+        
+        // 显示模型信息
+        resultLabel_->setText(QString::fromStdString(dlProcessor_->GetModelInfo()));
+    }
+}
+
+// 任务类型改变处理槽函数
+void DLExample::OnTaskTypeChanged(int index)
+{
+    // 根据任务类型更新按钮文本
+    switch(index)
+    {
+    case 0: // 图像分类
+        classifyBtn_->setText("开始分类");
+        batchBtn_->setText("批量分类");
+        break;
+    case 1: // 目标检测
+        classifyBtn_->setText("开始检测");
+        batchBtn_->setText("批量检测");
+        break;
+    case 2: // 实例分割
+        classifyBtn_->setText("开始分割");
+        batchBtn_->setText("批量分割");
+        break;
+    default:
+        break;
+    }
+}
+
+// 通用图像处理方法
+void DLExample::ProcessImage()
+{
+    // 变量定义
+    Mat image;                      // OpenCV图像矩阵
+    ClassificationResult result;    // 分类结果
+    Mat processedImage;             // 处理后的图像
+
+    // 检查模型是否已加载
+    if (!isModelLoaded_) 
+    {
+        QMessageBox::warning(this, "警告", "请先加载模型！");
+        return;
+    }
+
+    // 检查是否已选择图像
+    if (currentImagePath_.isEmpty()) 
+    {
+        QMessageBox::warning(this, "警告", "请先选择图像！");
+        return;
+    }
+
+    // 加载图像
+    image = imread(currentImagePath_.toStdString());
+    if (image.empty()) 
+    {
+        QMessageBox::warning(this, "错误", "无法加载图像文件！");
+        return;
+    }
+
+    statusLabel_->setText("正在处理...");
+    statusLabel_->setStyleSheet("QLabel { color: orange; }");
+
+    // 获取当前任务类型
+    int taskType = taskTypeComboBox_->currentIndex();
+    
+    // 根据任务类型执行不同操作
+    if (taskType == 0) // 图像分类
+    {
+        if (dlProcessor_->ClassifyImage(image, result))
+        {
+            // 结果会通过信号槽处理
+        }
+        else 
+        {
+            statusLabel_->setText("处理失败");
+            statusLabel_->setStyleSheet("QLabel { color: red; }");
+        }
+    }
+    else if (taskType == 1 || taskType == 2) // 目标检测或实例分割
+    {
+        if (dlProcessor_->ProcessYoloFrame(image, processedImage))
+        {
+            // 结果会通过信号槽处理
+        }
+        else 
+        {
+            statusLabel_->setText("处理失败");
+            statusLabel_->setStyleSheet("QLabel { color: red; }");
+        }
+    }
+}
+
+// 通用批量处理方法
+void DLExample::BatchProcess()
+{
+    // 变量定义
+    QStringList fileNames;                // 选择的文件列表
+    vector<Mat> images;                   // OpenCV图像矩阵列表
+    QStringList validFiles;               // 有效的文件名列表
+    vector<ClassificationResult> results; // 批量分类结果列表
+
+    // 检查模型是否已加载
+    if (!isModelLoaded_) 
+    {
+        QMessageBox::warning(this, "警告", "请先加载模型！");
+        return;
+    }
+
+    // 打开文件对话框选择多个图像文件
+    fileNames = QFileDialog::getOpenFileNames(this, "选择要处理的图像", "", "图像文件 (*.jpg *.jpeg *.png *.bmp *.tiff)");
+
+    if (fileNames.isEmpty()) 
+    {
+        return;
+    }
+
+    // 获取当前任务类型
+    int taskType = taskTypeComboBox_->currentIndex();
+    
+    // 加载所有图像
+    for (const QString& fileName : fileNames) 
+    {
+        Mat image = imread(fileName.toStdString());
+        if (!image.empty()) 
+        {
+            images.push_back(image);
+            validFiles.append(fileName);
+        }
+    }
+
+    // 检查是否有有效的图像
+    if (images.empty()) 
+    {
+        QMessageBox::warning(this, "错误", "没有有效的图像文件！");
+        return;
+    }
+
+    // 显示进度条
+    progressBar_->setVisible(true);
+    progressBar_->setRange(0, images.size());
+    progressBar_->setValue(0);
+
+    statusLabel_->setText(QString("正在批量处理 %1 张图像...").arg(images.size()));
+    statusLabel_->setStyleSheet("QLabel { color: orange; }");
+
+    // 保存文件名用于结果显示
+    batchFileNames_ = validFiles;
+
+    // 根据任务类型执行不同的批量处理
+    if (taskType == 0) // 图像分类
+    {
+        dlProcessor_->ClassifyBatch(images, results);
+    }
+    else // 目标检测或实例分割
+    {
+        // 这里可以扩展支持YOLO模型的批量处理
+        QMessageBox::information(this, "信息", "YOLO批量处理功能即将推出");
+        progressBar_->setVisible(false);
+    }
+}
+
+// YOLO处理结果显示槽函数
+void DLExample::OnProcessingComplete(const cv::Mat& resultImage)
+{
+    // 变量定义
+    Mat rgbImage; // RGB格式图像
+    QImage qImage; // Qt图像对象
+    QPixmap pixmap; // Qt像素图对象
+    
+    try
+    {
+        // 将OpenCV图像转换为Qt格式
+        cvtColor(resultImage, rgbImage, COLOR_BGR2RGB);
+        qImage = QImage(rgbImage.data, rgbImage.cols, rgbImage.rows, rgbImage.step, QImage::Format_RGB888);
+        
+        // 调整图像大小以适应显示区域
+        pixmap = QPixmap::fromImage(qImage).scaled(imageLabel_->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        
+        // 显示处理后的图像
+        imageLabel_->setPixmap(pixmap);
+        
+        // 更新状态
+        statusLabel_->setText("处理完成");
+        statusLabel_->setStyleSheet("QLabel { color: green; }");
+        
+        // 显示简单的结果统计
+        resultLabel_->setText("YOLO处理完成 - 已在图像上绘制检测框和分割掩码");
+    }
+    catch (const exception& e)
+    {
+        statusLabel_->setText("结果显示失败");
+        statusLabel_->setStyleSheet("QLabel { color: red; }");
+        qDebug() << "Error displaying result image:" << QString::fromStdString(e.what());
+    }
+    else
+    {
+        // 量化失败由OnDLError处理
+        quantizationStatusLabel_->setText("量化失败");
+        quantizationStatusLabel_->setStyleSheet("QLabel { color: red; font-style: italic; }");
+    }
 }

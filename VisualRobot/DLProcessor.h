@@ -22,6 +22,18 @@ struct ClassificationResult
     ClassificationResult() : classId(-1), confidence(0.0f), className("unknown"), isValid(false) {}
 };
 
+// 检测结果结构体（支持YOLO）
+struct DetectionResult
+{
+    int classId;      // 类别ID
+    float confidence; // 置信度
+    string className; // 类别名称
+    Rect boundingBox; // 边界框
+    Mat mask;         // 分割掩码（用于实例分割）
+    
+    DetectionResult() : classId(-1), confidence(0.0f), className("unknown"), boundingBox() {}
+};
+
 class DLProcessor : public QObject
 {
     Q_OBJECT
@@ -49,6 +61,10 @@ public:
     // 处理单张图像 (兼容原接口) 
     bool ProcessFrame(const Mat& frame, Mat& output);
     
+    // YOLO目标检测与实例分割
+    bool DetectObjects(const Mat& frame, vector<DetectionResult>& results);
+    bool ProcessYoloFrame(const Mat& frame, Mat& output);
+    
     // 获取模型信息
     Size GetInputSize() const { return inputSize_; }
     vector<string> GetClassLabels() const { return classLabels_; }
@@ -67,6 +83,11 @@ public:
     // GPU支持
     void EnableGPU(bool enable);
     
+    // 模型量化优化
+    bool QuantizeModel(const string& quantizationType = "INT8", const vector<Mat>& calibrationImages = {});
+    bool IsModelQuantized() const { return isQuantized_; }
+    string GetQuantizationType() const { return quantizationType_; }
+    
     // 重置参数
     void ResetToDefaults();
     
@@ -83,11 +104,29 @@ public:
     bool WarmUp();
 
 signals:
-    // 处理结果信号
-    void processingComplete(const Mat& result);
-    void classificationComplete(const ClassificationResult& result);
-    void batchProcessingComplete(const vector<ClassificationResult>& results);
-    void errorOccurred(const QString& error);
+      /**
+       * @brief 分类完成信号
+       * @param result 分类结果
+       */
+      void classificationComplete(const ClassificationResult& result);
+      
+      /**
+       * @brief 图像处理完成信号（用于检测和分割）
+       * @param resultImage 处理后的图像
+       */
+      void processingComplete(const cv::Mat& resultImage);
+      
+      /**
+       * @brief 批量处理完成信号
+       * @param results 批量处理结果列表
+       */
+      void batchProcessingComplete(const vector<ClassificationResult>& results);
+      
+      /**
+       * @brief 错误发生信号
+       * @param error 错误信息
+       */
+      void errorOccurred(const QString& error);
 
 private:
     // OpenCV DNN模块相关
@@ -95,6 +134,8 @@ private:
     float confThreshold_;
     float nmsThreshold_;
     bool isModelLoaded_;
+    bool isQuantized_;          // 模型是否已量化
+    string quantizationType_;   // 量化类型 (INT8, UINT8, FP16等)
     
     // 二分类相关参数
     Size inputSize_;              // 输入图像尺寸
@@ -112,6 +153,12 @@ private:
     
     // 后处理方法 (兼容原接口) 
     void PostProcess(Mat& frame, const vector<Mat>& outs);
+    
+    // YOLO后处理方法
+    vector<DetectionResult> PostProcessYolo(const Mat& frame, const vector<Mat>& outs, float confThreshold, float nmsThreshold);
+    
+    // 绘制检测结果
+    void DrawDetectionResults(Mat& frame, const vector<DetectionResult>& results);
     
     // 辅助方法
     void InitDefaultParams();
