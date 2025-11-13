@@ -14,6 +14,7 @@ QT_BEGIN_NAMESPACE
 class QPushButton;
 class QVBoxLayout;
 class QHBoxLayout;
+class QComboBox;
 QT_END_NAMESPACE
 
 /**
@@ -83,10 +84,26 @@ private slots:
     void BatchClassify();
     
     /**
+     * @brief 处理单张图像
+     */
+    void ProcessImage();
+    
+    /**
+     * @brief 批量处理多张图像
+     */
+    void BatchProcess();
+    
+    /**
      * @brief 处理单张图像分类完成信号
      * @param result 分类结果
      */
     void OnClassificationComplete(const ClassificationResult& result);
+    
+    /**
+     * @brief 处理图像处理完成信号
+     * @param resultImage 处理后的图像
+     */
+    void OnProcessingComplete(const cv::Mat& resultImage);
     
     /**
      * @brief 处理批量分类完成信号
@@ -99,6 +116,22 @@ private slots:
      * @param error 错误信息
      */
     void OnDLError(const QString& error);
+    
+    /**
+     * @brief 选择校准图像用于量化
+     */
+    void SelectCalibrationImages();
+    
+    /**
+     * @brief 执行模型量化
+     */
+    void QuantizeModel();
+    
+    /**
+     * @brief 任务类型变更时的处理
+     * @param index 选择的任务类型索引
+     */
+    void OnTaskTypeChanged(int index);
 
 private:
     /**
@@ -125,10 +158,20 @@ private:
     QLabel* resultLabel_;               ///< 结果显示标签
     QLabel* imageLabel_;                ///< 图像显示标签
     QLabel* statusLabel_;               ///< 状态显示标签
+    QComboBox* taskTypeComboBox_;       ///< 任务类型选择框
+    QPushButton* classifyBtn_;          ///< 处理按钮
+    QPushButton* batchBtn_;             ///< 批量处理按钮
     
     // 数据
     QString currentImagePath_;          ///< 当前选择的图像路径
     QStringList batchFileNames_;        ///< 批量处理的文件名列表
+    
+    // 量化相关组件
+    QComboBox* quantizationType_;       ///< 量化类型选择框
+    QPushButton* calibrationImagesBtn_; ///< 校准图像选择按钮
+    QPushButton* quantizeBtn_;          ///< 量化按钮
+    QLabel* quantizationStatusLabel_;   ///< 量化状态显示标签
+    QStringList calibrationImages_;     ///< 校准图像路径列表
 };
 
 #endif // DLEXAMPLE_H
