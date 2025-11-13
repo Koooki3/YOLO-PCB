@@ -26,11 +26,11 @@ DLProcessor::~DLProcessor()
 
 void DLProcessor::InitDefaultParams()
 {
-    // 初始化默认参数
-    inputSize_ = Size(224, 224);                // 常用的分类模型输入尺寸
-    meanValues_ = Scalar(104.0, 177.0, 123.0);  // ImageNet均值
-    scaleFactor_ = 1.0;
-    swapRB_ = true;                             // OpenCV默认BGR，很多模型需要RGB
+    // 初始化默认参数 - 调整为适合YOLO模型的参数
+    inputSize_ = Size(640, 640);                // YOLOv8默认输入尺寸
+    meanValues_ = Scalar(0.0, 0.0, 0.0);        // YOLO通常使用0均值
+    scaleFactor_ = 1.0 / 255.0;                 // YOLO通常使用1/255归一化
+    swapRB_ = true;                             // OpenCV默认BGR，YOLO需要RGB
 
     // 默认二分类标签
     classLabels_ = {"Class_0", "Class_1"};
@@ -43,6 +43,16 @@ bool DLProcessor::InitModel(const string& modelPath, const string& configPath)
 
     try 
     {
+        // 检测是否为ONNX模型
+        bool isOnnxModel = false;
+        string lowerModelPath = modelPath;
+        transform(lowerModelPath.begin(), lowerModelPath.end(), lowerModelPath.begin(), ::tolower);
+        if (lowerModelPath.find(".onnx") != string::npos)
+        {
+            isOnnxModel = true;
+            qDebug() << "Detected ONNX model format";
+        }
+
         // 加载深度学习模型
         if (configPath.empty()) 
         {
@@ -67,6 +77,14 @@ bool DLProcessor::InitModel(const string& modelPath, const string& configPath)
         // 可选: 如果有GPU支持
         // net_.setPreferableBackend(dnn::DNN_BACKEND_CUDA);
         // net_.setPreferableTarget(dnn::DNN_TARGET_CUDA);
+
+        // 如果是ONNX模型，可能需要额外的设置
+        if (isOnnxModel)
+        {
+            qDebug() << "Configuring for ONNX model compatibility";
+            // 对于YOLO ONNX模型，确保输入尺寸正确设置
+            // 这里可以根据需要添加更多针对ONNX模型的特殊处理
+        }
 
         isModelLoaded_ = true;
         modelLoaded = true;
@@ -369,58 +387,123 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
     // YOLO模型输出解析
     for (size_t i = 0; i < outs.size(); ++i)
     {
-        // 注意：不同版本的YOLO输出格式可能不同
-        // 这里实现的是YOLOv8/YOLOv5的通用处理方式
-        float* data = (float*)outs[i].data;
-        
-        // 输出维度检查 - 检测+分割的情况
-        bool hasMask = outs[i].dims > 2;
-        
-        // 对于每个检测结果
-        // 假设输出格式: [x, y, w, h, confidence, class0, class1, ...] 或包含掩码信息
-        for (int j = 0; j < outs[i].rows; ++j, data += outs[i].cols)
+        qDebug() << "Processing output layer" << i;
+        qDebug() << "Output shape: dimensions=" << outs[i].dims;
+        for (int d = 0; d < outs[i].dims; ++d)
         {
-            // 提取边界框信息
-            float x = data[0];
-            float y = data[1];
-            float w = data[2];
-            float h = data[3];
+            qDebug() << "  dim[" << d << "]=" << outs[i].size[d];
+        }
+
+        // 处理YOLOv8 ONNX输出格式
+        // YOLOv8导出为ONNX时通常会有一个输出，形状为[N, num_boxes, num_attributes]
+        if (outs[i].dims == 3)
+        {
+            // 这是YOLOv8的典型输出格式
+            int batchSize = outs[i].size[0];
+            int numDetections = outs[i].size[1];
+            int detectionSize = outs[i].size[2];
             
-            // 计算边界框坐标
-            int left = static_cast<int>((x - w / 2) * frame.cols);
-            int top = static_cast<int>((y - h / 2) * frame.rows);
-            int width = static_cast<int>(w * frame.cols);
-            int height = static_cast<int>(h * frame.rows);
+            qDebug() << "YOLOv8 ONNX format detected: batch=" << batchSize 
+                     << " detections=" << numDetections 
+                     << " detection_size=" << detectionSize;
             
-            // 确保边界框在图像范围内
-            left = max(0, left);
-            top = max(0, top);
-            width = min(frame.cols - left, width);
-            height = min(frame.rows - top, height);
-            
-            // 获取置信度最高的类别
-            Mat scores = outs[i].row(j).colRange(5, outs[i].cols);
-            Point classIdPoint;
-            double confidence;
-            minMaxLoc(scores, 0, &confidence, 0, &classIdPoint);
-            
-            // 应用置信度阈值
-            if (confidence > confThreshold)
+            // 假设输出格式: [batch, num_detections, (x, y, w, h, conf, class0, class1, ...)]
+            for (int b = 0; b < batchSize; ++b)
             {
-                classIds.push_back(classIdPoint.x);
-                confidences.push_back(static_cast<float>(confidence));
-                boxes.push_back(Rect(left, top, width, height));
-                
-                // 如果是实例分割模型，提取掩码
-                if (hasMask)
+                for (int d = 0; d < numDetections; ++d)
                 {
-                    // 提取掩码数据
-                    int maskChannels = outs[i].size[1] - 5 - classLabels_.size();
-                    if (maskChannels > 0)
+                    // 获取当前检测的起始指针
+                    float* detectionPtr = (float*)outs[i].ptr<float>(b, d);
+                    
+                    // 提取边界框信息
+                    float x = detectionPtr[0];  // 中心点x坐标
+                    float y = detectionPtr[1];  // 中心点y坐标
+                    float w = detectionPtr[2];  // 宽度
+                    float h = detectionPtr[3];  // 高度
+                    float confidence = detectionPtr[4];  // 置信度
+                    
+                    // 应用置信度阈值
+                    if (confidence > confThreshold)
                     {
-                        Mat maskData = outs[i].row(j).colRange(5 + classLabels_.size(), 5 + classLabels_.size() + maskChannels);
-                        masks.push_back(maskData.clone());
+                        // 找到最高置信度的类别
+                        int classId = -1;
+                        float maxClassConf = 0.0f;
+                        
+                        // 从第5个元素开始是类别置信度
+                        for (int c = 0; c < detectionSize - 5; ++c)
+                        {
+                            if (detectionPtr[5 + c] > maxClassConf)
+                            {
+                                maxClassConf = detectionPtr[5 + c];
+                                classId = c;
+                            }
+                        }
+                        
+                        // 计算边界框坐标（YOLOv8输出是归一化的坐标）
+                        int left = static_cast<int>((x - w / 2) * frame.cols);
+                        int top = static_cast<int>((y - h / 2) * frame.rows);
+                        int width = static_cast<int>(w * frame.cols);
+                        int height = static_cast<int>(h * frame.rows);
+                        
+                        // 确保边界框在图像范围内
+                        left = max(0, left);
+                        top = max(0, top);
+                        width = min(frame.cols - left, width);
+                        height = min(frame.rows - top, height);
+                        
+                        classIds.push_back(classId);
+                        confidences.push_back(confidence * maxClassConf);  // 乘以类别置信度
+                        boxes.push_back(Rect(left, top, width, height));
                     }
+                }
+            }
+        }
+        else if (outs[i].dims == 2)
+        {
+            // 传统的YOLO输出格式
+            float* data = (float*)outs[i].data;
+            
+            // 对于每个检测结果
+            for (int j = 0; j < outs[i].rows; ++j, data += outs[i].cols)
+            {
+                // 提取边界框信息
+                float x = data[0];
+                float y = data[1];
+                float w = data[2];
+                float h = data[3];
+                float confidence = data[4];
+                
+                // 应用置信度阈值
+                if (confidence > confThreshold)
+                {
+                    // 获取置信度最高的类别
+                    int classId = -1;
+                    float maxClassConf = 0.0f;
+                    
+                    for (int c = 0; c < outs[i].cols - 5; ++c)
+                    {
+                        if (data[5 + c] > maxClassConf)
+                        {
+                            maxClassConf = data[5 + c];
+                            classId = c;
+                        }
+                    }
+                    
+                    // 计算边界框坐标
+                    int left = static_cast<int>((x - w / 2) * frame.cols);
+                    int top = static_cast<int>((y - h / 2) * frame.rows);
+                    int width = static_cast<int>(w * frame.cols);
+                    int height = static_cast<int>(h * frame.rows);
+                    
+                    // 确保边界框在图像范围内
+                    left = max(0, left);
+                    top = max(0, top);
+                    width = min(frame.cols - left, width);
+                    height = min(frame.rows - top, height);
+                    
+                    classIds.push_back(classId);
+                    confidences.push_back(confidence * maxClassConf);
+                    boxes.push_back(Rect(left, top, width, height));
                 }
             }
         }
@@ -428,43 +511,34 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
     
     // 应用非极大值抑制
     vector<int> indices;
-    dnn::NMSBoxes(boxes, confidences, confThreshold, nmsThreshold, indices);
-    
-    // 构建最终结果
-    for (size_t i = 0; i < indices.size(); ++i)
+    if (!boxes.empty())
     {
-        int idx = indices[i];
-        DetectionResult result;
-        result.classId = classIds[idx];
-        result.confidence = confidences[idx];
-        result.boundingBox = boxes[idx];
+        dnn::NMSBoxes(boxes, confidences, confThreshold, nmsThreshold, indices);
         
-        // 设置类别名称
-        if (result.classId >= 0 && result.classId < static_cast<int>(classLabels_.size()))
+        // 构建最终结果
+        for (size_t i = 0; i < indices.size(); ++i)
         {
-            result.className = classLabels_[result.classId];
-        }
-        else
-        {
-            result.className = "Class_" + to_string(result.classId);
-        }
-        
-        // 如果有掩码数据，处理掩码
-        if (!masks.empty() && idx < static_cast<int>(masks.size()))
-        {
-            // 将掩码调整到边界框大小
-            Mat mask = masks[idx];
-            resize(mask, mask, Size(result.boundingBox.width, result.boundingBox.height));
+            int idx = indices[i];
+            DetectionResult result;
+            result.classId = classIds[idx];
+            result.confidence = confidences[idx];
+            result.boundingBox = boxes[idx];
             
-            // 应用阈值创建二值掩码
-            Mat binaryMask;
-            threshold(mask, binaryMask, 0.5, 255, THRESH_BINARY);
-            binaryMask.convertTo(result.mask, CV_8U);
+            // 设置类别名称
+            if (result.classId >= 0 && result.classId < static_cast<int>(classLabels_.size()))
+            {
+                result.className = classLabels_[result.classId];
+            }
+            else
+            {
+                result.className = "Class_" + to_string(result.classId);
+            }
+            
+            results.push_back(result);
         }
-        
-        results.push_back(result);
     }
     
+    qDebug() << "Final detection results count:" << results.size();
     return results;
 }
 
