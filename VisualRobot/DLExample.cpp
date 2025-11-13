@@ -79,7 +79,7 @@ void DLExample::SetupUI()
     paramLayout->addWidget(new QLabel("任务类型:"));
     taskTypeComboBox_ = new QComboBox();
     taskTypeComboBox_->addItems({"图像分类", "目标检测", "实例分割"});
-    connect(taskTypeComboBox_, &QComboBox::currentIndexChanged, this, &DLExample::OnTaskTypeChanged);
+    connect(taskTypeComboBox_, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, &DLExample::OnTaskTypeChanged);
     paramLayout->addWidget(taskTypeComboBox_);
     
     paramLayout->addWidget(new QLabel("置信度阈值:"));
@@ -824,11 +824,5 @@ void DLExample::OnProcessingComplete(const cv::Mat& resultImage)
         statusLabel_->setText("结果显示失败");
         statusLabel_->setStyleSheet("QLabel { color: red; }");
         qDebug() << "Error displaying result image:" << QString::fromStdString(e.what());
-    }
-    else
-    {
-        // 量化失败由OnDLError处理
-        quantizationStatusLabel_->setText("量化失败");
-        quantizationStatusLabel_->setStyleSheet("QLabel { color: red; font-style: italic; }");
     }
 }
