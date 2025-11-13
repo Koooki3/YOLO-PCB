@@ -816,16 +816,6 @@ void DLProcessor::ClearModel()
     qDebug() << "Model cleared";
 }
 
-bool DLProcessor::IsModelQuantized() const
-{
-    return isQuantized_;
-}
-
-string DLProcessor::GetQuantizationType() const
-{
-    return quantizationType_;
-}
-
 bool DLProcessor::WarmUp()
 {
     // 变量定义
@@ -857,148 +847,166 @@ bool DLProcessor::WarmUp()
         }
 
         return warmUpSuccess;
+    }
+    catch (const Exception& e)
+    {
+        qDebug() << "OpenCV exception during warm-up: " << e.what();
+        emit errorOccurred(QString("Warm-up failed: %1").arg(e.what()));
+        return false;
+    }
+    catch (const std::exception& e)
+    {
+        qDebug() << "Standard exception during warm-up: " << e.what();
+        emit errorOccurred(QString("Warm-up failed: %1").arg(e.what()));
+        return false;
+    }
+    catch(...)
+    {
+        qDebug() << "Unknown exception during warm-up";
+        emit errorOccurred("Warm-up failed: Unknown error");
+        return false;
+    }
 }
 
 bool DLProcessor::QuantizeModel(const string& quantizationType, const vector<Mat>& calibrationImages)
 {
-    // 检查模型是否已加载
-    if (!isModelLoaded_)
-    {
-        qDebug() << "Cannot quantize: model not loaded";
-        emit errorOccurred("Cannot quantize: model not loaded");
-        return false;
-    }
+//    // 检查模型是否已加载
+//    if (!isModelLoaded_)
+//    {
+//        qDebug() << "Cannot quantize: model not loaded";
+//        emit errorOccurred("Cannot quantize: model not loaded");
+//        return false;
+//    }
 
-    try
-    {
-        qDebug() << "Starting model quantization with type:" << QString::fromStdString(quantizationType);
-        
-        // 如果模型已经量化，则先清除
-        if (isQuantized_)
-        {
-            qDebug() << "Model is already quantized, will re-quantize";
-        }
+//    try
+//    {
+//        qDebug() << "Starting model quantization with type:" << QString::fromStdString(quantizationType);
 
-        // 量化配置
-        cv::dnn::Net quantizedNet;
-        
-        // 根据量化类型选择不同的量化策略
-        if (quantizationType == "INT8")
-        {
-            // INT8量化需要校准图像
-            if (calibrationImages.empty())
-            {
-                qDebug() << "INT8 quantization requires calibration images";
-                emit errorOccurred("INT8 quantization requires calibration images");
-                return false;
-            }
-            
-            // 准备校准数据
-            std::vector<cv::Mat> calibrationBlobs;
-            for (const auto& img : calibrationImages)
-            {
-                if (!img.empty())
-                {
-                    cv::Mat blob = PreProcess(img);
-                    calibrationBlobs.push_back(blob);
-                }
-            }
-            
-            // 检查校准数据是否有效
-            if (calibrationBlobs.empty())
-            {
-                qDebug() << "No valid calibration images provided";
-                emit errorOccurred("No valid calibration images provided");
-                return false;
-            }
-            
-            qDebug() << "Using" << calibrationBlobs.size() << "calibration images for INT8 quantization";
-            
-            // OpenCV DNN的INT8量化方法 (使用dnn::writeTextGraph和dnn::readNetFromONNX/Protobuf等)
-            // 注意：这里使用简化的量化实现，实际项目中可能需要更复杂的校准过程
-            
-            // 保存原始模型的网络结构到临时文件
-            string tempPrototxt = "temp_quantization_model.prototxt";
-            if (cv::dnn::writeTextGraph(net_, tempPrototxt))
-            {
-                qDebug() << "Successfully wrote network graph for quantization";
-                
-                // 这里是简化的量化处理，实际的INT8量化通常需要：
-                // 1. 运行校准数据获取激活值的范围
-                // 2. 计算量化参数
-                // 3. 应用量化到模型权重和激活值
-                
-                // 为了演示，我们直接使用原始网络但标记为已量化
-                // 实际应用中应该调用相应的量化API
-                quantizedNet = net_.clone();
-                
-                // 删除临时文件
-                std::remove(tempPrototxt.c_str());
-            }
-        }
-        else if (quantizationType == "FP16")
-        {
-            // FP16量化相对简单，大多数后端都支持
-            qDebug() << "Applying FP16 precision optimization";
-            quantizedNet = net_.clone();
-            
-            // 设置FP16推理模式（如果后端支持）
-            #ifdef OPENCV_DNN_CUDA
-            quantizedNet.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
-            quantizedNet.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA_FP16);
-            #endif
-        }
-        else if (quantizationType == "UINT8")
-        {
-            // UINT8量化类似于INT8，但使用无符号整数
-            qDebug() << "Applying UINT8 quantization";
-            if (calibrationImages.empty())
-            {
-                qDebug() << "UINT8 quantization requires calibration images";
-                emit errorOccurred("UINT8 quantization requires calibration images");
-                return false;
-            }
-            
-            // 类似INT8的实现，但使用无符号整数范围
-            quantizedNet = net_.clone();
-        }
-        else
-        {
-            qDebug() << "Unsupported quantization type:" << QString::fromStdString(quantizationType);
-            emit errorOccurred("Unsupported quantization type");
-            return false;
-        }
-        
-        // 验证量化后的模型是否有效
-        if (quantizedNet.empty())
-        {
-            qDebug() << "Failed to create quantized network";
-            emit errorOccurred("Failed to create quantized network");
-            return false;
-        }
-        
-        // 替换原始网络
-        net_ = quantizedNet;
-        isQuantized_ = true;
-        quantizationType_ = quantizationType;
-        
-        qDebug() << "Model quantization successful. Type:" << QString::fromStdString(quantizationType);
-        
-        // 预热量化后的模型
-        WarmUp();
-        
-        return true;
-    }
-    catch (const Exception& e)
-    {
-        qDebug() << "Error during model quantization:" << QString::fromStdString(e.msg);
-        emit errorOccurred(QString::fromStdString(e.msg));
-        return false;
-    }
-} 
-    catch (const Exception& e) 
-    {
-        qDebug() << "Error during warm-up:" << QString::fromStdString(e.msg);
-        return false;
-    }
+//        // 如果模型已经量化，则先清除
+//        if (isQuantized_)
+//        {
+//            qDebug() << "Model is already quantized, will re-quantize";
+//        }
+
+//        // 量化配置
+//        cv::dnn::Net quantizedNet;
+
+//        // 根据量化类型选择不同的量化策略
+//        if (quantizationType == "INT8")
+//        {
+//            // INT8量化需要校准图像
+//            if (calibrationImages.empty())
+//            {
+//                qDebug() << "INT8 quantization requires calibration images";
+//                emit errorOccurred("INT8 quantization requires calibration images");
+//                return false;
+//            }
+
+//            // 准备校准数据
+//            std::vector<cv::Mat> calibrationBlobs;
+//            for (const auto& img : calibrationImages)
+//            {
+//                if (!img.empty())
+//                {
+//                    cv::Mat blob = PreProcess(img);
+//                    calibrationBlobs.push_back(blob);
+//                }
+//            }
+
+//            // 检查校准数据是否有效
+//            if (calibrationBlobs.empty())
+//            {
+//                qDebug() << "No valid calibration images provided";
+//                emit errorOccurred("No valid calibration images provided");
+//                return false;
+//            }
+
+//            qDebug() << "Using" << calibrationBlobs.size() << "calibration images for INT8 quantization";
+
+//            // OpenCV DNN的INT8量化方法 (使用dnn::writeTextGraph和dnn::readNetFromONNX/Protobuf等)
+//            // 注意：这里使用简化的量化实现，实际项目中可能需要更复杂的校准过程
+
+//            // 保存原始模型的网络结构到临时文件
+//            string tempPrototxt = "temp_quantization_model.prototxt";
+//            if (cv::dnn::writeTextGraph(net_, tempPrototxt))
+//            {
+//                qDebug() << "Successfully wrote network graph for quantization";
+
+//                // 这里是简化的量化处理，实际的INT8量化通常需要：
+//                // 1. 运行校准数据获取激活值的范围
+//                // 2. 计算量化参数
+//                // 3. 应用量化到模型权重和激活值
+
+//                // 为了演示，我们直接使用原始网络但标记为已量化
+//                // 实际应用中应该调用相应的量化API
+//                quantizedNet = net_.clone();
+
+//                // 删除临时文件
+//                std::remove(tempPrototxt.c_str());
+//            }
+//        }
+//        else if (quantizationType == "FP16")
+//        {
+//            // FP16量化相对简单，大多数后端都支持
+//            qDebug() << "Applying FP16 precision optimization";
+//            quantizedNet = net_.clone();
+
+//            // 设置FP16推理模式（如果后端支持）
+//            #ifdef OPENCV_DNN_CUDA
+//            quantizedNet.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
+//            quantizedNet.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA_FP16);
+//            #endif
+//        }
+//        else if (quantizationType == "UINT8")
+//        {
+//            // UINT8量化类似于INT8，但使用无符号整数
+//            qDebug() << "Applying UINT8 quantization";
+//            if (calibrationImages.empty())
+//            {
+//                qDebug() << "UINT8 quantization requires calibration images";
+//                emit errorOccurred("UINT8 quantization requires calibration images");
+//                return false;
+//            }
+
+//            // 类似INT8的实现，但使用无符号整数范围
+//            quantizedNet = net_.clone();
+//        }
+//        else
+//        {
+//            qDebug() << "Unsupported quantization type:" << QString::fromStdString(quantizationType);
+//            emit errorOccurred("Unsupported quantization type");
+//            return false;
+//        }
+
+//        // 验证量化后的模型是否有效
+//        if (quantizedNet.empty())
+//        {
+//            qDebug() << "Failed to create quantized network";
+//            emit errorOccurred("Failed to create quantized network");
+//            return false;
+//        }
+
+//        // 替换原始网络
+//        net_ = quantizedNet;
+//        isQuantized_ = true;
+//        quantizationType_ = quantizationType;
+
+//        qDebug() << "Model quantization successful. Type:" << QString::fromStdString(quantizationType);
+
+//        // 预热量化后的模型
+//        WarmUp();
+
+//        return true;
+//    }
+//    catch (const Exception& e)
+//    {
+//        qDebug() << "Error during model quantization:" << QString::fromStdString(e.msg);
+//        emit errorOccurred(QString::fromStdString(e.msg));
+//        return false;
+//    }
+//    catch (const Exception& e)
+//    {
+//        qDebug() << "Error during warm-up:" << QString::fromStdString(e.msg);
+//        return false;
+//    }
 }
