@@ -4,6 +4,13 @@
 #include <QTextStream>
 #include <algorithm>
 #include <fstream>
+#ifdef _WIN32
+    #include <direct.h>
+    #include <windows.h>
+#else
+    #include <sys/stat.h>
+    #include <sys/types.h>
+#endif
 
 using namespace cv;
 using namespace std;
@@ -369,7 +376,39 @@ bool DLProcessor::ProcessYoloFrame(const Mat& frame, Mat& output)
 
     // 复制原始图像并绘制结果
     output = frame.clone();
+// 添加调试输出，确认检测结果数量
+    qDebug() << "Number of detection results before drawing:" << results.size();
+    
+    // 绘制检测结果
     DrawDetectionResults(output, results);
+    
+    // 添加调试输出，确认绘制后图像尺寸
+    qDebug() << "Output image size after drawing: width=" << output.cols << " height=" << output.rows;
+    
+    // 保存检测结果图片
+    string savePath = "/home/orangepi/Desktop/VisualRobot_Local/Img/Yolo_Detected.jpg";
+    try {
+        // 确保保存目录存在
+        string directory = "/home/orangepi/Desktop/VisualRobot_Local/Img";
+        
+        // 创建目录（如果不存在）
+        #ifdef _WIN32
+            // Windows系统
+            CreateDirectoryA(directory.c_str(), NULL);
+        #else
+            // Linux/macOS系统
+            system((string("mkdir -p ") + directory).c_str());
+        #endif
+        
+        // 使用OpenCV的imwrite保存图片
+        if (imwrite(savePath, output)) {
+            qDebug() << "检测结果已保存到:" << QString::fromStdString(savePath);
+        } else {
+            qDebug() << "保存检测结果失败:" << QString::fromStdString(savePath);
+        }
+    } catch (const Exception& e) {
+        qDebug() << "保存图片时出错:" << QString::fromStdString(e.msg);
+    }
 
     // 发送处理完成信号
     emit processingComplete(output);
@@ -544,6 +583,9 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
 
 void DLProcessor::DrawDetectionResults(Mat& frame, const vector<DetectionResult>& results)
 {
+    // 添加调试输出
+    qDebug() << "DrawDetectionResults called with" << results.size() << "results, target frame size:" << frame.cols << "x" << frame.rows;
+    
     // 颜色列表，用于不同类别
     vector<Scalar> colors = {
         Scalar(0, 0, 255),   // 红色
@@ -559,40 +601,62 @@ void DLProcessor::DrawDetectionResults(Mat& frame, const vector<DetectionResult>
     {
         const DetectionResult& result = results[i];
         
+        // 添加调试输出，显示当前检测结果
+        qDebug() << "  Drawing result" << i << ": class=" << QString::fromStdString(result.className)
+                 << " confidence=" << result.confidence
+                 << " bbox=" << result.boundingBox.x << "," << result.boundingBox.y
+                 << "," << result.boundingBox.width << "," << result.boundingBox.height;
+        
         // 选择颜色
         Scalar color = colors[i % colors.size()];
         
         // 绘制边界框
         rectangle(frame, result.boundingBox, color, 2);
+        qDebug() << "  Bounding box drawn";
         
         // 绘制类别和置信度
         string label = result.className + ": " + to_string(result.confidence).substr(0, 4);
         int baseline = 0;
         Size labelSize = getTextSize(label, FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
         
-        // 绘制标签背景
-        Rect labelRect(result.boundingBox.x, result.boundingBox.y - labelSize.height, 
+        // 确保标签区域在图像范围内
+        Rect labelRect(result.boundingBox.x, max(0, result.boundingBox.y - labelSize.height),
                       labelSize.width, labelSize.height + baseline);
+        
+        // 绘制标签背景
         rectangle(frame, labelRect, color, FILLED);
+        qDebug() << "  Label background drawn";
+        
+        // 确保标签文本位置在图像范围内
+        Point textPos(result.boundingBox.x, max(labelSize.height, result.boundingBox.y - 5));
         
         // 绘制标签文本
-        putText(frame, label, Point(result.boundingBox.x, result.boundingBox.y - 5),
+        putText(frame, label, textPos,
                 FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0, 0, 0), 1);
+        qDebug() << "  Label text drawn";
         
         // 如果有分割掩码，绘制掩码
         if (!result.mask.empty())
         {
+            qDebug() << "  Drawing mask";
             // 创建彩色掩码
             Mat coloredMask(result.mask.size(), CV_8UC3, color);
             
-            // 将掩码应用到原始图像的相应区域
-            Mat roi = frame(result.boundingBox);
-            Mat maskROI;
-            coloredMask.copyTo(maskROI, result.mask);
-            
-            // 添加半透明效果
-            addWeighted(maskROI, 0.3, roi, 0.7, 0, roi);
+            // 确保ROI在图像范围内
+            Rect safeRoi = result.boundingBox & Rect(0, 0, frame.cols, frame.rows);
+            if (safeRoi.width > 0 && safeRoi.height > 0)
+            {
+                // 将掩码应用到原始图像的相应区域
+                Mat roi = frame(safeRoi);
+                Mat maskROI;
+                coloredMask.copyTo(maskROI, result.mask);
+                
+                // 添加半透明效果
+                addWeighted(maskROI, 0.3, roi, 0.7, 0, roi);
+                qDebug() << "  Mask applied successfully";
+            }
         }
+        qDebug() << "  Result" << i << "drawing completed";
     }
 }
 ClassificationResult DLProcessor::PostProcessClassification(const vector<Mat>& outs)
