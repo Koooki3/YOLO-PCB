@@ -108,8 +108,15 @@ bool DLProcessor::InitModel(const string& modelPath, const string& configPath)
 
 void DLProcessor::SetModelParams(float confThreshold, float nmsThreshold)
 {
-    confThreshold_ = confThreshold;
-    nmsThreshold_ = nmsThreshold;
+    // 验证并限制置信度阈值在0.1-1.0范围内
+    confThreshold_ = max(0.1f, min(1.0f, confThreshold));
+    
+    // 验证并限制NMS阈值在0.1-1.0范围内
+    nmsThreshold_ = max(0.1f, min(1.0f, nmsThreshold));
+    
+    qDebug() << "Model parameters updated:";
+    qDebug() << "  Confidence threshold:" << confThreshold_;
+    qDebug() << "  NMS threshold:" << nmsThreshold_;
 }
 
 void DLProcessor::SetClassLabels(const vector<string>& labels)
@@ -434,68 +441,79 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
         }
 
         // 处理YOLOv8 ONNX输出格式
-        // YOLOv8导出为ONNX时通常会有一个输出，形状为[N, num_boxes, num_attributes]
+        // YOLOv8导出为ONNX时通常输出形状为[N, 84, 8400]，其中：
+        // N是批次大小，84是属性数量(4坐标+1置信度+80类别概率)，8400是检测数量
         if (outs[i].dims == 3)
         {
-            // 这是YOLOv8的典型输出格式
             int batchSize = outs[i].size[0];
-            int numDetections = outs[i].size[1];
-            int detectionSize = outs[i].size[2];
+            int numAttributes = outs[i].size[1];  // 通常是84 (4+1+80)
+            int numDetections = outs[i].size[2];  // 通常是8400
             
             qDebug() << "YOLOv8 ONNX format detected: batch=" << batchSize 
-                     << " detections=" << numDetections 
-                     << " detection_size=" << detectionSize;
+                     << " attributes=" << numAttributes 
+                     << " detections=" << numDetections;
             
-            // 假设输出格式: [batch, num_detections, (x, y, w, h, conf, class0, class1, ...)]
+            // YOLOv8输出格式: [batch, attributes, num_detections]
+            // attributes: [x_center, y_center, width, height, object_conf, class_0_conf, class_1_conf, ...]
             for (int b = 0; b < batchSize; ++b)
             {
                 for (int d = 0; d < numDetections; ++d)
                 {
-                    // 获取当前检测的起始指针
-                    float* detectionPtr = (float*)outs[i].ptr<float>(b, d);
-                    
-                    // 提取边界框信息
-                    float x = detectionPtr[0];  // 中心点x坐标
-                    float y = detectionPtr[1];  // 中心点y坐标
-                    float w = detectionPtr[2];  // 宽度
-                    float h = detectionPtr[3];  // 高度
-                    float confidence = detectionPtr[4];  // 置信度
+                    // 获取当前检测的所有属性
+                    // 注意：这里需要遍历attributes维度获取每个检测框的属性
+                    float x_center = outs[i].at<float>(b, 0, d);  // 中心点x坐标（归一化）
+                    float y_center = outs[i].at<float>(b, 1, d);  // 中心点y坐标（归一化）
+                    float width_norm = outs[i].at<float>(b, 2, d);   // 宽度（归一化）
+                    float height_norm = outs[i].at<float>(b, 3, d);  // 高度（归一化）
+                    float object_conf = outs[i].at<float>(b, 4, d);  // 对象置信度
                     
                     // 应用置信度阈值
-                    if (confidence > confThreshold)
+                    if (object_conf > confThreshold)
                     {
                         // 找到最高置信度的类别
                         int classId = -1;
                         float maxClassConf = 0.0f;
                         
-                        // 从第5个元素开始是类别置信度
-                        for (int c = 0; c < detectionSize - 5; ++c)
+                        // 从第5个元素开始是类别置信度，通常有80个类别
+                        int numClasses = min(numAttributes - 5, 80); // 限制最大类别数为80
+                        for (int c = 0; c < numClasses; ++c)
                         {
-                            if (detectionPtr[5 + c] > maxClassConf)
+                            float classConf = outs[i].at<float>(b, 5 + c, d);
+                            if (classConf > maxClassConf)
                             {
-                                maxClassConf = detectionPtr[5 + c];
+                                maxClassConf = classConf;
                                 classId = c;
                             }
                         }
                         
-                        // 计算边界框坐标（YOLOv8输出是归一化的坐标）
-                        int left = static_cast<int>((x - w / 2) * frame.cols);
-                        int top = static_cast<int>((y - h / 2) * frame.rows);
-                        int width = static_cast<int>(w * frame.cols);
-                        int height = static_cast<int>(h * frame.rows);
+                        // 计算最终置信度 = 对象置信度 * 类别置信度
+                        float finalConfidence = object_conf * maxClassConf;
                         
-                        // 确保边界框在图像范围内
-                        left = max(0, left);
-                        top = max(0, top);
-                        width = min(frame.cols - left, width);
-                        height = min(frame.rows - top, height);
-                        
-                        classIds.push_back(classId);
-                        confidences.push_back(confidence * maxClassConf);  // 乘以类别置信度
-                        boxes.push_back(Rect(left, top, width, height));
+                        // 应用最终置信度阈值
+                        if (finalConfidence > confThreshold)
+                        {
+                            // YOLOv8输出是归一化的坐标，需要转换为像素坐标
+                            int left = static_cast<int>((x_center - width_norm / 2) * frame.cols);
+                            int top = static_cast<int>((y_center - height_norm / 2) * frame.rows);
+                            int width = static_cast<int>(width_norm * frame.cols);
+                            int height = static_cast<int>(height_norm * frame.rows);
+                            
+                            qDebug() << "  Detection " << d << ":";
+                            qDebug() << "    Raw normalized values: x_center=" << x_center << " y_center=" << y_center 
+                                     << " width=" << width_norm << " height=" << height_norm;
+                            qDebug() << "    Calculated box: left=" << left << " top=" << top 
+                                     << " width=" << width << " height=" << height;
+                            qDebug() << "    Class ID=" << classId << " Confidence=" << finalConfidence;
+                            
+                            classIds.push_back(classId);
+                            confidences.push_back(finalConfidence);
+                            boxes.push_back(Rect(left, top, width, height));
+                        }
                     }
                 }
             }
+            
+            qDebug() << "Total detections after filtering:" << boxes.size();
         }
         else if (outs[i].dims == 2)
         {
@@ -554,14 +572,58 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
     {
         dnn::NMSBoxes(boxes, confidences, confThreshold, nmsThreshold, indices);
         
+        qDebug() << "NMS selected" << indices.size() << "detections";  
+        
         // 构建最终结果
         for (size_t i = 0; i < indices.size(); ++i)
         {
             int idx = indices[i];
             DetectionResult result;
-            result.classId = classIds[idx];
-            result.confidence = confidences[idx];
-            result.boundingBox = boxes[idx];
+            
+            // 验证类别ID，确保在合理范围内
+            if (classIds[idx] >= 0 && classIds[idx] < 1000) // 限制最大类别ID为1000
+            {
+                result.classId = classIds[idx];
+            } else {
+                qDebug() << "Warning: Invalid class ID" << classIds[idx] << "detected, setting to 0";
+                result.classId = 0;
+            }
+            
+            // 验证置信度，确保在0-1范围内
+            if (confidences[idx] >= 0.0f && confidences[idx] <= 1.0f)
+            {
+                result.confidence = confidences[idx];
+            } else {
+                // 如果置信度异常，将其归一化到合理范围
+                result.confidence = max(0.0f, min(1.0f, confidences[idx]));
+                qDebug() << "Warning: Abnormal confidence value" << confidences[idx] << "detected, normalized to" << result.confidence;
+            }
+            
+            // 获取边界框
+            Rect bbox = boxes[idx];
+            
+            // 验证和修复边界框坐标，确保在图像范围内且尺寸合理
+            // 限制边界框最小尺寸为1x1，最大尺寸不超过图像
+            int min_size = 1;
+            int max_width = frame.cols;
+            int max_height = frame.rows;
+            
+            // 确保左上角坐标为正
+            bbox.x = max(0, bbox.x);
+            bbox.y = max(0, bbox.y);
+            
+            // 确保宽度和高度为正且合理
+            bbox.width = max(min_size, min(bbox.width, max_width - bbox.x));
+            bbox.height = max(min_size, min(bbox.height, max_height - bbox.y));
+            
+            // 如果修复后边界框仍然无效，跳过此检测
+            if (bbox.width <= 0 || bbox.height <= 0 || bbox.x >= max_width || bbox.y >= max_height)
+            {
+                qDebug() << "Warning: Invalid bounding box after repair, skipping detection" << i;
+                continue;
+            }
+            
+            result.boundingBox = bbox;
             
             // 设置类别名称
             if (result.classId >= 0 && result.classId < static_cast<int>(classLabels_.size()))
@@ -572,6 +634,12 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
             {
                 result.className = "Class_" + to_string(result.classId);
             }
+            
+            qDebug() << "Added detection result" << i << ":";
+            qDebug() << "  Class:" << QString::fromStdString(result.className) << "(ID:" << result.classId << ")";
+            qDebug() << "  Confidence:" << result.confidence;
+            qDebug() << "  Bounding box:" << result.boundingBox.x << "," << result.boundingBox.y 
+                     << "," << result.boundingBox.width << "," << result.boundingBox.height;
             
             results.push_back(result);
         }
@@ -607,15 +675,40 @@ void DLProcessor::DrawDetectionResults(Mat& frame, const vector<DetectionResult>
                  << " bbox=" << result.boundingBox.x << "," << result.boundingBox.y
                  << "," << result.boundingBox.width << "," << result.boundingBox.height;
         
-        // 选择颜色
+        // 安全地处理类别ID（防止负数或过大的ID）
+        int displayClassId = result.classId;
+        if (result.classId < 0 || result.classId > 1000) {
+            displayClassId = 0; // 使用默认类别ID
+            qDebug() << "  Warning: Invalid class ID" << result.classId << "detected, using default";
+        }
+        
+        // 选择颜色（基于索引，避免数组越界）
         Scalar color = colors[i % colors.size()];
+        
+        // 验证边界框有效性
+        if (result.boundingBox.width <= 0 || result.boundingBox.height <= 0 ||
+            result.boundingBox.x >= frame.cols || result.boundingBox.y >= frame.rows) {
+            qDebug() << "  Warning: Skipping invalid bounding box for result" << i;
+            continue;
+        }
         
         // 绘制边界框
         rectangle(frame, result.boundingBox, color, 2);
         qDebug() << "  Bounding box drawn";
         
-        // 绘制类别和置信度
-        string label = result.className + ": " + to_string(result.confidence).substr(0, 4);
+        // 创建安全的标签文本
+        string safeClassName = result.className.empty() ? "Unknown" : result.className;
+        float safeConfidence = max(0.0f, min(1.0f, result.confidence));
+        // 格式化置信度为百分比或保留两位小数
+        string confStr;
+        if (safeConfidence < 1.0f) {
+            confStr = to_string(int(safeConfidence * 100)) + "%"; // 百分比格式
+        } else {
+            confStr = to_string(safeConfidence).substr(0, 4); // 保留两位小数
+        }
+        string label = safeClassName + ": " + confStr;
+        
+        // 计算标签大小
         int baseline = 0;
         Size labelSize = getTextSize(label, FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
         
@@ -623,12 +716,20 @@ void DLProcessor::DrawDetectionResults(Mat& frame, const vector<DetectionResult>
         Rect labelRect(result.boundingBox.x, max(0, result.boundingBox.y - labelSize.height),
                       labelSize.width, labelSize.height + baseline);
         
+        // 额外检查，确保标签完全在图像范围内
+        if (labelRect.x < 0) labelRect.x = 0;
+        if (labelRect.y < 0) labelRect.y = 0;
+        if (labelRect.x + labelRect.width > frame.cols)
+            labelRect.width = frame.cols - labelRect.x;
+        if (labelRect.y + labelRect.height > frame.rows)
+            labelRect.height = frame.rows - labelRect.y;
+        
         // 绘制标签背景
         rectangle(frame, labelRect, color, FILLED);
         qDebug() << "  Label background drawn";
         
         // 确保标签文本位置在图像范围内
-        Point textPos(result.boundingBox.x, max(labelSize.height, result.boundingBox.y - 5));
+        Point textPos(labelRect.x, labelRect.y + labelSize.height);
         
         // 绘制标签文本
         putText(frame, label, textPos,
