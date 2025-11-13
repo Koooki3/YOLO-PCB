@@ -440,74 +440,145 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
             qDebug() << "  dim[" << d << "]=" << outs[i].size[d];
         }
 
-        // 处理YOLOv8 ONNX输出格式
-        // YOLOv8导出为ONNX时通常输出形状为[N, 84, 8400]，其中：
-        // N是批次大小，84是属性数量(4坐标+1置信度+80类别概率)，8400是检测数量
+        // 处理YOLOv8 ONNX输出格式 - 格式1: [1, 84, 8400]
         if (outs[i].dims == 3)
         {
             int batchSize = outs[i].size[0];
-            int numAttributes = outs[i].size[1];  // 通常是84 (4+1+80)
-            int numDetections = outs[i].size[2];  // 通常是8400
+            int numAttributes = outs[i].size[1];  // 通常是84 (4+1+80)或80+5
+            int numDetections = outs[i].size[2];  // 通常是8400或25200
             
             qDebug() << "YOLOv8 ONNX format detected: batch=" << batchSize 
                      << " attributes=" << numAttributes 
                      << " detections=" << numDetections;
             
-            // YOLOv8输出格式: [batch, attributes, num_detections]
+            // 处理格式1: [batch, attributes, num_detections]
             // attributes: [x_center, y_center, width, height, object_conf, class_0_conf, class_1_conf, ...]
-            for (int b = 0; b < batchSize; ++b)
+            if (numAttributes < numDetections)  // 通常84 < 8400或25200
             {
-                for (int d = 0; d < numDetections; ++d)
+                for (int b = 0; b < batchSize; ++b)
                 {
-                    // 获取当前检测的所有属性
-                    // 注意：这里需要遍历attributes维度获取每个检测框的属性
-                    float x_center = outs[i].at<float>(b, 0, d);  // 中心点x坐标（归一化）
-                    float y_center = outs[i].at<float>(b, 1, d);  // 中心点y坐标（归一化）
-                    float width_norm = outs[i].at<float>(b, 2, d);   // 宽度（归一化）
-                    float height_norm = outs[i].at<float>(b, 3, d);  // 高度（归一化）
-                    float object_conf = outs[i].at<float>(b, 4, d);  // 对象置信度
-                    
-                    // 应用置信度阈值
-                    if (object_conf > confThreshold)
+                    for (int d = 0; d < numDetections; ++d)
                     {
-                        // 找到最高置信度的类别
-                        int classId = -1;
-                        float maxClassConf = 0.0f;
+                        // 获取当前检测的所有属性
+                        float x_center = outs[i].at<float>(b, 0, d);  // 中心点x坐标（归一化）
+                        float y_center = outs[i].at<float>(b, 1, d);  // 中心点y坐标（归一化）
+                        float width_norm = outs[i].at<float>(b, 2, d);   // 宽度（归一化）
+                        float height_norm = outs[i].at<float>(b, 3, d);  // 高度（归一化）
+                        float object_conf = outs[i].at<float>(b, 4, d);  // 对象置信度
                         
-                        // 从第5个元素开始是类别置信度，通常有80个类别
-                        int numClasses = min(numAttributes - 5, 80); // 限制最大类别数为80
-                        for (int c = 0; c < numClasses; ++c)
+                        // 应用置信度阈值 - 第一层过滤
+                        if (object_conf > confThreshold)
                         {
-                            float classConf = outs[i].at<float>(b, 5 + c, d);
-                            if (classConf > maxClassConf)
+                            // 找到最高置信度的类别
+                            int classId = -1;
+                            float maxClassConf = 0.0f;
+                            
+                            // 从第5个元素开始是类别置信度
+                            int numClasses = max(1, numAttributes - 5); // 至少有1个类别
+                            for (int c = 0; c < numClasses; ++c)
                             {
-                                maxClassConf = classConf;
-                                classId = c;
+                                float classConf = outs[i].at<float>(b, 5 + c, d);
+                                if (classConf > maxClassConf)
+                                {
+                                    maxClassConf = classConf;
+                                    classId = c;
+                                }
+                            }
+                            
+                            // 计算最终置信度 = 对象置信度 * 类别置信度
+                            float finalConfidence = object_conf * maxClassConf;
+                            
+                            // 应用最终置信度阈值 - 第二层过滤
+                            if (finalConfidence > confThreshold)
+                            {
+                                // 坐标反归一化和转换 (与Python实现一致)
+                                // 从中心点+宽高格式转换为左上角+宽高格式
+                                float x_min = x_center - width_norm / 2;
+                                float y_min = y_center - height_norm / 2;
+                                
+                                // 转换为像素坐标并缩放
+                                int left = static_cast<int>(x_min * frame.cols);
+                                int top = static_cast<int>(y_min * frame.rows);
+                                int width = static_cast<int>(width_norm * frame.cols);
+                                int height = static_cast<int>(height_norm * frame.rows);
+                                
+                                qDebug() << "  Detection " << d << ":";
+                                qDebug() << "    Raw normalized values: x_center=" << x_center << " y_center=" << y_center 
+                                         << " width=" << width_norm << " height=" << height_norm;
+                                qDebug() << "    Calculated box: left=" << left << " top=" << top 
+                                         << " width=" << width << " height=" << height;
+                                qDebug() << "    Class ID=" << classId << " Confidence=" << finalConfidence;
+                                
+                                classIds.push_back(classId);
+                                confidences.push_back(finalConfidence);
+                                boxes.push_back(Rect(left, top, width, height));
                             }
                         }
+                    }
+                }
+            }
+            // 处理格式2: [1, 25200, 84] (numAttributes > numDetections)
+            else
+            {
+                qDebug() << "Processing YOLOv8 format 2: [batch, num_detections, attributes]";
+                for (int b = 0; b < batchSize; ++b)
+                {
+                    for (int d = 0; d < numDetections; ++d)
+                    {
+                        // 获取当前检测的所有属性
+                        float x_center = outs[i].at<float>(b, d, 0);  // 中心点x坐标（归一化）
+                        float y_center = outs[i].at<float>(b, d, 1);  // 中心点y坐标（归一化）
+                        float width_norm = outs[i].at<float>(b, d, 2);   // 宽度（归一化）
+                        float height_norm = outs[i].at<float>(b, d, 3);  // 高度（归一化）
+                        float object_conf = outs[i].at<float>(b, d, 4);  // 对象置信度
                         
-                        // 计算最终置信度 = 对象置信度 * 类别置信度
-                        float finalConfidence = object_conf * maxClassConf;
-                        
-                        // 应用最终置信度阈值
-                        if (finalConfidence > confThreshold)
+                        // 应用置信度阈值 - 第一层过滤
+                        if (object_conf > confThreshold)
                         {
-                            // YOLOv8输出是归一化的坐标，需要转换为像素坐标
-                            int left = static_cast<int>((x_center - width_norm / 2) * frame.cols);
-                            int top = static_cast<int>((y_center - height_norm / 2) * frame.rows);
-                            int width = static_cast<int>(width_norm * frame.cols);
-                            int height = static_cast<int>(height_norm * frame.rows);
+                            // 找到最高置信度的类别
+                            int classId = -1;
+                            float maxClassConf = 0.0f;
                             
-                            qDebug() << "  Detection " << d << ":";
-                            qDebug() << "    Raw normalized values: x_center=" << x_center << " y_center=" << y_center 
-                                     << " width=" << width_norm << " height=" << height_norm;
-                            qDebug() << "    Calculated box: left=" << left << " top=" << top 
-                                     << " width=" << width << " height=" << height;
-                            qDebug() << "    Class ID=" << classId << " Confidence=" << finalConfidence;
+                            // 从第5个元素开始是类别置信度
+                            int numClasses = max(1, numAttributes - 5); // 至少有1个类别
+                            for (int c = 0; c < numClasses; ++c)
+                            {
+                                float classConf = outs[i].at<float>(b, d, 5 + c);
+                                if (classConf > maxClassConf)
+                                {
+                                    maxClassConf = classConf;
+                                    classId = c;
+                                }
+                            }
                             
-                            classIds.push_back(classId);
-                            confidences.push_back(finalConfidence);
-                            boxes.push_back(Rect(left, top, width, height));
+                            // 计算最终置信度 = 对象置信度 * 类别置信度
+                            float finalConfidence = object_conf * maxClassConf;
+                            
+                            // 应用最终置信度阈值 - 第二层过滤
+                            if (finalConfidence > confThreshold)
+                            {
+                                // 坐标反归一化和转换 (与Python实现一致)
+                                // 从中心点+宽高格式转换为左上角+宽高格式
+                                float x_min = x_center - width_norm / 2;
+                                float y_min = y_center - height_norm / 2;
+                                
+                                // 转换为像素坐标并缩放
+                                int left = static_cast<int>(x_min * frame.cols);
+                                int top = static_cast<int>(y_min * frame.rows);
+                                int width = static_cast<int>(width_norm * frame.cols);
+                                int height = static_cast<int>(height_norm * frame.rows);
+                                
+                                qDebug() << "  Detection " << d << ":";
+                                qDebug() << "    Raw normalized values: x_center=" << x_center << " y_center=" << y_center 
+                                         << " width=" << width_norm << " height=" << height_norm;
+                                qDebug() << "    Calculated box: left=" << left << " top=" << top 
+                                         << " width=" << width << " height=" << height;
+                                qDebug() << "    Class ID=" << classId << " Confidence=" << finalConfidence;
+                                
+                                classIds.push_back(classId);
+                                confidences.push_back(finalConfidence);
+                                boxes.push_back(Rect(left, top, width, height));
+                            }
                         }
                     }
                 }
@@ -530,7 +601,7 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
                 float h = data[3];
                 float confidence = data[4];
                 
-                // 应用置信度阈值
+                // 应用置信度阈值 - 第一层过滤
                 if (confidence > confThreshold)
                 {
                     // 获取置信度最高的类别
@@ -546,30 +617,43 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
                         }
                     }
                     
-                    // 计算边界框坐标
-                    int left = static_cast<int>((x - w / 2) * frame.cols);
-                    int top = static_cast<int>((y - h / 2) * frame.rows);
-                    int width = static_cast<int>(w * frame.cols);
-                    int height = static_cast<int>(h * frame.rows);
+                    // 计算最终置信度 = 对象置信度 * 类别置信度
+                    float finalConfidence = confidence * maxClassConf;
                     
-                    // 确保边界框在图像范围内
-                    left = max(0, left);
-                    top = max(0, top);
-                    width = min(frame.cols - left, width);
-                    height = min(frame.rows - top, height);
-                    
-                    classIds.push_back(classId);
-                    confidences.push_back(confidence * maxClassConf);
-                    boxes.push_back(Rect(left, top, width, height));
+                    // 应用最终置信度阈值 - 第二层过滤
+                    if (finalConfidence > confThreshold)
+                    {
+                        // 坐标反归一化和转换 (与Python实现一致)
+                        float x_min = x - w / 2;
+                        float y_min = y - h / 2;
+                        
+                        // 转换为像素坐标并缩放
+                        int left = static_cast<int>(x_min * frame.cols);
+                        int top = static_cast<int>(y_min * frame.rows);
+                        int width = static_cast<int>(w * frame.cols);
+                        int height = static_cast<int>(h * frame.rows);
+                        
+                        // 确保边界框在图像范围内
+                        left = max(0, left);
+                        top = max(0, top);
+                        width = min(frame.cols - left, width);
+                        height = min(frame.rows - top, height);
+                        
+                        classIds.push_back(classId);
+                        confidences.push_back(finalConfidence);
+                        boxes.push_back(Rect(left, top, width, height));
+                    }
                 }
             }
         }
     }
     
-    // 应用非极大值抑制
+    // 应用非极大值抑制 (NMS) - 与Python实现保持一致
     vector<int> indices;
     if (!boxes.empty())
     {
+        qDebug() << "Applying NMS with threshold" << nmsThreshold;
+        // NMSBoxes参数说明：boxes, confidences, score_threshold, nms_threshold, indices
         dnn::NMSBoxes(boxes, confidences, confThreshold, nmsThreshold, indices);
         
         qDebug() << "NMS selected" << indices.size() << "detections";  
@@ -602,24 +686,47 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
             // 获取边界框
             Rect bbox = boxes[idx];
             
-            // 验证和修复边界框坐标，确保在图像范围内且尺寸合理
-            // 限制边界框最小尺寸为1x1，最大尺寸不超过图像
-            int min_size = 1;
-            int max_width = frame.cols;
-            int max_height = frame.rows;
+            // 增强的边界框有效性检查和修复 - 与Python实现完全一致
+            int frameWidth = frame.cols;
+            int frameHeight = frame.rows;
+            int min_size = 2; // 增加最小尺寸要求，太小的边界框没有实际意义
             
-            // 确保左上角坐标为正
-            bbox.x = max(0, bbox.x);
-            bbox.y = max(0, bbox.y);
+            // 计算边界框的四个角坐标
+            int x1 = bbox.x;
+            int y1 = bbox.y;
+            int x2 = bbox.x + bbox.width;
+            int y2 = bbox.y + bbox.height;
             
-            // 确保宽度和高度为正且合理
-            bbox.width = max(min_size, min(bbox.width, max_width - bbox.x));
-            bbox.height = max(min_size, min(bbox.height, max_height - bbox.y));
+            // 1. 首先检查边界框是否有基本有效性
+            if (bbox.width <= 0 || bbox.height <= 0 ||  // 无效尺寸
+                x1 >= frameWidth || y1 >= frameHeight || // 完全在图像外
+                x2 <= 0 || y2 <= 0) { // 完全在图像左侧/上方
+                qDebug() << "Invalid detection skipped: Box dimensions or position invalid";
+                qDebug() << "  Box:" << bbox.x << "," << bbox.y 
+                         << "," << bbox.width << "," << bbox.height;
+                continue;
+            }
             
-            // 如果修复后边界框仍然无效，跳过此检测
-            if (bbox.width <= 0 || bbox.height <= 0 || bbox.x >= max_width || bbox.y >= max_height)
-            {
-                qDebug() << "Warning: Invalid bounding box after repair, skipping detection" << i;
+            // 2. 修复边界框使其完全在图像范围内 - 采用Python风格的边界裁剪
+            x1 = max(0, x1);
+            y1 = max(0, y1);
+            x2 = min(frameWidth, x2);
+            y2 = min(frameHeight, y2);
+            
+            // 3. 重新计算边界框参数
+            bbox.x = x1;
+            bbox.y = y1;
+            bbox.width = x2 - x1;
+            bbox.height = y2 - y1;
+            
+            // 4. 最终验证边界框是否有效且具有最小尺寸
+            if (bbox.width < min_size || bbox.height < min_size || 
+                bbox.x >= frameWidth || bbox.y >= frameHeight ||
+                bbox.x + bbox.width <= 0 || bbox.y + bbox.height <= 0) {
+                qDebug() << "Invalid detection skipped after adjustment: Box too small or still out of bounds";
+                qDebug() << "  Box:" << bbox.x << "," << bbox.y 
+                         << "," << bbox.width << "," << bbox.height;
+                qDebug() << "  Frame size:" << frameWidth << "x" << frameHeight;
                 continue;
             }
             
@@ -654,17 +761,7 @@ void DLProcessor::DrawDetectionResults(Mat& frame, const vector<DetectionResult>
     // 添加调试输出
     qDebug() << "DrawDetectionResults called with" << results.size() << "results, target frame size:" << frame.cols << "x" << frame.rows;
     
-    // 颜色列表，用于不同类别
-    vector<Scalar> colors = {
-        Scalar(0, 0, 255),   // 红色
-        Scalar(0, 255, 0),   // 绿色
-        Scalar(255, 0, 0),   // 蓝色
-        Scalar(0, 255, 255), // 黄色
-        Scalar(255, 0, 255), // 紫色
-        Scalar(255, 255, 0)  // 青色
-    };
-    
-    // 绘制每个检测结果
+    // 绘制每个检测结果 - 与Python实现保持一致
     for (size_t i = 0; i < results.size(); ++i)
     {
         const DetectionResult& result = results[i];
@@ -675,65 +772,85 @@ void DLProcessor::DrawDetectionResults(Mat& frame, const vector<DetectionResult>
                  << " bbox=" << result.boundingBox.x << "," << result.boundingBox.y
                  << "," << result.boundingBox.width << "," << result.boundingBox.height;
         
-        // 安全地处理类别ID（防止负数或过大的ID）
-        int displayClassId = result.classId;
-        if (result.classId < 0 || result.classId > 1000) {
-            displayClassId = 0; // 使用默认类别ID
-            qDebug() << "  Warning: Invalid class ID" << result.classId << "detected, using default";
+        // 使用与Python相同的颜色生成逻辑
+        // 基于类别ID生成固定的颜色，而不是基于索引
+        Scalar color = Scalar(255, 0, 0); // 默认红色
+        if (result.classId >= 0)
+        {
+            // 使用哈希方式生成颜色，与Python实现一致
+            int colorIndex = result.classId % 80; // 假设最多80个类别（COCO数据集标准）
+            int r = (37 * colorIndex) % 255;
+            int g = (179 * colorIndex) % 255;
+            int b = (119 * colorIndex) % 255;
+            color = Scalar(b, g, r); // OpenCV使用BGR格式
         }
         
-        // 选择颜色（基于索引，避免数组越界）
-        Scalar color = colors[i % colors.size()];
-        
-        // 验证边界框有效性
-        if (result.boundingBox.width <= 0 || result.boundingBox.height <= 0 ||
-            result.boundingBox.x >= frame.cols || result.boundingBox.y >= frame.rows) {
+        // 严格验证边界框有效性 - 与Python实现一致
+        Rect bbox = result.boundingBox;
+        if (bbox.width <= 0 || bbox.height <= 0 || 
+            bbox.x < 0 || bbox.y < 0 || 
+            bbox.x + bbox.width > frame.cols || 
+            bbox.y + bbox.height > frame.rows)
+        {
             qDebug() << "  Warning: Skipping invalid bounding box for result" << i;
+            qDebug() << "    Box:" << bbox.x << "," << bbox.y 
+                     << "," << bbox.width << "," << bbox.height;
+            qDebug() << "    Frame size:" << frame.cols << "x" << frame.rows;
             continue;
         }
         
-        // 绘制边界框
-        rectangle(frame, result.boundingBox, color, 2);
+        // 绘制边界框 - 使用抗锯齿线条，与Python一致
+        rectangle(frame, bbox, color, 2, LINE_AA);
         qDebug() << "  Bounding box drawn";
         
-        // 创建安全的标签文本
-        string safeClassName = result.className.empty() ? "Unknown" : result.className;
-        float safeConfidence = max(0.0f, min(1.0f, result.confidence));
-        // 格式化置信度为百分比或保留两位小数
-        string confStr;
-        if (safeConfidence < 1.0f) {
-            confStr = to_string(int(safeConfidence * 100)) + "%"; // 百分比格式
-        } else {
-            confStr = to_string(safeConfidence).substr(0, 4); // 保留两位小数
+        // 创建标签文本 - 与Python格式一致："类别 置信度"
+        string labelText;
+        if (!result.className.empty())
+        {
+            labelText = result.className;
         }
-        string label = safeClassName + ": " + confStr;
+        else if (result.classId >= 0)
+        {
+            labelText = "Class " + to_string(result.classId);
+        }
+        else
+        {
+            labelText = "Unknown";
+        }
         
-        // 计算标签大小
+        // 格式化置信度为两位小数 - 与Python实现一致
+        char confStr[10];
+        sprintf(confStr, "%.2f", max(0.0f, min(1.0f, result.confidence)));
+        labelText += " " + string(confStr);
+        
+        // 计算标签大小和位置 - 与Python实现一致
+        int fontFace = FONT_HERSHEY_SIMPLEX;
+        double fontScale = 0.5;
+        int thickness = 1;
         int baseline = 0;
-        Size labelSize = getTextSize(label, FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
+        Size textSize = getTextSize(labelText, fontFace, fontScale, thickness, &baseline);
         
-        // 确保标签区域在图像范围内
-        Rect labelRect(result.boundingBox.x, max(0, result.boundingBox.y - labelSize.height),
-                      labelSize.width, labelSize.height + baseline);
+        // 标签位置和背景 - 确保在图像范围内
+        Point labelOrg(bbox.x, max(0, bbox.y - 5)); // 标签在边界框上方
+        Rect labelBg(bbox.x, max(0, bbox.y - textSize.height - 10), 
+                    textSize.width + 10, textSize.height + 10);
         
         // 额外检查，确保标签完全在图像范围内
-        if (labelRect.x < 0) labelRect.x = 0;
-        if (labelRect.y < 0) labelRect.y = 0;
-        if (labelRect.x + labelRect.width > frame.cols)
-            labelRect.width = frame.cols - labelRect.x;
-        if (labelRect.y + labelRect.height > frame.rows)
-            labelRect.height = frame.rows - labelRect.y;
+        if (labelBg.x < 0) labelBg.x = 0;
+        if (labelBg.y < 0) labelBg.y = 0;
+        if (labelBg.x + labelBg.width > frame.cols)
+            labelBg.width = frame.cols - labelBg.x;
+        if (labelBg.y + labelBg.height > frame.rows)
+            labelBg.height = frame.rows - labelBg.y;
         
         // 绘制标签背景
-        rectangle(frame, labelRect, color, FILLED);
+        rectangle(frame, labelBg, color, FILLED);
         qDebug() << "  Label background drawn";
         
-        // 确保标签文本位置在图像范围内
-        Point textPos(labelRect.x, labelRect.y + labelSize.height);
-        
-        // 绘制标签文本
-        putText(frame, label, textPos,
-                FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0, 0, 0), 1);
+        // 绘制标签文本 - 使用抗锯齿
+        putText(frame, labelText, 
+                Point(labelBg.x + 5, labelBg.y + textSize.height + 5 - baseline), 
+                fontFace, fontScale, Scalar(0, 0, 0), thickness, LINE_AA);
         qDebug() << "  Label text drawn";
         
         // 如果有分割掩码，绘制掩码
@@ -744,21 +861,27 @@ void DLProcessor::DrawDetectionResults(Mat& frame, const vector<DetectionResult>
             Mat coloredMask(result.mask.size(), CV_8UC3, color);
             
             // 确保ROI在图像范围内
-            Rect safeRoi = result.boundingBox & Rect(0, 0, frame.cols, frame.rows);
+            Rect safeRoi = bbox & Rect(0, 0, frame.cols, frame.rows);
             if (safeRoi.width > 0 && safeRoi.height > 0)
             {
+                // 调整掩码大小以匹配边界框
+                Mat resizedMask;
+                resize(coloredMask, resizedMask, bbox.size(), 0, 0, INTER_LINEAR);
+                
                 // 将掩码应用到原始图像的相应区域
                 Mat roi = frame(safeRoi);
                 Mat maskROI;
-                coloredMask.copyTo(maskROI, result.mask);
+                resizedMask.copyTo(maskROI, result.mask);
                 
-                // 添加半透明效果
-                addWeighted(maskROI, 0.3, roi, 0.7, 0, roi);
+                // 添加半透明效果 - 与Python一致的透明度0.4
+                addWeighted(maskROI, 0.4, roi, 0.6, 0, roi);
                 qDebug() << "  Mask applied successfully";
             }
         }
         qDebug() << "  Result" << i << "drawing completed";
     }
+    
+    qDebug() << "Total results drawn:" << results.size();
 }
 ClassificationResult DLProcessor::PostProcessClassification(const vector<Mat>& outs)
 {
