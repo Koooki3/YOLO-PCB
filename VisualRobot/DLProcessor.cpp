@@ -460,7 +460,8 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
                 qDebug() << "Detected YOLOv8 format 1: (1, 84, 8400)";
                 
                 // 对于这种格式，我们需要重新整形为 (1, 8400, 84)
-                Mat reshaped_output = outs[i].reshape(1, {batchSize, dim2, dim1}); // [1, 8400, 84]
+                Mat reshaped_output = outs[i].reshape(1, batchSize); // [1, 8400, 84]
+                reshaped_output = reshaped_output.reshape(1, {batchSize, dim2, dim1});
                 
                 for (int b = 0; b < batchSize; ++b)
                 {
@@ -482,7 +483,8 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
                         
                         // 获取类别得分并找到最高得分的类别
                         vector<float> class_scores;
-                        for (int c = 0; c < 80; ++c)  // COCO数据集80个类别
+                        int num_classes = dim1 - 5;
+                        for (int c = 0; c < num_classes && c < 80; ++c)  // COCO数据集80个类别
                         {
                             float classConf = reshaped_output.at<float>(b, d, 5 + c);
                             class_scores.push_back(classConf);
@@ -549,7 +551,8 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
                         
                         // 获取类别得分并找到最高得分的类别
                         vector<float> class_scores;
-                        for (int c = 0; c < 80; ++c)  // COCO数据集80个类别
+                        int num_classes = 84 - 5;
+                        for (int c = 0; c < num_classes && c < 80; ++c)  // COCO数据集80个类别
                         {
                             float classConf = outs[i].at<float>(b, d, 5 + c);
                             class_scores.push_back(classConf);
@@ -616,6 +619,7 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
                                 continue;
                             
                             vector<float> class_scores;
+                            int num_classes = min(dim2 - 5, 80);
                             for (int c = 0; c < 80; ++c)
                             {
                                 float classConf = outs[i].at<float>(b, 5 + c, d);
