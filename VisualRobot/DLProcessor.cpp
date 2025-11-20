@@ -22,7 +22,11 @@ DLProcessor::DLProcessor(QObject *parent)
     , isModelLoaded_(false)
     , isQuantized_(false)
     , quantizationType_("")
+    , useYOLOPreprocessing_(false)
 {
+    // 初始化DataProcessor实例
+    dataProcessor_ = make_unique<DataProcessor>(this);
+    
     InitDefaultParams();
 }
 
@@ -41,6 +45,22 @@ void DLProcessor::InitDefaultParams()
 
     // 默认二分类标签
     classLabels_ = {"Class_0", "Class_1"};
+}
+
+void DLProcessor::EnableYOLOMode(bool enable)
+{
+    useYOLOPreprocessing_ = enable;
+    
+    if (enable) {
+        qDebug() << "YOLO模式已启用 - 将使用YOLO专用预处理和后处理";
+        // YOLO模式下使用合适的参数
+        confThreshold_ = 0.5f;  // 适度调整置信度阈值
+        nmsThreshold_ = 0.45f;  // 适度的NMS阈值
+    } else {
+        qDebug() << "YOLO模式已禁用 - 将使用标准预处理和后处理";
+    }
+    
+    qDebug() << "当前参数 - 置信度阈值:" << confThreshold_ << ", NMS阈值:" << nmsThreshold_;
 }
 
 bool DLProcessor::InitModel(const string& modelPath, const string& configPath)
@@ -306,24 +326,42 @@ Mat DLProcessor::PreProcess(const Mat& frame)
 
     try 
     {
-        // 转换颜色空间 (如果需要) 
-        Mat processedFrame = frame;
-        if (frame.channels() == 1 && inputSize_.width > 0) 
+        qDebug() << "预处理开始 - 输入图像尺寸:" << frame.cols << "x" << frame.rows;
+        
+        // 检查是否使用YOLO预处理
+        if (useYOLOPreprocessing_ && dataProcessor_)
         {
-            // 灰度图转RGB
-            cvtColor(frame, processedFrame, COLOR_GRAY2RGB);
+            qDebug() << "使用YOLO专用预处理";
+            
+            // 使用DataProcessor的YOLO预处理方法
+            Mat yoloProcessed = dataProcessor_->PreprocessForYOLO(frame, inputSize_);
+            
+            // 创建blob - 使用OpenCV DNN的标准方法
+            dnn::blobFromImage(yoloProcessed, blob, 1.0, Size(), Scalar(), swapRB_, false, CV_32F);
+        }
+        else
+        {
+            qDebug() << "使用标准预处理";
+            
+            // 转换颜色空间 (如果需要) 
+            Mat processedFrame = frame;
+            if (frame.channels() == 1 && inputSize_.width > 0) 
+            {
+                // 灰度图转RGB
+                cvtColor(frame, processedFrame, COLOR_GRAY2RGB);
+            }
+
+            // 创建blob - 使用标准方法
+            dnn::blobFromImage(processedFrame, blob, scaleFactor_, inputSize_, meanValues_, swapRB_, false, CV_32F);
         }
 
-        // 创建blob
-        dnn::blobFromImage(processedFrame, blob, scaleFactor_, inputSize_, meanValues_, swapRB_, false, CV_32F);
-
-        qDebug() << "Preprocessed blob shape: [" << blob.size[0] << ","
+        qDebug() << "预处理完成 - Blob形状: [" << blob.size[0] << ","
                  << blob.size[1] << "," << blob.size[2] << "," << blob.size[3] << "]";
 
     } 
     catch (const Exception& e) 
     {
-        qDebug() << "Error in preprocessing:" << QString::fromStdString(e.msg);
+        qDebug() << "预处理错误:" << QString::fromStdString(e.msg);
         throw;
     }
 
@@ -335,6 +373,7 @@ bool DLProcessor::DetectObjects(const Mat& frame, vector<DetectionResult>& resul
     // 变量定义
     Mat blob;                            // 预处理后的blob数据
     vector<Mat> outs;                    // 网络输出结果
+    DataProcessor tempProcessor;         // 临时数据处理器用于获取预处理参数
 
     if (!isModelLoaded_)
     {
@@ -352,6 +391,13 @@ bool DLProcessor::DetectObjects(const Mat& frame, vector<DetectionResult>& resul
         // 预处理 - 注意YOLO通常使用不同的预处理参数
         blob = PreProcess(frame);
 
+        // 如果启用了YOLO模式，记录预处理参数用于后处理
+        if (useYOLOPreprocessing_ && dataProcessor_)
+        {
+            qDebug() << "保存YOLO预处理参数用于后处理";
+            // 预处理参数已经在DataProcessor中设置，我们可以在后处理中获取
+        }
+
         // 前向传播
         net_.setInput(blob);
         net_.forward(outs, net_.getUnconnectedOutLayersNames());
@@ -359,12 +405,12 @@ bool DLProcessor::DetectObjects(const Mat& frame, vector<DetectionResult>& resul
         // YOLO后处理 - 包括边界框检测和实例分割
         results = PostProcessYolo(frame, outs, confThreshold_, nmsThreshold_);
 
-        qDebug() << "Detected" << results.size() << "objects";
+        qDebug() << "检测完成 - 检测到" << results.size() << "个目标";
         return !results.empty();
     }
     catch (const Exception& e)
     {
-        qDebug() << "Error detecting objects:" << QString::fromStdString(e.msg);
+        qDebug() << "检测错误:" << QString::fromStdString(e.msg);
         emit errorOccurred(QString::fromStdString(e.msg));
         return false;
     }
@@ -429,6 +475,20 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
     vector<float> confidences;
     vector<Rect> boxes;
     vector<Mat> masks;
+
+    // 如果启用YOLO模式，获取预处理参数用于后处理
+    float scaleRatio = 1.0f;
+    float fillPadding = 0.0f;
+    Size yoloInputSize(640, 640);
+    
+    if (useYOLOPreprocessing_ && dataProcessor_)
+    {
+        scaleRatio = dataProcessor_->GetYoloScaleRatio();
+        fillPadding = dataProcessor_->GetYoloFillPadding();
+        yoloInputSize = dataProcessor_->GetYoloInputSize();
+        qDebug() << "使用YOLO预处理参数: scale=" << scaleRatio << ", fill=" << fillPadding 
+                 << ", input_size=" << yoloInputSize.width << "x" << yoloInputSize.height;
+    }
 
     // YOLO模型输出解析 - 参考test-YOLO.py的正确实现
     for (size_t i = 0; i < outs.size(); ++i)
@@ -499,29 +559,38 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
                                      << ", class_score=" << class_score << ", class_id=" << classId;
                         }
                         
-                        // YOLOv8输出是相对于输入尺寸的绝对坐标，不需要额外除以输入尺寸
-                        // 将坐标从输入尺寸空间转换到原始图像尺寸空间
-                        float x_scale = static_cast<float>(frame.cols) / 640.0f;  // 假设默认输入尺寸640
-                        float y_scale = static_cast<float>(frame.rows) / 640.0f;
+                        // 与Python实现一致的坐标转换逻辑
+                        float x, y, w, h;
                         
-                        float x_center_scaled = x_center * x_scale;
-                        float y_center_scaled = y_center * y_scale;
-                        float width_scaled = width * x_scale;
-                        float height_scaled = height * y_scale;
+                        // Python中的关键后处理逻辑：先移除填充，再除以缩放比例
+                        x = x_center - fillPadding;  // 移除填充
+                        y = y_center - fillPadding;
+                        w = width;
+                        h = height;
                         
-                        // 转换为 [x1, y1, x2, y2] 格式
-                        float x1 = max(0.0f, x_center_scaled - width_scaled / 2);
-                        float y1 = max(0.0f, y_center_scaled - height_scaled / 2);
-                        float x2 = min(static_cast<float>(frame.cols) - 1, x_center_scaled + width_scaled / 2);
-                        float y2 = min(static_cast<float>(frame.rows) - 1, y_center_scaled + height_scaled / 2);
+                        // 然后除以缩放比例
+                        x /= scaleRatio;
+                        y /= scaleRatio;
+                        w /= scaleRatio;
+                        h /= scaleRatio;
                         
-                        // 确保边界框尺寸合理
-                        if ((x2 - x1) > 0 && (y2 - y1) > 0)
+                        // 转换为左上角坐标和尺寸
+                        int left = static_cast<int>(x - w / 2);
+                        int top = static_cast<int>(y - h / 2);
+                        int width_int = static_cast<int>(w);
+                        int height_int = static_cast<int>(h);
+                        
+                        // 确保边界框在图像范围内
+                        left = max(0, left);
+                        top = max(0, top);
+                        if (left + width_int > frame.cols) width_int = frame.cols - left;
+                        if (top + height_int > frame.rows) height_int = frame.rows - top;
+                        
+                        if (width_int > 0 && height_int > 0)
                         {
                             classIds.push_back(classId);
                             confidences.push_back(object_conf);  // 使用原始置信度（与Python一致）
-                            boxes.push_back(Rect(static_cast<int>(x1), static_cast<int>(y1), 
-                                                static_cast<int>(x2 - x1), static_cast<int>(y2 - y1)));
+                            boxes.push_back(Rect(left, top, width_int, height_int));
                         }
                     }
                 }
@@ -567,29 +636,38 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
                                      << ", class_score=" << class_score << ", class_id=" << classId;
                         }
                         
-                        // YOLOv8输出是相对于输入尺寸的绝对坐标
-                        // 将坐标从输入尺寸空间转换到原始图像尺寸空间
-                        float x_scale = static_cast<float>(frame.cols) / 640.0f;  // 假设默认输入尺寸640
-                        float y_scale = static_cast<float>(frame.rows) / 640.0f;
+                        // 与Python实现一致的坐标转换逻辑
+                        float x, y, w, h;
                         
-                        float x_center_scaled = x_center * x_scale;
-                        float y_center_scaled = y_center * y_scale;
-                        float width_scaled = width * x_scale;
-                        float height_scaled = height * y_scale;
+                        // Python中的关键后处理逻辑：先移除填充，再除以缩放比例
+                        x = x_center - fillPadding;  // 移除填充
+                        y = y_center - fillPadding;
+                        w = width;
+                        h = height;
                         
-                        // 转换为 [x1, y1, x2, y2] 格式
-                        float x1 = max(0.0f, x_center_scaled - width_scaled / 2);
-                        float y1 = max(0.0f, y_center_scaled - height_scaled / 2);
-                        float x2 = min(static_cast<float>(frame.cols) - 1, x_center_scaled + width_scaled / 2);
-                        float y2 = min(static_cast<float>(frame.rows) - 1, y_center_scaled + height_scaled / 2);
+                        // 然后除以缩放比例
+                        x /= scaleRatio;
+                        y /= scaleRatio;
+                        w /= scaleRatio;
+                        h /= scaleRatio;
                         
-                        // 确保边界框尺寸合理
-                        if ((x2 - x1) > 0 && (y2 - y1) > 0)
+                        // 转换为左上角坐标和尺寸
+                        int left = static_cast<int>(x - w / 2);
+                        int top = static_cast<int>(y - h / 2);
+                        int width_int = static_cast<int>(w);
+                        int height_int = static_cast<int>(h);
+                        
+                        // 确保边界框在图像范围内
+                        left = max(0, left);
+                        top = max(0, top);
+                        if (left + width_int > frame.cols) width_int = frame.cols - left;
+                        if (top + height_int > frame.rows) height_int = frame.rows - top;
+                        
+                        if (width_int > 0 && height_int > 0)
                         {
                             classIds.push_back(classId);
                             confidences.push_back(object_conf);  // 使用原始置信度（与Python一致）
-                            boxes.push_back(Rect(static_cast<int>(x1), static_cast<int>(y1), 
-                                                static_cast<int>(x2 - x1), static_cast<int>(y2 - y1)));
+                            boxes.push_back(Rect(left, top, width_int, height_int));
                         }
                     }
                 }
@@ -628,26 +706,38 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
                             
                             int classId = max_element(class_scores.begin(), class_scores.end()) - class_scores.begin();
                             
-                            // 坐标转换
-                            float x_scale = static_cast<float>(frame.cols) / 640.0f;
-                            float y_scale = static_cast<float>(frame.rows) / 640.0f;
+                            // 与Python实现一致的坐标转换逻辑
+                            float x, y, w, h;
                             
-                            float x_center_scaled = x_center * x_scale;
-                            float y_center_scaled = y_center * y_scale;
-                            float width_scaled = width * x_scale;
-                            float height_scaled = height * y_scale;
+                            // Python中的关键后处理逻辑：先移除填充，再除以缩放比例
+                            x = x_center - fillPadding;  // 移除填充
+                            y = y_center - fillPadding;
+                            w = width;
+                            h = height;
                             
-                            float x1 = max(0.0f, x_center_scaled - width_scaled / 2);
-                            float y1 = max(0.0f, y_center_scaled - height_scaled / 2);
-                            float x2 = min(static_cast<float>(frame.cols) - 1, x_center_scaled + width_scaled / 2);
-                            float y2 = min(static_cast<float>(frame.rows) - 1, y_center_scaled + height_scaled / 2);
+                            // 然后除以缩放比例
+                            x /= scaleRatio;
+                            y /= scaleRatio;
+                            w /= scaleRatio;
+                            h /= scaleRatio;
                             
-                            if ((x2 - x1) > 0 && (y2 - y1) > 0)
+                            // 转换为左上角坐标和尺寸
+                            int left = static_cast<int>(x - w / 2);
+                            int top = static_cast<int>(y - h / 2);
+                            int width_int = static_cast<int>(w);
+                            int height_int = static_cast<int>(h);
+                            
+                            // 确保边界框在图像范围内
+                            left = max(0, left);
+                            top = max(0, top);
+                            if (left + width_int > frame.cols) width_int = frame.cols - left;
+                            if (top + height_int > frame.rows) height_int = frame.rows - top;
+                            
+                            if (width_int > 0 && height_int > 0)
                             {
                                 classIds.push_back(classId);
                                 confidences.push_back(object_conf);
-                                boxes.push_back(Rect(static_cast<int>(x1), static_cast<int>(y1), 
-                                                    static_cast<int>(x2 - x1), static_cast<int>(y2 - y1)));
+                                boxes.push_back(Rect(left, top, width_int, height_int));
                             }
                         }
                     }
@@ -712,25 +802,53 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
                     // 应用最终置信度阈值 - 第二层过滤
                     if (finalConfidence > confThreshold)
                     {
-                        // 坐标反归一化和转换 (与Python实现一致)
+                        // 传统YOLO格式的坐标转换逻辑 (与Python实现一致)
                         float x_min = x - w / 2;
                         float y_min = y - h / 2;
+                        float width = w;
+                        float height = h;
                         
-                        // 转换为像素坐标并缩放
-                        int left = static_cast<int>(x_min * frame.cols);
-                        int top = static_cast<int>(y_min * frame.rows);
-                        int width = static_cast<int>(w * frame.cols);
-                        int height = static_cast<int>(h * frame.rows);
+                        int left, top, width_int, height_int;
+                        
+                        // 使用与Python一致的坐标转换
+                        if (useYOLOPreprocessing_ && dataProcessor_)
+                        {
+                            // YOLO模式：使用预处理参数进行坐标转换
+                            x_min = x_min - fillPadding;  // 移除填充
+                            y_min = y_min - fillPadding;
+                            width = width;
+                            height = height;
+                            
+                            // 然后除以缩放比例
+                            x_min /= scaleRatio;
+                            y_min /= scaleRatio;
+                            width /= scaleRatio;
+                            height /= scaleRatio;
+                            
+                            // 转换为像素坐标
+                            left = static_cast<int>(x_min);
+                            top = static_cast<int>(y_min);
+                            width_int = static_cast<int>(width);
+                            height_int = static_cast<int>(height);
+                        }
+                        else
+                        {
+                            // 标准模式：直接转换为像素坐标并缩放
+                            left = static_cast<int>(x_min * frame.cols);
+                            top = static_cast<int>(y_min * frame.rows);
+                            width_int = static_cast<int>(width * frame.cols);
+                            height_int = static_cast<int>(height * frame.rows);
+                        }
                         
                         // 确保边界框在图像范围内
                         left = max(0, left);
                         top = max(0, top);
-                        width = min(frame.cols - left, width);
-                        height = min(frame.rows - top, height);
+                        if (left + width_int > frame.cols) width_int = frame.cols - left;
+                        if (top + height_int > frame.rows) height_int = frame.rows - top;
                         
                         classIds.push_back(classId);
                         confidences.push_back(finalConfidence);
-                        boxes.push_back(Rect(left, top, width, height));
+                        boxes.push_back(Rect(left, top, width_int, height_int));
                     }
                 }
             }
