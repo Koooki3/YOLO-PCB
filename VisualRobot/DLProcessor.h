@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include "DataProcessor.h"
 
 using namespace std;
 using namespace cv;
@@ -51,6 +52,10 @@ public:
     // 设置类别标签
     void SetClassLabels(const vector<string>& labels);
     bool LoadClassLabels(const string& labelPath);
+    
+    // YOLO模型配置
+    void EnableYOLOMode(bool enable = true);
+    bool IsYOLOModeEnabled() const { return useYOLOPreprocessing_; }
     
     // 处理单张图像 - 二分类
     bool ClassifyImage(const Mat& frame, ClassificationResult& result);
@@ -137,6 +142,9 @@ private:
     bool isQuantized_;          // 模型是否已量化
     string quantizationType_;   // 量化类型 (INT8, UINT8, FP16等)
     
+    // 数据处理相关
+    unique_ptr<DataProcessor> dataProcessor_;  // 数据处理器实例
+    
     // 二分类相关参数
     Size inputSize_;              // 输入图像尺寸
     Scalar meanValues_;           // 均值
@@ -144,6 +152,7 @@ private:
     float scaleFactor_;           // 缩放因子
     vector<string> classLabels_;  // 类别标签
     bool swapRB_;                 // 是否交换R和B通道
+    bool useYOLOPreprocessing_;   // 是否使用YOLO预处理
     
     // 预处理方法
     Mat PreProcess(const Mat& frame);

@@ -8,29 +8,39 @@ DataProcessor::DataProcessor(QObject *parent)
     : QObject(parent)
     , rng_(random_device{}())
     , currentFeatureType_(FeatureType::SIFT)
+    , yoloInputSize_(640, 640)  // YOLO默认输入尺寸
 {
     InitializeDetectors();
 }
 
 void DataProcessor::InitializeDetectors()
 {
-    try {
+    try 
+    {
         siftDetector_ = SIFT::create();
-    } catch (const cv::Exception& e) {
+    } 
+    catch (const cv::Exception& e) 
+    {
         qDebug() << "警告: 无法初始化SIFT检测器:" << e.what();
     }
     
 
     
-    try {
+    try 
+    {
         orbDetector_ = ORB::create(500, 1.2f, 8, 31, 0, 2, ORB::HARRIS_SCORE, 31, 20);
-    } catch (const cv::Exception& e) {
+    } 
+    catch (const cv::Exception& e) 
+    {
         qDebug() << "警告: 无法初始化ORB检测器:" << e.what();
     }
     
-    try {
+    try 
+    {
         akazeDetector_ = AKAZE::create();
-    } catch (const cv::Exception& e) {
+    } 
+    catch (const cv::Exception& e) 
+    {
         qDebug() << "警告: 无法初始化AKAZE检测器:" << e.what();
     }
 }
@@ -371,6 +381,78 @@ int DataProcessor::RandomInt(int min, int max)
     // 定义局部变量
     uniform_int_distribution<int> dist(min, max);  // 均匀整数分布对象
 
-    // 生成随机整数
+    // 生成随机浮点数
     return dist(rng_);
+}
+
+// YOLO专用预处理方法
+Mat DataProcessor::PreprocessForYOLO(const Mat& input, Size targetSize)
+{
+    qDebug() << "YOLO预处理开始 - 输入尺寸:" << input.cols << "x" << input.rows << ", 目标尺寸:" << targetSize.width << "x" << targetSize.height;
+    
+    // 首先进行letterbox处理
+    Mat letterboxed = Letterbox(input, targetSize);
+    
+    // 然后标准化处理
+    Mat normalized = NormalizeYOLOInput(letterboxed);
+    
+    qDebug() << "YOLO预处理完成 - 输出尺寸:" << normalized.cols << "x" << normalized.rows;
+    
+    return normalized;
+}
+
+Mat DataProcessor::Letterbox(const Mat& input, Size targetSize, Scalar color)
+{
+    // 保存原始图像尺寸
+    Size originalSize = input.size();
+    yoloInputSize_ = targetSize;  // 保存到成员变量
+    
+    // 计算缩放比例
+    double ratio = min(static_cast<double>(targetSize.width) / input.cols, 
+                      static_cast<double>(targetSize.height) / input.rows);
+    
+    // 记录缩放比例
+    ratio_ = { static_cast<float>(ratio), static_cast<float>(ratio) };
+    
+    // 计算新尺寸
+    Size newSize(static_cast<int>(input.cols * ratio), 
+                static_cast<int>(input.rows * ratio));
+    
+    // 缩放图像
+    Mat resized;
+    resize(input, resized, newSize, 0, 0, INTER_LINEAR);
+    
+    // 计算填充尺寸
+    int dw = targetSize.width - newSize.width;
+    int dh = targetSize.height - newSize.height;
+    
+    // 记录填充值
+    dw_dh_ = { static_cast<float>(dw), static_cast<float>(dh) };
+    
+    // 在四周平均分配填充
+    int top = dh / 2;
+    int bottom = dh - top;
+    int left = dw / 2;
+    int right = dw - left;
+    
+    // 添加边框
+    Mat letterboxed;
+    copyMakeBorder(resized, letterboxed, top, bottom, left, right, BORDER_CONSTANT, color);
+    
+    qDebug() << "Letterbox处理 - 原始尺寸:" << originalSize.width << "x" << originalSize.height 
+             << ", 缩放比例:" << ratio 
+             << ", 填充:(" << left << "," << top << "," << right << "," << bottom << ")";
+    
+    return letterboxed;
+}
+
+Mat DataProcessor::NormalizeYOLOInput(const Mat& input)
+{
+    Mat normalized;
+    
+    // YOLO输入标准化: 除以255.0，从[0,255]转换为[0,1]
+    input.convertTo(normalized, CV_32F);
+    normalized /= 255.0f;
+    
+    return normalized;
 }
