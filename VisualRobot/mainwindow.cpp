@@ -39,6 +39,7 @@
 #include <QTimer>
 #include "Undistort.h"
 #include "DefectDetection.h"
+#include "YOLOExample.h"
 
 #define ERROR 2
 #define WARNNING 1
@@ -1626,13 +1627,29 @@ void MainWindow::DrawOverlayOnDisplay2(double length, double width, double angle
 
 void MainWindow::on_CallDLwindow_clicked()
 {
-    // 变量定义
-    DLExample* dlExample;  // 深度学习示例窗口指针
+    // 让用户选择深度学习模式: 二分类（原DLExample）或 YOLO (独立窗口)
+    QMessageBox msg(this);
+    msg.setWindowTitle("选择深度学习模式");
+    msg.setText("请选择深度学习模式:");
+    auto *btnDL = msg.addButton("二分类", QMessageBox::AcceptRole);
+    auto *btnYOLO = msg.addButton("YOLO", QMessageBox::AcceptRole);
+    msg.addButton(QMessageBox::Cancel);
 
-    dlExample = new DLExample(nullptr);
-    dlExample->setAttribute(Qt::WA_DeleteOnClose);
-    dlExample->show();
-    AppendLog("深度学习二分类示例窗口已打开", INFO);
+    msg.exec();
+    QAbstractButton* clicked = msg.clickedButton();
+    if (clicked == btnYOLO) {
+        YOLOExample* ywin = new YOLOExample(nullptr);
+        ywin->setAttribute(Qt::WA_DeleteOnClose);
+        ywin->show();
+        AppendLog("YOLO 窗口已打开", INFO);
+    } else if (clicked == btnDL) {
+        DLExample* dlExample = new DLExample(nullptr);
+        dlExample->setAttribute(Qt::WA_DeleteOnClose);
+        dlExample->show();
+        AppendLog("深度学习二分类示例窗口已打开", INFO);
+    } else {
+        AppendLog("已取消打开深度学习窗口", INFO);
+    }
 }
 
 // Tenengrad清晰度计算函数

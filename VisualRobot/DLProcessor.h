@@ -54,8 +54,7 @@ public:
     bool LoadClassLabels(const string& labelPath);
     
     // YOLO模型配置
-    void EnableYOLOMode(bool enable = true);
-    bool IsYOLOModeEnabled() const { return useYOLOPreprocessing_; }
+    // (YOLO 相关支持已迁移到独立的 YOLOProcessor 模块)
     
     // 处理单张图像 - 二分类
     bool ClassifyImage(const Mat& frame, ClassificationResult& result);
@@ -67,13 +66,13 @@ public:
     bool ProcessFrame(const Mat& frame, Mat& output);
     
     // YOLO目标检测与实例分割
-    bool DetectObjects(const Mat& frame, vector<DetectionResult>& results);
-    bool ProcessYoloFrame(const Mat& frame, Mat& output);
+    // (YOLO 相关支持已迁移到独立的 YOLOProcessor 模块)
     
     // 获取模型信息
     Size GetInputSize() const { return inputSize_; }
     vector<string> GetClassLabels() const { return classLabels_; }
     bool IsModelLoaded() const { return isModelLoaded_; }
+        bool IsModelLoaded() const { return isModelLoaded_; }
     
     // 设置输入尺寸
     void SetInputSize(const Size& size);
@@ -155,6 +154,7 @@ private:
     bool useYOLOPreprocessing_;   // 是否使用YOLO预处理
     
     // 预处理方法
+    // 预处理方法
     Mat PreProcess(const Mat& frame);
     
     // 后处理方法 - 二分类
@@ -164,10 +164,8 @@ private:
     void PostProcess(Mat& frame, const vector<Mat>& outs);
     
     // YOLO后处理方法
-    vector<DetectionResult> PostProcessYolo(const Mat& frame, const vector<Mat>& outs, float confThreshold, float nmsThreshold);
-    
-    // 绘制检测结果
-    void DrawDetectionResults(Mat& frame, const vector<DetectionResult>& results);
+    // (YOLO 相关后处理与绘制已迁移到 `YOLOProcessor`)
+        // bool useYOLOPreprocessing_;   // YOLO 预处理相关设置已迁移
     
     // 辅助方法
     void InitDefaultParams();
