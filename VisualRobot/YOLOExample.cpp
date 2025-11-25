@@ -10,7 +10,7 @@ using namespace cv;
 
 YOLOExample::YOLOExample(QWidget *parent)
     : QWidget(parent)
-    , yoloProcessor_(new YOLOProcessor(this))
+    , yoloProcessor_(new YOLOProcessorORT(this))
     , modelPathEdit_(nullptr)
     , statusLabel_(nullptr)
     , imageLabel_(nullptr)
