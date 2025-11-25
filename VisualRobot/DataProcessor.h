@@ -34,15 +34,7 @@ public:
     Mat StandardizeImage(const Mat& input);
     Mat ResizeWithAspectRatio(const Mat& input, int targetSize);
     
-    // YOLO专用预处理方法
-    Mat PreprocessForYOLO(const Mat& input, Size targetSize = Size(640, 640));
-    Mat Letterbox(const Mat& input, Size targetSize, Scalar color = Scalar(114, 114, 114));
-    Mat NormalizeYOLOInput(const Mat& input);
-    
-    // 获取YOLO预处理参数（用于后处理坐标映射）
-    vector<float> GetYoloScaleRatio() const { return ratio_; }
-    vector<float> GetYoloFillPadding() const { return dw_dh_; }
-    Size GetYoloInputSize() const { return yoloInputSize_; }
+    // 通用预处理方法（YOLO 专用预处理已迁移到独立模块）
     
     // 特征提取方法
     Mat ExtractHOGFeatures(const Mat& input);
@@ -66,10 +58,7 @@ private:
     Ptr<AKAZE> akazeDetector_;
     FeatureType currentFeatureType_;
     
-    // YOLO相关参数
-    Size yoloInputSize_;           // YOLO输入尺寸
-    vector<float> ratio_;          // 缩放比例
-    vector<float> dw_dh_;          // 填充值 (dw, dh)
+    // YOLO 相关参数已移除（由 YOLOProcessor 管理）
     
     // 初始化特征检测器
     void InitializeDetectors();

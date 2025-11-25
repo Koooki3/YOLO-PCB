@@ -36,7 +36,7 @@ DLExample::~DLExample()
 void DLExample::SetupUI()
 {
     // 设置窗口标题和最小尺寸
-    setWindowTitle("深度学习二分类示例");
+    setWindowTitle("深度学习");
     setMinimumSize(800, 600);
     
     // 主布局
