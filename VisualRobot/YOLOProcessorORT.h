@@ -45,6 +45,10 @@ private:
     double scaleFactor_;
     bool swapRB_;
     vector<string> classLabels_;
+    // letterbox params used during preprocess -> postprocess
+    double letterbox_r_;
+    double letterbox_dw_;
+    double letterbox_dh_;
 
     vector<Mat> OrtOutputToMats(const std::vector<Ort::Value>& outputs);
     vector<DetectionResult> PostProcess(const Mat& frame, const Mat& dets);
