@@ -66,8 +66,8 @@ void YOLOExample::SetupUI()
 
 void YOLOExample::ConnectSignals()
 {
-    connect(yoloProcessor_, &YOLOProcessor::processingComplete, this, &YOLOExample::OnProcessingComplete);
-    connect(yoloProcessor_, &YOLOProcessor::errorOccurred, this, &YOLOExample::OnDLError);
+    connect(yoloProcessor_, &YOLOProcessorORT::processingComplete, this, &YOLOExample::OnProcessingComplete);
+    connect(yoloProcessor_, &YOLOProcessorORT::errorOccurred, this, &YOLOExample::OnDLError);
 }
 
 void YOLOExample::BrowseModel()

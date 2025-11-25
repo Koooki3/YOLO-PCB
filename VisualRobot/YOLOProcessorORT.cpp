@@ -135,23 +135,19 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
         Ort::MemoryInfo mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
         Ort::Value inputTensor = Ort::Value::CreateTensor<float>(mem_info, inputTensorValues.data(), inputTensorSize, inputShape.data(), inputShape.size());
 
-        // prepare input names
-        size_t numInputNodes = session_->GetInputCount();
-        vector<const char*> inputNames(numInputNodes);
-        for (size_t i=0;i<numInputNodes;++i) {
-            char* name = session_->GetInputName(i, Ort::AllocatorWithDefaultOptions());
-            inputNames[i] = name;
-        }
+        // prepare input and output name arrays (use GetInputNames/GetOutputNames to get std::vector<string>)
+        auto inputNamesVec = session_->GetInputNames();
+        vector<const char*> inputNames;
+        inputNames.reserve(inputNamesVec.size());
+        for (auto &s : inputNamesVec) inputNames.push_back(s.c_str());
 
-        // prepare outputs
-        size_t numOutputNodes = session_->GetOutputCount();
-        vector<const char*> outputNames(numOutputNodes);
-        for (size_t i=0;i<numOutputNodes;++i) {
-            char* oname = session_->GetOutputName(i, Ort::AllocatorWithDefaultOptions());
-            outputNames[i] = oname;
-        }
+        auto outputNamesVec = session_->GetOutputNames();
+        vector<const char*> outputNames;
+        outputNames.reserve(outputNamesVec.size());
+        for (auto &s : outputNamesVec) outputNames.push_back(s.c_str());
 
-        // run
+        // run (assume single input tensor)
+        size_t numOutputNodes = outputNames.size();
         auto outputTensors = session_->Run(Ort::RunOptions{nullptr}, inputNames.data(), &inputTensor, 1, outputNames.data(), numOutputNodes);
 
         // convert outputs to mats
