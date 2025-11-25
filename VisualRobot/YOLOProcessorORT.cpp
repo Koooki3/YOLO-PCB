@@ -247,6 +247,46 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
             }
         }
 
+        // Debug: print column-wise stats and confidence distribution
+        if (!dets.empty()) {
+            int R = dets.rows;
+            int C = dets.cols;
+            qDebug() << "dets rows,cols:" << R << C;
+            // per-column min/max
+            for (int c = 0; c < C; ++c) {
+                double minv, maxv;
+                cv::minMaxLoc(dets.col(c), &minv, &maxv);
+                qDebug() << "  col" << c << "min" << minv << "max" << maxv;
+            }
+
+            // compute per-row max class score and product with obj
+            vector<float> confidences;
+            confidences.reserve(R);
+            int cnt_gt_01 = 0, cnt_gt_05 = 0, cnt_gt_001 = 0;
+            for (int r = 0; r < R; ++r) {
+                const float* row = dets.ptr<float>(r);
+                // assume first 4 are xywh, index 4 is obj, remaining are class scores
+                float obj = (C > 4) ? row[4] : 1.0f;
+                float maxCls = 0.0f;
+                for (int cc = 5; cc < C; ++cc) {
+                    if (row[cc] > maxCls) maxCls = row[cc];
+                }
+                float conf = obj * maxCls;
+                confidences.push_back(conf);
+                if (maxCls > 0.1f) cnt_gt_01++;
+                if (maxCls > 0.5f) cnt_gt_05++;
+                if (maxCls > 0.001f) cnt_gt_001++;
+            }
+            // top 5 confidences
+            vector<float> sorted = confidences;
+            sort(sorted.begin(), sorted.end(), greater<float>());
+            int showN = min((int)sorted.size(), 10);
+            QString topstr = "top confidences:";
+            for (int i = 0; i < showN; ++i) topstr += QString::number(sorted[i],'g',6)+",";
+            qDebug() << topstr;
+            qDebug() << "counts: >0.001=" << cnt_gt_001 << " >0.1=" << cnt_gt_01 << " >0.5=" << cnt_gt_05;
+        }
+
         // now call PostProcess expecting dets where each row is candidate vector
         vector<DetectionResult> dr = PostProcess(frame, dets);
         results = dr;
