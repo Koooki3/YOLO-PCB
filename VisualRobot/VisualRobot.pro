@@ -31,7 +31,8 @@ SOURCES += \
     YOLOExample.cpp \
     YOLOProcessor.cpp \
     Undistort.cpp \
-    DefectDetection.cpp
+    DefectDetection.cpp \
+    FeatureAlignment.cpp
 
 HEADERS += \
     DIP.h \
@@ -44,7 +45,8 @@ HEADERS += \
     mainwindow.h \
     DLExample.h \
     Undistort.h \
-    DefectDetection.h
+    DefectDetection.h \
+    FeatureAlignment.h
 
 FORMS += \
     mainwindow.ui
