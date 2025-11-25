@@ -35,6 +35,15 @@ public:
     Mat ResizeWithAspectRatio(const Mat& input, int targetSize);
     
     // 通用预处理方法（YOLO 专用预处理已迁移到独立模块）
+    // YOLO 专用预处理方法（由 DLProcessor/YOLO 代码调用）
+    Mat PreprocessForYOLO(const Mat& input, Size targetSize);
+    Mat Letterbox(const Mat& input, Size targetSize, Scalar color = Scalar(114,114,114));
+    Mat NormalizeYOLOInput(const Mat& input);
+
+    // 获取YOLO预处理参数
+    vector<float> GetYoloScaleRatio() const;
+    vector<float> GetYoloFillPadding() const;
+    Size GetYoloInputSize() const;
     
     // 特征提取方法
     Mat ExtractHOGFeatures(const Mat& input);
@@ -59,6 +68,10 @@ private:
     FeatureType currentFeatureType_;
     
     // YOLO 相关参数已移除（由 YOLOProcessor 管理）
+    // YOLO 相关成员（在.cpp中使用并初始化）
+    Size yoloInputSize_;
+    vector<float> ratio_;    // 缩放比例 x,y
+    vector<float> dw_dh_;    // 填充宽高 (dw, dh)
     
     // 初始化特征检测器
     void InitializeDetectors();
