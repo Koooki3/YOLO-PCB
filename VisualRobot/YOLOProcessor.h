@@ -52,7 +52,6 @@ private:
 
     // helpers
     vector<DetectionResult> PostProcess(const Mat& frame, const Mat& outputs);
-    void DrawDetectionResults(Mat& frame, const vector<DetectionResult>& results);
 };
 
 #endif // YOLOPROCESSOR_H
