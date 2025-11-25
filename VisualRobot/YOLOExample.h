@@ -25,6 +25,7 @@ public:
 private slots:
     void BrowseModel();
     void LoadModel();
+    void LoadLabels();
     void SelectImage();
     void RunDetect();
     void OnProcessingComplete(const cv::Mat& resultImage);
@@ -36,10 +37,12 @@ private:
 
     YOLOProcessorORT* yoloProcessor_;
     QLineEdit* modelPathEdit_;
+    QLineEdit* labelPathEdit_;
     QLabel* statusLabel_;
     QLabel* imageLabel_;
     QPushButton* detectBtn_;
     QString currentImagePath_;
+    QStringList currentClassLabels_;
 };
 
 #endif // YOLOEXAMPLE_H
