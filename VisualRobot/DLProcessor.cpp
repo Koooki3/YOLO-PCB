@@ -56,11 +56,20 @@ void DLProcessor::EnableYOLOMode(bool enable)
         // YOLO模式下使用合适的参数
         confThreshold_ = 0.5f;  // 适度调整置信度阈值
         nmsThreshold_ = 0.45f;  // 适度的NMS阈值
+
+        if (inputSize_.empty())
+        {
+            inputSize_ = Size(640, 640);
+        }
     } else {
         qDebug() << "YOLO模式已禁用 - 将使用标准预处理和后处理";
     }
     
     qDebug() << "当前参数 - 置信度阈值:" << confThreshold_ << ", NMS阈值:" << nmsThreshold_;
+    if (enable)
+    {
+        qDebug() << "YOLO输入尺寸: " << inputSize_.width << "x" << inputSize_.height;
+    }
 }
 
 bool DLProcessor::InitModel(const string& modelPath, const string& configPath)
@@ -111,6 +120,19 @@ bool DLProcessor::InitModel(const string& modelPath, const string& configPath)
             qDebug() << "Configuring for ONNX model compatibility";
             // 对于YOLO ONNX模型，确保输入尺寸正确设置
             // 这里可以根据需要添加更多针对ONNX模型的特殊处理
+            qDebug() << "Configuring for ONNX model compatibility with concat layer fix";
+
+            if (inputSize_.empty())
+            {
+                inputSize_ = Size(640, 640);
+                qDebug() << "Auto-setting default ONNX input size to 640*640";
+            }
+            else
+            {
+                qDebug() << "Using configured ONNX input size: " << inputSize_.width << "x" << inputSize_.height;
+            }
+
+            qDebug() << "ONNX model configured - fix will be applied during preprocessing";
         }
 
         isModelLoaded_ = true;
@@ -332,12 +354,16 @@ Mat DLProcessor::PreProcess(const Mat& frame)
         if (useYOLOPreprocessing_ && dataProcessor_)
         {
             qDebug() << "使用YOLO专用预处理";
+            if (inputSize_.empty())
+            {
+                inputSize_ = Size(640, 640);
+            }
             
             // 使用DataProcessor的YOLO预处理方法
             Mat yoloProcessed = dataProcessor_->PreprocessForYOLO(frame, inputSize_);
             
             // 创建blob - 使用OpenCV DNN的标准方法
-            dnn::blobFromImage(yoloProcessed, blob, 1.0, Size(), Scalar(), swapRB_, false, CV_32F);
+            dnn::blobFromImage(yoloProcessed, blob, 1.0, inputSize_, Scalar(0,0,0), true, false, CV_32F);
         }
         else
         {
@@ -396,11 +422,22 @@ bool DLProcessor::DetectObjects(const Mat& frame, vector<DetectionResult>& resul
         {
             qDebug() << "保存YOLO预处理参数用于后处理";
             // 预处理参数已经在DataProcessor中设置，我们可以在后处理中获取
+            if (inputSize_.empty())
+            {
+                inputSize_ = Size(640,640);
+            }
         }
 
         // 前向传播
+        qDebug() << "Prepare for forward - Blob shape: " << blob.size[0] << "x" << blob.size[1] << "x"
+                 << blob.size[2] << "x" << blob.size[3];
+
         net_.setInput(blob);
-        net_.forward(outs, net_.getUnconnectedOutLayersNames());
+        vector<string> outNames = net_.getUnconnectedOutLayersNames();
+        qDebug() << "Output Layers count: " << outNames.size();
+
+        net_.forward(outs, outNames);
+        qDebug() << "Forward complete, outputs count: " << outs.size();
 
         // YOLO后处理 - 包括边界框检测和实例分割
         results = PostProcessYolo(frame, outs, confThreshold_, nmsThreshold_);
@@ -477,8 +514,8 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
     vector<Mat> masks;
 
     // 如果启用YOLO模式，获取预处理参数用于后处理
-    float scaleRatio = 1.0f;
-    float fillPadding = 0.0f;
+    vector<float> scaleRatio = {1.0f, 1.0f};
+    vector<float> fillPadding = {0.0f, 0.0f};
     Size yoloInputSize(640, 640);
     
     if (useYOLOPreprocessing_ && dataProcessor_)
@@ -486,8 +523,8 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
         scaleRatio = dataProcessor_->GetYoloScaleRatio();
         fillPadding = dataProcessor_->GetYoloFillPadding();
         yoloInputSize = dataProcessor_->GetYoloInputSize();
-        qDebug() << "使用YOLO预处理参数: scale=" << scaleRatio << ", fill=" << fillPadding 
-                 << ", input_size=" << yoloInputSize.width << "x" << yoloInputSize.height;
+        qDebug() << "使用YOLO预处理参数: scale=" << scaleRatio[0] << "," << scaleRatio[1] << ", fill=" << fillPadding[0]
+                 << "," << fillPadding[1] << ", input_size=" << yoloInputSize.width << "x" << yoloInputSize.height;
     }
 
     // YOLO模型输出解析 - 参考test-YOLO.py的正确实现
@@ -563,16 +600,16 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
                         float x, y, w, h;
                         
                         // Python中的关键后处理逻辑：先移除填充，再除以缩放比例
-                        x = x_center - fillPadding;  // 移除填充
-                        y = y_center - fillPadding;
+                        x = x_center - fillPadding[0];  // 移除填充
+                        y = y_center - fillPadding[1];
                         w = width;
                         h = height;
                         
                         // 然后除以缩放比例
-                        x /= scaleRatio;
-                        y /= scaleRatio;
-                        w /= scaleRatio;
-                        h /= scaleRatio;
+                        x /= scaleRatio[0];
+                        y /= scaleRatio[1];
+                        w /= scaleRatio[0];
+                        h /= scaleRatio[1];
                         
                         // 转换为左上角坐标和尺寸
                         int left = static_cast<int>(x - w / 2);
@@ -640,16 +677,16 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
                         float x, y, w, h;
                         
                         // Python中的关键后处理逻辑：先移除填充，再除以缩放比例
-                        x = x_center - fillPadding;  // 移除填充
-                        y = y_center - fillPadding;
+                        x = x_center - fillPadding[0];  // 移除填充
+                        y = y_center - fillPadding[1];
                         w = width;
                         h = height;
                         
                         // 然后除以缩放比例
-                        x /= scaleRatio;
-                        y /= scaleRatio;
-                        w /= scaleRatio;
-                        h /= scaleRatio;
+                        x /= scaleRatio[0];
+                        y /= scaleRatio[1];
+                        w /= scaleRatio[0];
+                        h /= scaleRatio[1];
                         
                         // 转换为左上角坐标和尺寸
                         int left = static_cast<int>(x - w / 2);
@@ -710,16 +747,16 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
                             float x, y, w, h;
                             
                             // Python中的关键后处理逻辑：先移除填充，再除以缩放比例
-                            x = x_center - fillPadding;  // 移除填充
-                            y = y_center - fillPadding;
+                            x = x_center - fillPadding[0];  // 移除填充
+                            y = y_center - fillPadding[1];
                             w = width;
                             h = height;
                             
                             // 然后除以缩放比例
-                            x /= scaleRatio;
-                            y /= scaleRatio;
-                            w /= scaleRatio;
-                            h /= scaleRatio;
+                            x /= scaleRatio[0];
+                            y /= scaleRatio[1];
+                            w /= scaleRatio[0];
+                            h /= scaleRatio[1];
                             
                             // 转换为左上角坐标和尺寸
                             int left = static_cast<int>(x - w / 2);
@@ -814,16 +851,16 @@ vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vec
                         if (useYOLOPreprocessing_ && dataProcessor_)
                         {
                             // YOLO模式：使用预处理参数进行坐标转换
-                            x_min = x_min - fillPadding;  // 移除填充
-                            y_min = y_min - fillPadding;
+                            x_min = x_min - fillPadding[0];  // 移除填充
+                            y_min = y_min - fillPadding[1];
                             width = width;
                             height = height;
                             
                             // 然后除以缩放比例
-                            x_min /= scaleRatio;
-                            y_min /= scaleRatio;
-                            width /= scaleRatio;
-                            height /= scaleRatio;
+                            x_min /= scaleRatio[0];
+                            y_min /= scaleRatio[1];
+                            width /= scaleRatio[0];
+                            height /= scaleRatio[1];
                             
                             // 转换为像素坐标
                             left = static_cast<int>(x_min);
