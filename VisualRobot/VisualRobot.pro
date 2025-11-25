@@ -30,6 +30,7 @@ SOURCES += \
     DLExample.cpp \
     YOLOExample.cpp \
     YOLOProcessor.cpp \
+    YOLOProcessorORT.cpp \
     Undistort.cpp \
     DefectDetection.cpp \
     FeatureAlignment.cpp
@@ -40,6 +41,7 @@ HEADERS += \
     DataProcessor.h \
     YOLOProcessor.h \
     YOLOExample.h \
+    YOLOProcessorORT.h \
     MvCamera.h \
     SystemMonitor.h \
     mainwindow.h \
