@@ -87,14 +87,30 @@ vector<Mat> YOLOProcessorORT::OrtOutputToMats(const std::vector<Ort::Value>& out
             }
             mats.push_back(m);
         }
-        // 3D tensors [A,B,C] -> interpret as rows=A, cols=B*C (fallback)
+        // 3D tensors: common patterns:
+        // - [1, C, L] -> interpret as L rows, C cols (e.g., (1,8,8400) -> 8400 x 8)
+        // - [A,B,C] (other) -> fallback to A x (B*C)
         else if (shape.size() == 3) {
             int A = (int)shape[0];
             int B = (int)shape[1];
             int C = (int)shape[2];
-            Mat m(A, B*C, CV_32F);
-            memcpy(m.ptr<float>(), data, elemCount * sizeof(float));
-            mats.push_back(m);
+            if (A == 1) {
+                int rows = C;
+                int cols = B;
+                Mat m(rows, cols, CV_32F);
+                // data layout N(=1), B, C -> index = b*C + c
+                for (int b = 0; b < B; ++b) {
+                    const float* plane = data + (size_t)b * C;
+                    for (int cidx = 0; cidx < C; ++cidx) {
+                        m.at<float>(cidx, b) = plane[cidx];
+                    }
+                }
+                mats.push_back(m);
+            } else {
+                Mat m(A, B*C, CV_32F);
+                memcpy(m.ptr<float>(), data, elemCount * sizeof(float));
+                mats.push_back(m);
+            }
         } else if (shape.size() == 2) {
             int R = (int)shape[0];
             int C = (int)shape[1];
