@@ -456,3 +456,18 @@ Mat DataProcessor::NormalizeYOLOInput(const Mat& input)
     
     return normalized;
 }
+
+vector<float> DataProcessor::GetYoloScaleRatio() const
+{
+    return ratio_;
+}
+
+vector<float> DataProcessor::GetYoloFillPadding() const
+{
+    return dw_dh_;
+}
+
+Size DataProcessor::GetYoloInputSize() const
+{
+    return yoloInputSize_;
+}

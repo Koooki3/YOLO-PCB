@@ -72,7 +72,15 @@ public:
     Size GetInputSize() const { return inputSize_; }
     vector<string> GetClassLabels() const { return classLabels_; }
     bool IsModelLoaded() const { return isModelLoaded_; }
-        bool IsModelLoaded() const { return isModelLoaded_; }
+
+    // 启用/禁用YOLO模式（使用YOLO专用预处理与后处理）
+    void EnableYOLOMode(bool enable);
+
+    // YOLO 目标检测接口
+    bool DetectObjects(const Mat& frame, vector<DetectionResult>& results);
+    bool ProcessYoloFrame(const Mat& frame, Mat& output);
+    vector<DetectionResult> PostProcessYolo(const Mat& frame, const vector<Mat>& outs, float confThreshold, float nmsThreshold);
+    void DrawDetectionResults(Mat& frame, const vector<DetectionResult>& results);
     
     // 设置输入尺寸
     void SetInputSize(const Size& size);
