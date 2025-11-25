@@ -5,7 +5,7 @@
 #include <QLineEdit>
 #include <QLabel>
 #include <QProgressBar>
-#include "YOLOProcessor.h"
+#include "YOLOProcessorORT.h"
 
 QT_BEGIN_NAMESPACE
 class QPushButton;
@@ -34,7 +34,7 @@ private:
     void SetupUI();
     void ConnectSignals();
 
-    YOLOProcessor* yoloProcessor_;
+    YOLOProcessorORT* yoloProcessor_;
     QLineEdit* modelPathEdit_;
     QLabel* statusLabel_;
     QLabel* imageLabel_;
