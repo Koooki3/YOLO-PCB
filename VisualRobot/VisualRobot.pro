@@ -59,6 +59,10 @@ INCLUDEPATH += /usr/local/include \
                /usr/local/include/opencv4 \
                /usr/local/include/opencv4/opencv2
 
+INCLUDEPATH += /home/orangepi/Desktop/VisualRobot_Local/onnxruntime-linux-aarch64-1.23.2/include
+
+LIBS += -L/home/orangepi/Desktop/VisualRobot_Local/onnxruntime-linux-aarch64-1.23.2/lib -lonnxruntime
+
 LIBS += -L/usr/local/lib/ -lopencv_calib3d -lopencv_core -lopencv_dnn -lopencv_features2d \
         -lopencv_flann -lopencv_gapi -lopencv_highgui -lopencv_imgcodecs -lopencv_imgproc \
         -lopencv_ml -lopencv_objdetect -lopencv_photo -lopencv_stitching -lopencv_video \
