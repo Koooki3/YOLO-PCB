@@ -335,11 +335,15 @@ vector<DetectionResult> YOLOProcessorORT::PostProcess(const Mat& frame, const Ma
         float h  = row[3];
         float obj = row[4];
         // find class
-        double maxClassScore = 0; int cls = 0;
+        // Apply sigmoid to objectness and class scores if outputs are logits
+        double maxClassScore = -1e9; int cls = 0;
         for (int c=0;c<nc;++c) {
-            if (row[5+c] > maxClassScore) { maxClassScore = row[5+c]; cls = c; }
+            double raw = row[5+c];
+            double score = 1.0 / (1.0 + exp(-raw));
+            if (score > maxClassScore) { maxClassScore = score; cls = c; }
         }
-        double conf = obj * maxClassScore;
+        double obj_sig = 1.0 / (1.0 + exp(-obj));
+        double conf = obj_sig * maxClassScore;
         if (conf < confThreshold_) continue;
 
         // remove padding, then scale by 1/r to original image
