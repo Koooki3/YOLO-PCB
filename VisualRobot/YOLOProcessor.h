@@ -16,15 +16,17 @@ class YOLOProcessor : public QObject
 {
     Q_OBJECT
 public:
-    YOLOProcessor();
+    explicit YOLOProcessor(QObject* parent = nullptr);
     ~YOLOProcessor();
     
     bool InitModel(const std::string& modelPath, bool useGPU = false);
     std::vector<DetectionResult> DetectObjects(const cv::Mat& frame);
     void DrawDetectionResults(cv::Mat& frame, const std::vector<DetectionResult>& results);
     void SetClassLabels(const std::vector<std::string>& labels);
+    void SetInputSize(const cv::Size& size);
+    void SetThresholds(float conf, float nms);
     
-    bool IsModelLoaded() const { return net_.empty() == false; }
+    bool IsModelLoaded() const { return isModelLoaded_; }
     
 protected:
     std::vector<DetectionResult> PostProcess(const std::vector<cv::Mat>& outputs, const cv::Size& frameSize);
@@ -34,6 +36,11 @@ protected:
     float confThreshold_;  // 不再使用，保留兼容
     float nmsThreshold_;
     std::vector<std::string> classLabels_;
+    bool isModelLoaded_;
+    float scaleFactor_;
+    cv::Size inputSize_;
+    cv::Scalar meanValues_;
+    bool swapRB_;
     
     // 用于缩放边界框
     float letterbox_r_;
@@ -41,7 +48,9 @@ protected:
     float letterbox_dh_;
 
     // helpers
-    // 删除旧的PostProcess函数声明
+    
+signals:
+    void errorOccurred(const QString& message);
 };
 
-#endif // YOLOPROCESSOR_H
+#endif // YOLOPROCESSOR_H

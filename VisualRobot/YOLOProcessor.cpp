@@ -82,7 +82,7 @@ cv::Mat YOLOProcessor::PreProcess(const cv::Mat& frame)
 {
     cv::Mat blob;
     // 创建网络输入blob
-    cv::dnn::blobFromImage(frame, blob, scaleFactor_, inputSize_, meanValues_, swapRB_, false);
+    cv::dnn::blobFromImage(frame, blob, this->scaleFactor_, this->inputSize_, this->meanValues_, this->swapRB_, false);
     return blob;
 }
 
