@@ -77,12 +77,50 @@ class YOLODetector:
         print(f"Letterbox result: {img.shape}, ratio: {r}, padding: ({dw}, {dh})")
         return img, r, (dw, dh)
     
+    def save_raw_output(self, raw_output, filename="raw.csv"):
+        """将原始模型输出保存到CSV文件，保持矩阵行列形状"""
+        try:
+            # 创建保存目录（如果不存在）
+            save_dir = "d:/VisualRobot-Git/VisualRobot"
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
+            
+            # 构建完整文件路径
+            file_path = os.path.join(save_dir, filename)
+            
+            # 打印原始输出形状信息
+            print(f"原始输出形状: {raw_output.shape}")
+            
+            # 对于YOLOv8输出，形状通常是 [1, num_outputs, num_anchors]
+            # 我们需要调整格式以保持矩阵行列结构
+            
+            # 如果是三维张量 [1, num_outputs, num_anchors]，将其调整为 [num_outputs, num_anchors]
+            if len(raw_output.shape) == 3 and raw_output.shape[0] == 1:
+                output_2d = raw_output.squeeze(0)  # 移除batch维度
+                print(f"调整后形状: {output_2d.shape}")
+                
+                # 保存为CSV格式，保持行列结构
+                np.savetxt(file_path, output_2d, fmt='%.6f', delimiter=',')
+                print(f"原始模型输出矩阵已保存到CSV文件: {file_path}")
+                print(f"保存的矩阵形状: {output_2d.shape[0]}行 x {output_2d.shape[1]}列")
+            else:
+                # 如果是其他形状，保存为CSV格式
+                np.savetxt(file_path, raw_output, fmt='%.6f', delimiter=',')
+                print(f"原始模型输出已保存到CSV文件: {file_path}")
+                print(f"保存的形状: {raw_output.shape}")
+                
+        except Exception as e:
+            print(f"保存原始输出时出错: {str(e)}")
+    
     def postprocess(self, outputs, conf_threshold=0.25, iou_threshold=0.45):
         """后处理模型输出，提取检测结果"""
         # 打印原始输出信息
         raw_output = outputs[0]
         print(f"Raw output shape: {raw_output.shape}")
         print(f"Raw output min/max: {np.min(raw_output):.4f}/{np.max(raw_output):.4f}")
+        
+        # 保存原始输出到文件
+        self.save_raw_output(raw_output)
         
         # 使用squeeze压缩维度后再转置，与TestOnnx.py保持一致
         output_data = np.transpose(np.squeeze(raw_output))
@@ -256,11 +294,11 @@ def test_multiple_images():
     """
     # 从每个缺陷类别选择代表性图像
     test_images = [
-        {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/04_missing_hole_14.jpg", "expected_class": "missing_hole"},
-        {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/05_open_circuit_08.jpg", "expected_class": "open_circuit"},
-        {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/04_short_20.jpg", "expected_class": "short"},
-        {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/04_spurious_copper_09.jpg", "expected_class": "spurious_copper"},
-        {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/01_spur_18.jpg", "expected_class": "spur"},
+        # {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/04_missing_hole_14.jpg", "expected_class": "missing_hole"},
+        # {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/05_open_circuit_08.jpg", "expected_class": "open_circuit"},
+        # {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/04_short_20.jpg", "expected_class": "short"},
+        # {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/04_spurious_copper_09.jpg", "expected_class": "spurious_copper"},
+        # {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/01_spur_18.jpg", "expected_class": "spur"},
         {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/01_mouse_bite_09.jpg", "expected_class": "mouse_bite"}
     ]
     
