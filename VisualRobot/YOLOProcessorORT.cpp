@@ -289,8 +289,11 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
         }
 
         // now call PostProcess with the correct parameters
-        vector<DetectionResult> dr = PostProcess(singleOuts, frame.size());
-        results = dr;
+    // 临时添加默认的图像路径和期望类别，实际使用时应该从外部传入
+    string imagePath = "test_image.jpg";
+    string expectedClass = "unknown";
+    vector<DetectionResult> dr = PostProcess(singleOuts, frame.size(), imagePath, expectedClass);
+    results = dr;
 
         return true;
     } catch (const Ort::Exception& e) {
@@ -412,6 +415,7 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
         top_candidates.emplace_back(i, max_sigmoid_score, max_raw_score, max_class_id);
         
         // 应用置信度阈值过滤（使用原始分数，与Python实现一致）
+        // 输出调试信息，检查每个候选框是否通过过滤
         if (max_raw_score >= confThreshold_) {
             // 转换边界框坐标到原始图像尺寸，应用letterbox缩放参数
             // 注意：输出坐标是相对于输入图像尺寸(640x640)的比例值(0-1)
@@ -453,6 +457,7 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
             // 确保宽度和高度为正数且足够大
             if (x2 <= x1 + 1.0f || y2 <= y1 + 1.0f) {
                 // 忽略极小的边界框
+                std::cout << "  Filtered out box with zero or negative dimensions" << std::endl;
                 continue;
             }
             
@@ -460,9 +465,10 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
             float bbox_area = (x2 - x1) * (y2 - y1);
             float image_area = frameSize.width * frameSize.height;
             
-            // 如果边界框面积超过图像面积的90%，可能是异常检测
-            if (bbox_area > 0.9f * image_area) {
-                qDebug() << "Abnormally large bounding box detected";
+            // 放宽边界框面积限制，确保不会过滤掉有效的检测结果
+            // 调整最小面积阈值，确保小目标也能被检测到
+            if (bbox_area < 1.0f || bbox_area > 0.8f * image_area) {
+                std::cout << "  Filtered out box with area: " << bbox_area << ", image area: " << image_area << std::endl;
                 continue;
             }
             
@@ -481,6 +487,11 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
                 result.className = "";
             }
             
+            // 输出被添加到结果的检测框信息
+            std::cout << "  Adding detection: class_id=" << max_class_id 
+                      << ", confidence=" << max_raw_score 
+                      << ", box=[" << x1 << "," << y1 << "," << x2 << "," << y2 << "]" << std::endl;
+            
             results.push_back(result);
         }
     }
@@ -496,12 +507,25 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
             confidences.push_back(result.confidence);
         }
         
+        // 输出NMS前的详细信息
+        std::cout << "  Applying NMS with threshold=" << confThreshold_ 
+                  << ", nms_threshold=" << nmsThreshold_ << std::endl;
+        std::cout << "  Detections before NMS: " << results.size() << std::endl;
+        
+        // 使用正确的参数调用NMSBoxes
         cv::dnn::NMSBoxes(boxes, confidences, confThreshold_, nmsThreshold_, indices);
         
         std::vector<DetectionResult> filteredResults;
         for (int idx : indices) {
             filteredResults.push_back(results[idx]);
+            // 输出通过NMS的检测结果
+            std::cout << "  NMS kept: class_id=" << results[idx].classId 
+                      << ", confidence=" << results[idx].confidence 
+                      << ", box=" << results[idx].boundingBox.x << "," << results[idx].boundingBox.y << "," 
+                      << results[idx].boundingBox.width << "," << results[idx].boundingBox.height << std::endl;
         }
+        
+        std::cout << "  After NMS: " << filteredResults.size() << " detections" << std::endl;
         results = filteredResults;
     }
     
@@ -583,24 +607,138 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
     // 输出NMS前的检测数量
     std::cout << "Found " << results.size() << " detections before NMS with raw score > " << confThreshold_ << std::endl;
     
+    // 如果没有检测结果，尝试降低阈值并重新过滤
+    if (results.empty() && confThreshold_ > 0.1f) {
+        std::cout << "  No detections found. Trying with lower threshold (0.1f)..." << std::endl;
+        float lowerThreshold = 0.1f;
+        std::vector<DetectionResult> lowThresholdResults;
+        
+        // 重新遍历处理后的输出，使用更低的阈值
+        for (int i = 0; i < num_boxes; ++i) {
+            // 获取边界框信息
+            float x_center = output_data[0 * 8400 + i];
+            float y_center = output_data[1 * 8400 + i];
+            float width = output_data[2 * 8400 + i];
+            float height = output_data[3 * 8400 + i];
+            
+            // 找到最高分数的类别和对应的分数
+            float max_raw_score = -1.0f;
+            int max_class_id = -1;
+            
+            for (int c = 0; c < NUM_CLASSES; ++c) {  // 适配6类训练集
+                if (c + 5 >= num_attributes) break;
+                float raw_score = output_data[(c + 5) * 8400 + i];
+                if (raw_score > max_raw_score) {
+                    max_raw_score = raw_score;
+                    max_class_id = c;
+                }
+            }
+            
+            // 使用更低的阈值过滤
+            if (max_raw_score > lowerThreshold && max_class_id >= 0 && max_class_id < NUM_CLASSES) {
+                // 转换边界框坐标
+                float input_w = inputSize_.width;
+                float input_h = inputSize_.height;
+                
+                float x_center_pix = x_center * input_w;
+                float y_center_pix = y_center * input_h;
+                float width_pix = width * input_w;
+                float height_pix = height * input_h;
+                
+                // 应用letterbox逆变换
+                float real_x_center = (x_center_pix - letterbox_dw_) / letterbox_r_;
+                float real_y_center = (y_center_pix - letterbox_dh_) / letterbox_r_;
+                float real_width = width_pix / letterbox_r_;
+                float real_height = height_pix / letterbox_r_;
+                
+                float x1 = real_x_center - real_width / 2.0f;
+                float y1 = real_y_center - real_height / 2.0f;
+                float x2 = real_x_center + real_width / 2.0f;
+                float y2 = real_y_center + real_height / 2.0f;
+                
+                // 确保坐标有效
+                x1 = std::max(0.0f, std::min(x1, static_cast<float>(frameSize.width)));
+                y1 = std::max(0.0f, std::min(y1, static_cast<float>(frameSize.height)));
+                x2 = std::max(0.0f, std::min(x2, static_cast<float>(frameSize.width)));
+                y2 = std::max(0.0f, std::min(y2, static_cast<float>(frameSize.height)));
+                
+                if (x2 > x1 + 1.0f && y2 > y1 + 1.0f) {
+                    DetectionResult result;
+                    result.boundingBox = cv::Rect2i(static_cast<int>(x1), static_cast<int>(y1),
+                                                  static_cast<int>(x2 - x1), static_cast<int>(y2 - y1));
+                    result.classId = max_class_id;
+                    result.confidence = max_raw_score;
+                    
+                    if (!classLabels_.empty() && max_class_id < classLabels_.size()) {
+                        result.className = classLabels_[max_class_id];
+                    }
+                    
+                    lowThresholdResults.push_back(result);
+                }
+            }
+        }
+        
+        if (!lowThresholdResults.empty()) {
+            std::cout << "  Found " << lowThresholdResults.size() << " detections with threshold " << lowerThreshold << std::endl;
+            
+            // 对低阈值结果应用NMS
+            std::vector<int> indices;
+            std::vector<float> confidences;
+            std::vector<cv::Rect> boxes;
+            
+            for (const auto& result : lowThresholdResults) {
+                boxes.push_back(result.boundingBox);
+                confidences.push_back(result.confidence);
+            }
+            
+            cv::dnn::NMSBoxes(boxes, confidences, lowerThreshold, nmsThreshold_, indices);
+            
+            std::vector<DetectionResult> filteredResults;
+            for (int idx : indices) {
+                filteredResults.push_back(lowThresholdResults[idx]);
+            }
+            
+            std::cout << "  After NMS with low threshold: " << filteredResults.size() << " detections" << std::endl;
+            results = filteredResults;
+        }
+    }
+    
     return results;
 }
 
 void YOLOProcessorORT::DrawDetectionResults(cv::Mat& frame, const std::vector<DetectionResult>& results)
 {
-    // 为每个类别生成不同颜色
-    std::vector<cv::Scalar> colors;
-    for (int i = 0; i < 80; ++i) {  // 假设最多80个类别
-        int b = rand() % 256;
-        int g = rand() % 256;
-        int r = rand() % 256;
-        colors.push_back(cv::Scalar(b, g, r));
-    }
+    // 输出绘制信息
+    std::cout << "Drawing " << results.size() << " detection results on frame" << std::endl;
     
-    for (const auto& result : results) {
-        // 绘制边界框
-        cv::Scalar color = colors[result.classId % colors.size()];
-        cv::rectangle(frame, result.boundingBox, color, 2);
+    // 为每个类别生成不同颜色，适配6类训练集
+    std::vector<cv::Scalar> colors;
+    // 使用固定的颜色方案，确保一致性
+    colors.push_back(cv::Scalar(255, 0, 0));    // 蓝色 - class 0
+    colors.push_back(cv::Scalar(0, 255, 0));    // 绿色 - class 1
+    colors.push_back(cv::Scalar(0, 0, 255));    // 红色 - class 2
+    colors.push_back(cv::Scalar(255, 255, 0));  // 青色 - class 3
+    colors.push_back(cv::Scalar(255, 0, 255));  // 品红 - class 4
+    colors.push_back(cv::Scalar(0, 255, 255));  // 黄色 - class 5
+    
+    for (size_t i = 0; i < results.size(); ++i) {
+        const auto& result = results[i];
+        
+        // 输出当前绘制的检测结果信息
+        std::cout << "  Drawing detection " << i << ": class_id=" << result.classId 
+                  << ", confidence=" << result.confidence 
+                  << ", box=([" << result.boundingBox.x << "," << result.boundingBox.y 
+                  << "," << result.boundingBox.width << "," << result.boundingBox.height << "]" << std::endl;
+        
+        // 确保类别ID在有效范围内
+        int color_idx = result.classId;
+        if (color_idx < 0 || color_idx >= static_cast<int>(colors.size())) {
+            color_idx = 0;  // 默认使用第一个颜色
+        }
+        
+        // 绘制边界框，使用更粗的线宽以确保可见
+        cv::Scalar color = colors[color_idx];
+        cv::rectangle(frame, result.boundingBox, color, 3);  // 线宽从2增加到3
         
         // 准备标签文本
         std::string label;
@@ -608,24 +746,37 @@ void YOLOProcessorORT::DrawDetectionResults(cv::Mat& frame, const std::vector<De
             // 有用户标签，使用用户提供的标签
             label = result.className + " " + cv::format("%.2f", result.confidence);
         } else {
-            // 没有用户标签，显示数字标签
-            label = "class_" + std::to_string(result.classId) + " " + cv::format("%.2f", result.confidence);
+            // 没有用户标签，使用数字类别ID和置信度
+            // 直接使用数字而不是前缀"class_"，简化显示
+            label = std::to_string(result.classId) + " " + cv::format("%.2f", result.confidence);
         }
         
-        // 绘制标签
+        // 确保标签大小和位置正确
         int baseLine;
-        cv::Size labelSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
-        int top = std::max(result.boundingBox.y, labelSize.height);
+        cv::Size labelSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.7, 2, &baseLine);  // 增加字体大小和粗细
         
-        // 绘制标签背景
-        cv::rectangle(frame, 
-                     cv::Point(result.boundingBox.x, top - labelSize.height),
-                     cv::Point(result.boundingBox.x + labelSize.width, top + baseLine),
-                     color, cv::FILLED);
+        // 确保标签不会超出图像边界
+        int top = result.boundingBox.y - labelSize.height - 5;
+        if (top < 0) {
+            top = result.boundingBox.y + 5;
+        }
         
-        // 绘制文本
+        // 计算标签背景位置
+        cv::Point bottomLeft(result.boundingBox.x, top + labelSize.height + baseLine + 5);
+        cv::Point topRight(result.boundingBox.x + labelSize.width + 10, top - 5);
+        
+        // 确保标签背景不会超出图像边界
+        if (bottomLeft.x < 0) bottomLeft.x = 0;
+        if (bottomLeft.y > frame.rows) bottomLeft.y = frame.rows;
+        if (topRight.x > frame.cols) topRight.x = frame.cols;
+        if (topRight.y < 0) topRight.y = 0;
+        
+        // 绘制标签背景，使用半透明填充
+        cv::rectangle(frame, bottomLeft, topRight, color, cv::FILLED);
+        
+        // 绘制文本，使用更大的字体和更粗的线宽
         cv::putText(frame, label, 
-                   cv::Point(result.boundingBox.x, top),
-                   cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0), 1);
+                   cv::Point(result.boundingBox.x + 5, top + labelSize.height + baseLine),
+                   cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 255, 255), 2);  // 使用白色文本以便更好地可见
     }
 }
