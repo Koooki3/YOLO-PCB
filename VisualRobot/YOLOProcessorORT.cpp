@@ -370,13 +370,14 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
     // 遍历所有检测框
     for (int i = 0; i < num_boxes; ++i) {
         // 计算在1D数组中的索引
-        // 由于输出形状是[1, 10, 8400]，数据布局为: [batch][attribute][box]
-        // 所以第i个框的第j个属性的索引为: j * 8400 + i
-        float x_center = output_data[0 * 8400 + i];
-        float y_center = output_data[1 * 8400 + i];
-        float width = output_data[2 * 8400 + i];
-        float height = output_data[3 * 8400 + i];
-        float objectness = output_data[4 * 8400 + i];
+        // 注意：与Python实现保持一致，数据布局为[batch][attribute][box]
+        // 但Python中使用了np.transpose(np.squeeze(raw_output))，所以我们需要调整索引计算方式
+        // 第i个框的第j个属性的索引为: i * num_attributes + j
+        float x_center = output_data[i * num_attributes + 0];
+        float y_center = output_data[i * num_attributes + 1];
+        float width = output_data[i * num_attributes + 2];
+        float height = output_data[i * num_attributes + 3];
+        float objectness = output_data[i * num_attributes + 4];
         
         // 找到最高置信度的类别（与Python实现一致，使用原始分数，不需要乘以objectness）
         float max_raw_score = -1.0f;
@@ -390,7 +391,7 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
         
         for (int c = 0; c < NUM_CLASSES; ++c) {  // 适配6类训练集
             if (c + 5 >= num_attributes) break;  // 防止越界
-            float raw_score = output_data[(c + 5) * 8400 + i];  // 原始分数
+            float raw_score = output_data[i * num_attributes + (c + 5)];  // 原始分数，使用新的索引计算方式
             float sigmoid_score = sigmoid(raw_score);  // 应用sigmoid激活
             
             if (raw_score > max_raw_score) {
@@ -616,11 +617,11 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
         
         // 重新遍历处理后的输出，使用更低的阈值
         for (int i = 0; i < num_boxes; ++i) {
-            // 获取边界框信息
-            float x_center = output_data[0 * 8400 + i];
-            float y_center = output_data[1 * 8400 + i];
-            float width = output_data[2 * 8400 + i];
-            float height = output_data[3 * 8400 + i];
+            // 处理低阈值的边界框信息，与主处理逻辑保持一致
+            float x_center = output_data[i * num_attributes + 0];
+            float y_center = output_data[i * num_attributes + 1];
+            float width = output_data[i * num_attributes + 2];
+            float height = output_data[i * num_attributes + 3];
             
             // 找到最高分数的类别和对应的分数
             float max_raw_score = -1.0f;
@@ -628,7 +629,7 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
             
             for (int c = 0; c < NUM_CLASSES; ++c) {  // 适配6类训练集
                 if (c + 5 >= num_attributes) break;
-                float raw_score = output_data[(c + 5) * 8400 + i];
+                float raw_score = output_data[i * num_attributes + (c + 5)];  // 原始分数，使用新的索引计算方式
                 if (raw_score > max_raw_score) {
                     max_raw_score = raw_score;
                     max_class_id = c;

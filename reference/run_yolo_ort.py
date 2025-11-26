@@ -261,7 +261,7 @@ def test_multiple_images():
         {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/04_short_20.jpg", "expected_class": "short"},
         {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/04_spurious_copper_09.jpg", "expected_class": "spurious_copper"},
         {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/01_spur_18.jpg", "expected_class": "spur"},
-        {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/08_mouse_bite_03.jpg", "expected_class": "mouse_bite"}
+        {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/01_mouse_bite_09.jpg", "expected_class": "mouse_bite"}
     ]
     
     print("开始测试6类缺陷图像...")
