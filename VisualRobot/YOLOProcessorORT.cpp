@@ -1,5 +1,12 @@
 #include "YOLOProcessorORT.h"
 #include <QDebug>
+#include <vector>
+#include <opencv2/opencv.hpp>
+#include <onnxruntime_cxx_api.h>
+#include <iostream>
+#include <iomanip>
+#include <numeric>
+#include <tuple>
 
 using namespace std;
 
@@ -297,12 +304,22 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
     }
 }
 
-// reuse PostProcess logic similar to previous YOLOProcessor
-std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort::Value>& outputs, const cv::Size& frameSize)
+// 修改后的PostProcess方法，适配6类训练集，与Python实现相符
+std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort::Value>& outputs, const cv::Size& frameSize, const std::string& imagePath, const std::string& expectedClass)
 {
     std::vector<DetectionResult> results;
     
+    // 输出调试信息
+    std::cout << "图像路径: " << imagePath << std::endl;
+    std::cout << "期望类别: " << expectedClass << std::endl;
+    std::cout << "Original image size: " << frameSize.width << "x" << frameSize.height << std::endl;
+    
+    // 输出letterbox结果信息
+    std::cout << "Letterbox result: (" << inputSize_.width << ", " << inputSize_.height << ", 3), ratio: " << letterbox_r_ 
+              << ", padding: (" << letterbox_dw_ << ", " << letterbox_dh_ << ")" << std::endl;
+    
     if (outputs.empty()) {
+        std::cout << "Empty outputs received" << std::endl;
         return results;
     }
     
@@ -312,60 +329,152 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
     auto tensor_info = output_info.GetTensorTypeAndShapeInfo();
     auto output_shape = tensor_info.GetShape();
     
-    // 假设输出形状为 [batch_size, num_boxes, num_attributes]
-    // num_attributes = 4 (bounding box) + num_classes (class scores)
-    size_t batch_size = output_shape[0];
-    size_t num_boxes = output_shape[1];
-    size_t num_attributes = output_shape[2];
-    size_t num_classes = num_attributes - 4;
+    // 输出原始输出形状
+    std::cout << "Raw output shape: (" << output_shape[0] << ", " << output_shape[1] << ", " << output_shape[2] << ")" << std::endl;
+    
+    // 对于YOLOv8输出，形状应该是 [1, 10, 8400]
+    // 检查是否为3维张量
+    if (output_shape.size() != 3) {
+        std::cout << "Unexpected output shape dimension: " << output_shape.size() << std::endl;
+        return results;
+    }
     
     // 获取输出数据
     const float* output_data = output.GetTensorData<float>();
     
-    for (size_t i = 0; i < num_boxes; ++i) {
-        size_t box_offset = i * num_attributes;
+    // 计算输出数据的最小值和最大值
+    float min_val = std::numeric_limits<float>::max();
+    float max_val = std::numeric_limits<float>::lowest();
+    int total_elements = output_shape[0] * output_shape[1] * output_shape[2];
+    for (int i = 0; i < total_elements; i++) {
+        min_val = std::min(min_val, output_data[i]);
+        max_val = std::max(max_val, output_data[i]);
+    }
+    std::cout << "Raw output min/max: " << min_val << "/" << max_val << std::endl;
+    std::cout << "Processed output shape: (" << 8400 << ", " << 10 << ")" << std::endl << std::endl;
+    
+    // 通过OrtOutputToMats转换后，我们知道数据是8400行10列的矩阵
+    // 其中每一行格式为: x_center, y_center, width, height, objectness, class1, class2, ...
+    int num_boxes = 8400;  // 假设为8400个检测框
+    int num_attributes = 10;  // 对于6类数据集，YOLOv8输出10个属性
+    
+    // 适配6类训练集（与Python实现一致）
+    const int NUM_CLASSES = 6;
+    
+    // 用于存储top10候选结果
+    std::vector<std::tuple<int, float, float, int>> top_candidates; // (index, max_sigmoid_score, raw_score, class_id)
+    
+    // 遍历所有检测框
+    for (int i = 0; i < num_boxes; ++i) {
+        // 计算在1D数组中的索引
+        // 由于输出形状是[1, 10, 8400]，数据布局为: [batch][attribute][box]
+        // 所以第i个框的第j个属性的索引为: j * 8400 + i
+        float x_center = output_data[0 * 8400 + i];
+        float y_center = output_data[1 * 8400 + i];
+        float width = output_data[2 * 8400 + i];
+        float height = output_data[3 * 8400 + i];
+        float objectness = output_data[4 * 8400 + i];
         
-        // 提取边界框坐标
-        float x = output_data[box_offset + 0];
-        float y = output_data[box_offset + 1];
-        float width = output_data[box_offset + 2];
-        float height = output_data[box_offset + 3];
-        
-        // 提取类别原始分数（sigmoid激活前的分数）
+        // 找到最高置信度的类别（与Python实现一致，使用原始分数，不需要乘以objectness）
         float max_raw_score = -1.0f;
+        float max_sigmoid_score = -1.0f;
         int max_class_id = -1;
         
-        for (size_t c = 0; c < num_classes; ++c) {
-            float raw_score = output_data[box_offset + 4 + c];
+        // 对类别分数应用sigmoid激活（与Python实现一致）
+        auto sigmoid = [](float x) {
+            return 1.0f / (1.0f + expf(-x));
+        };
+        
+        for (int c = 0; c < NUM_CLASSES; ++c) {  // 适配6类训练集
+            if (c + 5 >= num_attributes) break;  // 防止越界
+            float raw_score = output_data[(c + 5) * 8400 + i];  // 原始分数
+            float sigmoid_score = sigmoid(raw_score);  // 应用sigmoid激活
+            
             if (raw_score > max_raw_score) {
                 max_raw_score = raw_score;
-                max_class_id = static_cast<int>(c);
+                max_sigmoid_score = sigmoid_score;
+                max_class_id = c;
             }
         }
         
-        // 使用原始分数(max_raw_scores)作为置信度，阈值为0.5
-        if (max_raw_score >= 0.5f) {
-            // 计算实际边界框坐标
-            float x1 = (x - width / 2.0f) * frameSize.width;
-            float y1 = (y - height / 2.0f) * frameSize.height;
-            float x2 = (x + width / 2.0f) * frameSize.width;
-            float y2 = (y + height / 2.0f) * frameSize.height;
+        // 检查是否找到有效类别
+        if (max_class_id < 0) {
+            continue;
+        }
+        
+        // 确保类别ID在有效范围内（适配6类）
+        if (max_class_id >= NUM_CLASSES) {
+            std::cout << "Class ID out of range: " << max_class_id << std::endl;
+            continue;
+        }
+        
+        // 保存到top候选列表
+        top_candidates.emplace_back(i, max_sigmoid_score, max_raw_score, max_class_id);
+        
+        // 应用置信度阈值过滤（使用原始分数，与Python实现一致）
+        if (max_raw_score >= confThreshold_) {
+            // 转换边界框坐标到原始图像尺寸，应用letterbox缩放参数
+            // 注意：输出坐标是相对于输入图像尺寸(640x640)的比例值(0-1)
+            float input_w = inputSize_.width;
+            float input_h = inputSize_.height;
             
-            // 确保边界框在图像范围内
-            x1 = std::max(0.0f, x1);
-            y1 = std::max(0.0f, y1);
-            x2 = std::min(static_cast<float>(frameSize.width - 1), x2);
-            y2 = std::min(static_cast<float>(frameSize.height - 1), y2);
+            // 将比例坐标转换为输入图像上的像素坐标
+            float x_center_pix = x_center * input_w;
+            float y_center_pix = y_center * input_h;
+            float width_pix = width * input_w;
+            float height_pix = height * input_h;
+            
+            // 应用letterbox逆变换，将坐标映射回原始图像
+            // 添加安全检查，避免除零错误
+            if (letterbox_r_ <= 0.0) {
+                qDebug() << "Invalid letterbox ratio: " << letterbox_r_;
+                continue;
+            }
+            
+            // 计算原始图像中的边界框坐标
+            float real_x_center = (x_center_pix - letterbox_dw_) / letterbox_r_;
+            float real_y_center = (y_center_pix - letterbox_dh_) / letterbox_r_;
+            float real_width = width_pix / letterbox_r_;
+            float real_height = height_pix / letterbox_r_;
+            
+            // 计算边界框的左上角和右下角坐标
+            float x1 = real_x_center - real_width / 2.0f;
+            float y1 = real_y_center - real_height / 2.0f;
+            float x2 = real_x_center + real_width / 2.0f;
+            float y2 = real_y_center + real_height / 2.0f;
+            
+            // 确保边界框在原始图像范围内
+            // 修正边界，确保边界框完全在图像内
+            x1 = std::max(0.0f, std::min(x1, static_cast<float>(frameSize.width)));
+            y1 = std::max(0.0f, std::min(y1, static_cast<float>(frameSize.height)));
+            x2 = std::max(0.0f, std::min(x2, static_cast<float>(frameSize.width)));
+            y2 = std::max(0.0f, std::min(y2, static_cast<float>(frameSize.height)));
+            
+            // 确保宽度和高度为正数且足够大
+            if (x2 <= x1 + 1.0f || y2 <= y1 + 1.0f) {
+                // 忽略极小的边界框
+                continue;
+            }
+            
+            // 检查边界框是否超出合理范围
+            float bbox_area = (x2 - x1) * (y2 - y1);
+            float image_area = frameSize.width * frameSize.height;
+            
+            // 如果边界框面积超过图像面积的90%，可能是异常检测
+            if (bbox_area > 0.9f * image_area) {
+                qDebug() << "Abnormally large bounding box detected";
+                continue;
+            }
             
             // 创建检测结果
             DetectionResult result;
-            result.boundingBox = cv::Rect2i(static_cast<int>(x1), static_cast<int>(y1), 
+            result.boundingBox = cv::Rect2i(static_cast<int>(x1), static_cast<int>(y1),
                                           static_cast<int>(x2 - x1), static_cast<int>(y2 - y1));
             result.classId = max_class_id;
-            result.confidence = max_raw_score;  // 使用原始分数作为置信度
+            result.confidence = max_raw_score;  // 使用原始分数作为置信度（与Python一致）
             
             // 分配类别名称（如果有）
-            if (!classLabels_.empty() && max_class_id < classLabels_.size()) {
+            if (!classLabels_.empty() && max_class_id >= 0 && max_class_id < classLabels_.size()) {
                 result.className = classLabels_[max_class_id];
             } else {
                 // 没有用户标签时，使用空字符串，后续DrawDetectionResults会处理显示数字标签
@@ -387,7 +496,7 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
             confidences.push_back(result.confidence);
         }
         
-        cv::dnn::NMSBoxes(boxes, confidences, 0.5f, nmsThreshold_, indices);  // 使用0.5作为NMS置信度阈值
+        cv::dnn::NMSBoxes(boxes, confidences, confThreshold_, nmsThreshold_, indices);
         
         std::vector<DetectionResult> filteredResults;
         for (int idx : indices) {
@@ -395,6 +504,84 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
         }
         results = filteredResults;
     }
+    
+    // 对top候选进行排序并输出
+    std::sort(top_candidates.begin(), top_candidates.end(), 
+              [](const auto& a, const auto& b) { return std::get<1>(a) > std::get<1>(b); });
+    
+    // 输出max sigmoid scores top10
+    std::cout << "\nAnalyzing output structure (using class scores as confidence)..." << std::endl;
+    std::cout << "max sigmoid scores top10: [";
+    for (int i = 0; i < std::min(10, static_cast<int>(top_candidates.size())); i++) {
+        if (i > 0) std::cout << ", ";
+        std::cout << '"' << std::fixed << std::setprecision(6) << std::get<1>(top_candidates[i]) << '"';
+    }
+    std::cout << "]" << std::endl;
+    
+    // 输出对应的class IDs
+    std::cout << "corresponding class IDs: [";
+    for (int i = 0; i < std::min(10, static_cast<int>(top_candidates.size())); i++) {
+        if (i > 0) std::cout << ", ";
+        std::cout << std::get<3>(top_candidates[i]);
+    }
+    std::cout << "]" << std::endl;
+    
+    // 输出max raw scores top10
+    std::cout << "max raw scores top10: [";
+    for (int i = 0; i < std::min(10, static_cast<int>(top_candidates.size())); i++) {
+        if (i > 0) std::cout << ", ";
+        std::cout << '"' << std::fixed << std::setprecision(6) << std::get<2>(top_candidates[i]) << '"';
+    }
+    std::cout << "]" << std::endl;
+    
+    // 计算不同阈值的计数
+    int count_gt_05_raw = 0, count_gt_01_raw = 0, count_gt_005_raw = 0;
+    int count_gt_05_sigmoid = 0, count_gt_01_sigmoid = 0, count_gt_005_sigmoid = 0;
+    
+    for (const auto& candidate : top_candidates) {
+        float sigmoid_score = std::get<1>(candidate);
+        float raw_score = std::get<2>(candidate);
+        
+        if (sigmoid_score > 0.5f) count_gt_05_sigmoid++;
+        if (sigmoid_score > 0.1f) count_gt_01_sigmoid++;
+        if (sigmoid_score > 0.05f) count_gt_005_sigmoid++;
+        
+        if (raw_score > 0.5f) count_gt_05_raw++;
+        if (raw_score > 0.1f) count_gt_01_raw++;
+        if (raw_score > 0.05f) count_gt_005_raw++;
+    }
+    
+    std::cout << "max sigmoid scores count > 0.5: " << count_gt_05_sigmoid << std::endl;
+    std::cout << "max sigmoid scores count > 0.1: " << count_gt_01_sigmoid << std::endl;
+    std::cout << "max sigmoid scores count > 0.05: " << count_gt_005_sigmoid << std::endl;
+    std::cout << "max raw scores count > 0.5: " << count_gt_05_raw << std::endl;
+    std::cout << "max raw scores count > 0.1: " << count_gt_01_raw << std::endl;
+    std::cout << "max raw scores count > 0.05: " << count_gt_005_raw << std::endl;
+    
+    // 输出top候选详细信息
+    std::cout << "\nTop candidates (index, max_sigmoid_score, raw_score, class_id):" << std::endl;
+    for (int i = 0; i < std::min(10, static_cast<int>(top_candidates.size())); i++) {
+        int idx = std::get<0>(top_candidates[i]);
+        float sigmoid_score = std::get<1>(top_candidates[i]);
+        float raw_score = std::get<2>(top_candidates[i]);
+        int class_id = std::get<3>(top_candidates[i]);
+        
+        std::string class_name = "";
+        if (!classLabels_.empty() && class_id >= 0 && class_id < classLabels_.size()) {
+            class_name = classLabels_[class_id];
+        }
+        
+        std::cout << idx << ": max_sigmoid_score=" << std::fixed << std::setprecision(7) << sigmoid_score 
+                  << ", raw_score=" << std::fixed << std::setprecision(7) << raw_score 
+                  << ", class_id=" << class_id;
+        if (!class_name.empty()) {
+            std::cout << ", class_name=" << class_name;
+        }
+        std::cout << std::endl;
+    }
+    
+    // 输出NMS前的检测数量
+    std::cout << "Found " << results.size() << " detections before NMS with raw score > " << confThreshold_ << std::endl;
     
     return results;
 }
