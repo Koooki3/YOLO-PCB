@@ -428,6 +428,12 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
             float width_pix = width * input_w;
             float height_pix = height * input_h;
             
+            // 首先将(cx, cy, w, h)转换为(x1, y1, x2, y2)，与Python实现保持一致的转换顺序
+            float x1_pix = x_center_pix - width_pix / 2.0f;
+            float y1_pix = y_center_pix - height_pix / 2.0f;
+            float x2_pix = x_center_pix + width_pix / 2.0f;
+            float y2_pix = y_center_pix + height_pix / 2.0f;
+            
             // 应用letterbox逆变换，将坐标映射回原始图像
             // 添加安全检查，避免除零错误
             if (letterbox_r_ <= 0.0) {
@@ -436,16 +442,11 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
             }
             
             // 计算原始图像中的边界框坐标
-            float real_x_center = (x_center_pix - letterbox_dw_) / letterbox_r_;
-            float real_y_center = (y_center_pix - letterbox_dh_) / letterbox_r_;
-            float real_width = width_pix / letterbox_r_;
-            float real_height = height_pix / letterbox_r_;
-            
-            // 计算边界框的左上角和右下角坐标
-            float x1 = real_x_center - real_width / 2.0f;
-            float y1 = real_y_center - real_height / 2.0f;
-            float x2 = real_x_center + real_width / 2.0f;
-            float y2 = real_y_center + real_height / 2.0f;
+            // 按照Python实现中的顺序：先转换为角点坐标，再应用letterbox逆变换
+            float x1 = (x1_pix - letterbox_dw_) / letterbox_r_;
+            float y1 = (y1_pix - letterbox_dh_) / letterbox_r_;
+            float x2 = (x2_pix - letterbox_dw_) / letterbox_r_;
+            float y2 = (y2_pix - letterbox_dh_) / letterbox_r_;
             
             // 确保边界框在原始图像范围内
             // 修正边界，确保边界框完全在图像内
