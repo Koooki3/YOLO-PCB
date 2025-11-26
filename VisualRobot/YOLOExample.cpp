@@ -159,12 +159,8 @@ void YOLOExample::RunDetect()
         return;
     }
 
-    vector<DetectionResult> results;
-    bool ok = yoloProcessor_->DetectObjects(img, results);
-    if (!ok) {
-        statusLabel_->setText("状态: 推理失败");
-        return;
-    }
+    // 调用更新后的DetectObjects方法，该方法现在返回检测结果向量
+    std::vector<DetectionResult> results = yoloProcessor_->DetectObjects(img);
 
     // 在图像上绘制
     Mat out = img.clone();

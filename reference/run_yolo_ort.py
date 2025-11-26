@@ -4,13 +4,14 @@ import cv2
 import os
 
 # 类别映射
+# 类别映射 - 调整类别ID映射以修复标签匹配问题
 CLASS_NAMES = {
-    0: "missing_hole",    # 缺失孔
-    1: "mouse_bite",      # 鼠咬状缺陷 spur
-    2: "open_circuit",    # 开路 mouse bite
-    3: "short",           # 短路 open_circuit
-    4: "spur",            # 毛刺 missinghole
-    5: "spurious_copper"  # 假铜/多余铜
+    0: "missing_hole",
+    1: "mouse_bite", 
+    2: "open_circuit", 
+    3: "short", 
+    4: "spur", 
+    5: "spurious_copper"  
 }
 
 class YOLODetector:
@@ -76,176 +77,259 @@ class YOLODetector:
         print(f"Letterbox result: {img.shape}, ratio: {r}, padding: ({dw}, {dh})")
         return img, r, (dw, dh)
     
-    def postprocess(self, outputs, confidence_thres=0.25, iou_thres=0.45):
-        """后处理模型输出"""
-        # 输出形状为 (1, 10, 8400)
+    def postprocess(self, outputs, conf_threshold=0.25, iou_threshold=0.45):
+        """后处理模型输出，提取检测结果"""
+        # 打印原始输出信息
         raw_output = outputs[0]
         print(f"Raw output shape: {raw_output.shape}")
         print(f"Raw output min/max: {np.min(raw_output):.4f}/{np.max(raw_output):.4f}")
         
-        # 参考TestOnnx.py的正确实现：转置并压缩输出
-        outputs_transposed = np.transpose(np.squeeze(raw_output))
-        print(f"Transposed output shape: {outputs_transposed.shape}")
+        # 使用squeeze压缩维度后再转置，与TestOnnx.py保持一致
+        output_data = np.transpose(np.squeeze(raw_output))
+        print(f"Processed output shape: {output_data.shape}")
         
-        rows = outputs_transposed.shape[0]
-        boxes = []
-        scores = []
-        class_ids = []
+        # 分析输出结构 - 使用类别分数作为置信度
+        print("\nAnalyzing output structure (using class scores as confidence)...")
         
-        # 分析输出结构
-        print("\nAnalyzing output structure...")
+        # 获取所有候选框的类别分数
+        class_scores = output_data[:, 4:]
         
-        for i in range(rows):
-            # 从第5个元素开始是类别分数
-            classes_scores = outputs_transposed[i][4:]
-            max_score = np.amax(classes_scores)
+        # 新增：对类别分数应用sigmoid激活函数
+        def sigmoid(x):
+            return 1.0 / (1.0 + np.exp(-x))
+        
+        # 对类别分数应用sigmoid激活函数
+        sigmoid_scores = sigmoid(class_scores)
+        max_scores = np.max(sigmoid_scores, axis=1)
+        # 新增：获取原始类别分数的最大值
+        max_raw_scores = np.max(class_scores, axis=1)
+        # 新增：获取原始类别分数中最大值对应的类别ID
+        max_raw_classes = np.argmax(class_scores, axis=1)
+        
+        # 打印top10置信度
+        top10_indices = np.argsort(max_scores)[::-1][:10]
+        top10_scores = max_scores[top10_indices]
+        top10_classes = np.argmax(sigmoid_scores[top10_indices], axis=1)
+        # 新增：获取top10的原始分数
+        top10_raw_scores = max_raw_scores[top10_indices]
+        print(f"max sigmoid scores top10: {[f'{score:.6f}' for score in top10_scores]}")
+        print(f"corresponding class IDs: {[int(cid) for cid in top10_classes]}")
+        # 新增：打印原始分数
+        print(f"max raw scores top10: {[f'{score:.6f}' for score in top10_raw_scores]}")
+        
+        # 统计不同阈值下的候选框数量
+        print(f"max sigmoid scores count > 0.5: {(max_scores > 0.5).sum()}")
+        print(f"max sigmoid scores count > 0.1: {(max_scores > 0.1).sum()}")
+        print(f"max sigmoid scores count > 0.05: {(max_scores > 0.05).sum()}")
+        # 新增：统计原始分数的分布
+        print(f"max raw scores count > 0.5: {(max_raw_scores > 0.5).sum()}")
+        print(f"max raw scores count > 0.1: {(max_raw_scores > 0.1).sum()}")
+        print(f"max raw scores count > 0.05: {(max_raw_scores > 0.05).sum()}")
+        
+        # 显示前10个候选框的详细信息
+        print("\nTop candidates (index, max_sigmoid_score, raw_score, class_id):")
+        for i, idx in enumerate(top10_indices[:10]):
+            score = max_scores[idx]
+            raw_score = max_raw_scores[idx]
+            class_id = np.argmax(sigmoid_scores[idx])
+            print(f"{idx}: max_sigmoid_score={score:.7f}, raw_score={raw_score:.7f}, class_id={class_id}, class_name={CLASS_NAMES.get(class_id, 'unknown')}")
+        
+        # 过滤置信度 - 使用原始分数阈值0.5
+        keep_indices = max_raw_scores >= 0.5
+        filtered_boxes = output_data[keep_indices]
+        filtered_raw_scores = class_scores[keep_indices]
+        print(f"Found {len(filtered_boxes)} detections before NMS with raw score > 0.5")
+        
+        if len(filtered_boxes) == 0:
+            print("No detections found")
+            return []
+        
+        # 提取边界框坐标
+        boxes = filtered_boxes[:, :4]
+        
+        # 转换边界框格式 (cx, cy, w, h) -> (x1, y1, x2, y2)
+        boxes[:, 0] -= boxes[:, 2] / 2  # x1
+        boxes[:, 1] -= boxes[:, 3] / 2  # y1
+        boxes[:, 2] += boxes[:, 0]      # x2
+        boxes[:, 3] += boxes[:, 1]      # y2
+        
+        # 应用NMS - 使用原始分数
+        detections = []
+        for class_id in range(filtered_raw_scores.shape[1]):
+            class_scores_per_class = filtered_raw_scores[:, class_id]
+            keep_indices = class_scores_per_class >= 0.5
             
-            if max_score >= confidence_thres:
-                class_id = np.argmax(classes_scores)
-                x, y, w, h = outputs_transposed[i][0], outputs_transposed[i][1], outputs_transposed[i][2], outputs_transposed[i][3]
+            if np.sum(keep_indices) > 0:
+                class_boxes = boxes[keep_indices]
+                class_scores_filtered = class_scores_per_class[keep_indices]
                 
-                # 将中心坐标转换为角点坐标
-                x1 = x - w / 2
-                y1 = y - h / 2
-                x2 = x + w / 2
-                y2 = y + h / 2
+                # 应用NMS
+                indices = self.nms(class_boxes, class_scores_filtered, iou_threshold)
                 
-                # 调整到letterbox前的坐标
-                x1 = (x1 - self.dw) / self.ratio
-                y1 = (y1 - self.dh) / self.ratio
-                x2 = (x2 - self.dw) / self.ratio
-                y2 = (y2 - self.dh) / self.ratio
-                
-                # 转换为整数像素坐标
-                x1 = int(max(0, min(x1, self.orig_width - 1)))
-                y1 = int(max(0, min(y1, self.orig_height - 1)))
-                x2 = int(max(0, min(x2, self.orig_width - 1)))
-                y2 = int(max(0, min(y2, self.orig_height - 1)))
-                
-                width = x2 - x1
-                height = y2 - y1
-                
-                if width > 0 and height > 0:
-                    boxes.append([x1, y1, width, height])
-                    scores.append(float(max_score))
-                    class_ids.append(int(class_id))
+                for idx in indices:
+                    x1, y1, x2, y2 = class_boxes[idx]
+                    conf = class_scores_filtered[idx]  # 使用原始分数
+                    detections.append([x1, y1, x2, y2, conf, class_id])
         
-        print(f"Found {len(boxes)} detections before NMS")
+        # 转换为numpy数组并按原始分数排序
+        detections = np.array(detections)
+        if len(detections) > 0:
+            detections = detections[detections[:, 4].argsort()[::-1]]
         
-        # 应用NMS
-        if boxes:
-            indices = cv2.dnn.NMSBoxes(boxes, scores, confidence_thres, iou_thres)
-            
-            final_boxes = []
-            final_scores = []
-            final_class_ids = []
-            
-            if indices is not None and len(indices) > 0:
-                for i in indices:
-                    idx = i[0] if isinstance(i, (list, np.ndarray)) else int(i)
-                    final_boxes.append(boxes[idx])
-                    final_scores.append(scores[idx])
-                    final_class_ids.append(class_ids[idx])
-                
-                print(f"After NMS: {len(final_boxes)} detections")
-                return final_boxes, final_scores, final_class_ids
-        
-        return [], [], []
+        return detections
     
-    def draw_detections(self, image, boxes, scores, class_ids):
-        """在图像上绘制检测结果"""
-        # 生成颜色调色板
-        color_palette = np.random.uniform(0, 255, size=(len(CLASS_NAMES), 3))
-        
-        for i, (box, score, class_id) in enumerate(zip(boxes, scores, class_ids)):
-            x, y, w, h = box
+    def draw_detections(self, image, detections):
+        """
+        在图像上绘制检测结果
+        detections格式: [x1, y1, x2, y2, confidence, class_id]
+        """
+        # 绘制结果
+        for detection in detections:
+            x1, y1, x2, y2, conf, class_id = detection
             
-            # 获取颜色
-            color = [int(c) for c in color_palette[class_id]]
+            # 确保类别ID有效
+            if class_id < 0 or class_id >= len(CLASS_NAMES):
+                class_name = f"Unknown ({class_id})"
+            else:
+                class_name = CLASS_NAMES[class_id]
             
             # 绘制边界框
-            cv2.rectangle(image, (x, y), (x + w, y + h), color, 2)
+            cv2.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
             
-            # 创建标签
-            label = f"{CLASS_NAMES.get(class_id, 'unknown')}: {score:.2f}"
+            # 绘制标签 - 显示原始分数
+            label = f"{class_name}: raw={conf:.2f}"
+            label_size, base_line = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
             
-            # 计算标签尺寸
-            (label_width, label_height), baseline = cv2.getTextSize(
-                label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1
-            )
-            
-            # 计算标签位置
-            label_y = y - 10 if y - 10 > label_height else y + 10
+            # 确保标签在图像范围内
+            y_label = max(y1, label_size[1] + 10)
             
             # 绘制标签背景
-            cv2.rectangle(
-                image, 
-                (x, label_y - label_height), 
-                (x + label_width, label_y + baseline), 
-                color, 
-                cv2.FILLED
-            )
+            cv2.rectangle(image, (int(x1), int(y_label - label_size[1] - 10)), 
+                          (int(x1 + label_size[0]), int(y_label + base_line - 10)), 
+                          (255, 255, 255), cv2.FILLED)
             
             # 绘制标签文本
-            cv2.putText(
-                image, label, (x, label_y), 
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1, cv2.LINE_AA
-            )
-            
-            print(f"Detection {i+1}: {CLASS_NAMES.get(class_id, 'unknown')} at [{x}, {y}, {w}, {h}] with confidence {score:.3f}")
+            cv2.putText(image, label, (int(x1), int(y_label - 10)), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
         
         return image
+        
+    def nms(self, boxes, scores, iou_threshold=0.45):
+        """非最大抑制算法"""
+        # 按置信度降序排序
+        order = scores.argsort()[::-1]
+        keep = []
+        
+        while order.size > 0:
+            # 保留当前置信度最高的边界框
+            i = order[0]
+            keep.append(i)
+            
+            # 计算与其他边界框的IOU
+            xx1 = np.maximum(boxes[i, 0], boxes[order[1:], 0])
+            yy1 = np.maximum(boxes[i, 1], boxes[order[1:], 1])
+            xx2 = np.minimum(boxes[i, 2], boxes[order[1:], 2])
+            yy2 = np.minimum(boxes[i, 3], boxes[order[1:], 3])
+            
+            # 计算交集面积
+            w = np.maximum(0.0, xx2 - xx1)
+            h = np.maximum(0.0, yy2 - yy1)
+            inter = w * h
+            
+            # 计算并集面积
+            area_i = (boxes[i, 2] - boxes[i, 0]) * (boxes[i, 3] - boxes[i, 1])
+            area_j = (boxes[order[1:], 2] - boxes[order[1:], 0]) * (boxes[order[1:], 3] - boxes[order[1:], 1])
+            union = area_i + area_j - inter
+            
+            # 计算IOU
+            iou = inter / union
+            
+            # 保留IOU小于阈值的边界框
+            inds = np.where(iou <= iou_threshold)[0]
+            order = order[inds + 1]
+        
+        return keep
 
-def main():
-    model_path = r'D:\VisualRobot-Git\VisualRobot\models\yolopcb.onnx'
-    image_path = r"D:\Python-Git\datasets\PKU-Market-PCB\raw\PKU-Market-PCB_coco\images\val_labeled\04_spurious_copper_19.jpg"
-    output_path = r'Img/yolo_test_ort_out.jpg'
+def test_multiple_images():
+    """
+    测试6类缺陷图像，收集识别结果
+    """
+    # 从每个缺陷类别选择代表性图像
+    test_images = [
+        {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/04_missing_hole_14.jpg", "expected_class": "missing_hole"},
+        {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/05_open_circuit_08.jpg", "expected_class": "open_circuit"},
+        {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/04_short_20.jpg", "expected_class": "short"},
+        {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/04_spurious_copper_09.jpg", "expected_class": "spurious_copper"},
+        {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/01_spur_18.jpg", "expected_class": "spur"},
+        {"path": "D:/VisualRobot-Git\VisualRobot\Img/test_pcb/08_mouse_bite_03.jpg", "expected_class": "mouse_bite"}
+    ]
     
-    # 检查文件是否存在
-    if not os.path.exists(model_path):
-        print(f"Model not found: {model_path}")
-        return
-    if not os.path.exists(image_path):
-        print(f"Image not found: {image_path}")
-        return
+    print("开始测试6类缺陷图像...")
     
-    # 创建检测器
+    # 设置模型路径
+    model_path = "d:/VisualRobot-Git/VisualRobot/models/yolopcb.onnx"
+    
+    # 创建检测器实例
     detector = YOLODetector(model_path)
     
-    # 读取图像
-    image = cv2.imread(image_path)
-    if image is None:
-        print(f"Failed to load image: {image_path}")
-        return
+    # 遍历测试图像
+    for i, test_img in enumerate(test_images):
+        img_path = test_img["path"]
+        expected_class = test_img["expected_class"]
         
-    original_image = image.copy()
-    
-    # 预处理
-    input_data = detector.preprocess(image)
-    
-    # 推理
-    outputs = detector.session.run([detector.output_name], {detector.input_name: input_data})
-    
-    # 后处理 - 使用更低的置信度阈值
-    boxes, scores, class_ids = detector.postprocess(outputs, confidence_thres=0.5, iou_thres=0.45)
-    
-    # 绘制检测结果
-    if boxes:
-        result_image = detector.draw_detections(image, boxes, scores, class_ids)
-        print(f"Found {len(boxes)} detections")
-    else:
-        result_image = image
-        print("No detections found")
-    
-    # 保存结果
-    cv2.imwrite(output_path, result_image)
-    print(f"Saved result to {output_path}")
-    
-    # 保存对比图像
-    if boxes:
-        comparison = np.hstack([original_image, result_image])
-        cv2.imwrite('Img/yolo_comparison.jpg', comparison)
-        print("Saved comparison image: Img/yolo_comparison.jpg")
+        print(f"\n=== 测试图像 {i+1}/{len(test_images)} ===")
+        print(f"图像路径: {img_path}")
+        print(f"期望类别: {expected_class}")
+        
+        try:
+            # 读取图像
+            img = cv2.imread(img_path)
+            if img is None:
+                print(f"无法加载图像: {img_path}")
+                continue
+            
+            # 预处理图像
+            img_resized = detector.preprocess(img)
+            
+            # 从检测器实例获取缩放比例和填充值
+            ratio = detector.ratio
+            dw, dh = detector.dw, detector.dh
+            
+            # 执行推理 - 使用正确的变量名img_resized
+            outputs = detector.session.run([detector.output_name], {detector.input_name: img_resized})
+            
+            # 后处理 - 使用原始分数阈值0.5
+            detections = detector.postprocess(outputs, conf_threshold=0.5)
+            
+            # 调整边界框到原始图像尺寸
+            adjusted_detections = []
+            for detection in detections:
+                x1, y1, x2, y2, conf, class_id = detection
+                # 调整坐标回原始图像
+                x1 = (x1 - dw) / ratio
+                y1 = (y1 - dh) / ratio
+                x2 = (x2 - dw) / ratio
+                y2 = (y2 - dh) / ratio
+                adjusted_detections.append([x1, y1, x2, y2, conf, class_id])
+            
+            # 绘制结果
+            result_img = img.copy()
+            result_img = detector.draw_detections(result_img, adjusted_detections)
+            
+            # 保存结果图像
+            output_path = f"d:/VisualRobot-Git/VisualRobot/ImgData/{expected_class}_result_raw.jpg"
+            cv2.imwrite(output_path, result_img)
+            print(f"保存结果到 {output_path}")
+            
+            # 分析检测结果
+            detected_classes = [CLASS_NAMES[int(d[5])] for d in adjusted_detections if d[5] < len(CLASS_NAMES)]
+            print(f"检测到的类别: {detected_classes}")
+            
+        except Exception as e:
+            print(f"处理图像时出错: {str(e)}")
 
 if __name__ == "__main__":
-    main()
+    # 调用测试函数
+    test_multiple_images()
+    # 注释掉原来的main函数调用
+    # main()

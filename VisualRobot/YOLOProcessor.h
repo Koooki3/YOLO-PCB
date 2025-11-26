@@ -16,46 +16,32 @@ class YOLOProcessor : public QObject
 {
     Q_OBJECT
 public:
-    explicit YOLOProcessor(QObject* parent = nullptr);
+    YOLOProcessor();
     ~YOLOProcessor();
-
-    // 初始化 ONNX/ONNXRuntime via OpenCV DNN
-    bool InitModel(const string& modelPath, bool useCUDA = false);
-
-    // 检测接口
-    bool DetectObjects(const Mat& frame, vector<DetectionResult>& results);
-
-    // 设置参数
-    void SetInputSize(const Size& size);
-    void SetThresholds(float conf, float nms);
-    void SetClassLabels(const vector<string>& labels);
-
-    bool IsModelLoaded() const { return isModelLoaded_; }
-
-    // 绘制结果（对外公开，方便UI直接调用）
-    void DrawDetectionResults(Mat& frame, const vector<DetectionResult>& results);
-
-signals:
-    void processingComplete(const cv::Mat& resultImage);
-    void errorOccurred(const QString& error);
-
-private:
-    dnn::Net net_;
-    bool isModelLoaded_;
-    Size inputSize_;
-    float confThreshold_;
+    
+    bool InitModel(const std::string& modelPath, bool useGPU = false);
+    std::vector<DetectionResult> DetectObjects(const cv::Mat& frame);
+    void DrawDetectionResults(cv::Mat& frame, const std::vector<DetectionResult>& results);
+    void SetClassLabels(const std::vector<std::string>& labels);
+    
+    bool IsModelLoaded() const { return net_.empty() == false; }
+    
+protected:
+    std::vector<DetectionResult> PostProcess(const std::vector<cv::Mat>& outputs, const cv::Size& frameSize);
+    cv::Mat PreProcess(const cv::Mat& frame);
+    
+    cv::dnn::Net net_;
+    float confThreshold_;  // 不再使用，保留兼容
     float nmsThreshold_;
-    double scaleFactor_;
-    Scalar meanValues_;
-    bool swapRB_;
-    vector<string> classLabels_;
-    // letterbox params (stored during preprocess)
-    double letterbox_r_;
-    double letterbox_dw_;
-    double letterbox_dh_;
+    std::vector<std::string> classLabels_;
+    
+    // 用于缩放边界框
+    float letterbox_r_;
+    float letterbox_dw_;
+    float letterbox_dh_;
 
     // helpers
-    vector<DetectionResult> PostProcess(const Mat& frame, const Mat& outputs);
+    // 删除旧的PostProcess函数声明
 };
 
-#endif // YOLOPROCESSOR_H
+#endif // YOLOPROCESSOR_H
