@@ -298,147 +298,147 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
 }
 
 // reuse PostProcess logic similar to previous YOLOProcessor
-vector<DetectionResult> YOLOProcessorORT::PostProcess(const Mat& frame, const Mat& dets)
+std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort::Value>& outputs, const cv::Size& frameSize)
 {
-    vector<DetectionResult> detections;
-    if (dets.empty()) return detections;
-
-    Mat dets2 = dets;
-    // if dets is single row with long vector, try to reshape
-    if (dets2.dims == 2 && dets2.cols < 6 && dets2.rows == 1) {
-        return detections;
+    std::vector<DetectionResult> results;
+    
+    if (outputs.empty()) {
+        return results;
     }
-
-    int nc = dets2.cols - 5;
-    if (nc <= 0) return detections;
-
-    vector<Rect> boxes;
-    vector<float> scores;
-    vector<int> classIds;
-
-    // use letterbox params to map from model space -> original image
-    double r = letterbox_r_;
-    double dw = letterbox_dw_;
-    double dh = letterbox_dh_;
-
-    // First pass: compute per-row candidate confidences using both sigmoid and softmax strategies
-    int R = dets2.rows;
-    vector<double> conf_sig_all; conf_sig_all.resize(R);
-    vector<double> conf_soft_all; conf_soft_all.resize(R);
-    vector<int> cls_sig_all(R, 0);
-    vector<int> cls_soft_all(R, 0);
-    vector<double> obj_sig_all(R, 0.0);
-
-    for (int i = 0; i < R; ++i) {
-        const float* row = dets2.ptr<float>(i);
-        double obj = (double)row[4];
-        // build class raw vector
-        vector<double> class_raw(nc);
-        for (int c=0;c<nc;++c) class_raw[c] = (double)row[5+c];
-
-        // sigmoid class probs
-        double max_sig = -1.0; int cls_sig = 0;
-        for (int c=0;c<nc;++c) {
-            double p = 1.0 / (1.0 + exp(-class_raw[c]));
-            if (p > max_sig) { max_sig = p; cls_sig = c; }
-        }
-
-        // softmax class probs
-        double ssum = 0.0;
-        for (int c=0;c<nc;++c) ssum += exp(class_raw[c]);
-        double max_soft = -1.0; int cls_soft = 0;
-        if (ssum > 0) {
-            for (int c=0;c<nc;++c) {
-                double p = exp(class_raw[c]) / ssum;
-                if (p > max_soft) { max_soft = p; cls_soft = c; }
+    
+    // 获取第一个输出的维度信息
+    const Ort::Value& output = outputs[0];
+    auto output_info = output.GetTypeInfo();
+    auto tensor_info = output_info.GetTensorTypeAndShapeInfo();
+    auto output_shape = tensor_info.GetShape();
+    
+    // 假设输出形状为 [batch_size, num_boxes, num_attributes]
+    // num_attributes = 4 (bounding box) + num_classes (class scores)
+    size_t batch_size = output_shape[0];
+    size_t num_boxes = output_shape[1];
+    size_t num_attributes = output_shape[2];
+    size_t num_classes = num_attributes - 4;
+    
+    // 获取输出数据
+    const float* output_data = output.GetTensorData<float>();
+    
+    for (size_t i = 0; i < num_boxes; ++i) {
+        size_t box_offset = i * num_attributes;
+        
+        // 提取边界框坐标
+        float x = output_data[box_offset + 0];
+        float y = output_data[box_offset + 1];
+        float width = output_data[box_offset + 2];
+        float height = output_data[box_offset + 3];
+        
+        // 提取类别原始分数（sigmoid激活前的分数）
+        float max_raw_score = -1.0f;
+        int max_class_id = -1;
+        
+        for (size_t c = 0; c < num_classes; ++c) {
+            float raw_score = output_data[box_offset + 4 + c];
+            if (raw_score > max_raw_score) {
+                max_raw_score = raw_score;
+                max_class_id = static_cast<int>(c);
             }
-        } else {
-            max_soft = max_sig; cls_soft = cls_sig;
         }
-
-        double obj_sig = 1.0 / (1.0 + exp(-obj));
-
-        conf_sig_all[i] = obj_sig * max_sig;
-        conf_soft_all[i] = obj_sig * max_soft;
-        cls_sig_all[i] = cls_sig;
-        cls_soft_all[i] = cls_soft;
-        obj_sig_all[i] = obj_sig;
+        
+        // 使用原始分数(max_raw_scores)作为置信度，阈值为0.5
+        if (max_raw_score >= 0.5f) {
+            // 计算实际边界框坐标
+            float x1 = (x - width / 2.0f) * frameSize.width;
+            float y1 = (y - height / 2.0f) * frameSize.height;
+            float x2 = (x + width / 2.0f) * frameSize.width;
+            float y2 = (y + height / 2.0f) * frameSize.height;
+            
+            // 确保边界框在图像范围内
+            x1 = std::max(0.0f, x1);
+            y1 = std::max(0.0f, y1);
+            x2 = std::min(static_cast<float>(frameSize.width - 1), x2);
+            y2 = std::min(static_cast<float>(frameSize.height - 1), y2);
+            
+            // 创建检测结果
+            DetectionResult result;
+            result.boundingBox = cv::Rect2i(static_cast<int>(x1), static_cast<int>(y1), 
+                                          static_cast<int>(x2 - x1), static_cast<int>(y2 - y1));
+            result.classId = max_class_id;
+            result.confidence = max_raw_score;  // 使用原始分数作为置信度
+            
+            // 分配类别名称（如果有）
+            if (!classLabels_.empty() && max_class_id < classLabels_.size()) {
+                result.className = classLabels_[max_class_id];
+            } else {
+                // 没有用户标签时，使用空字符串，后续DrawDetectionResults会处理显示数字标签
+                result.className = "";
+            }
+            
+            results.push_back(result);
+        }
     }
-
-    // compare top-N averages to choose global decoding strategy
-    int topN = std::min(50, (int)R);
-    auto avg_top = [&](vector<double>& arr) {
-        vector<double> s = arr;
-        sort(s.begin(), s.end(), greater<double>());
-        double sum = 0.0;
-        for (int k=0;k<topN && k<(int)s.size();++k) sum += s[k];
-        return (topN>0) ? sum / topN : 0.0;
-    };
-    double avg_sig_top = avg_top(conf_sig_all);
-    double avg_soft_top = avg_top(conf_soft_all);
-    const char* chosen_method = (avg_soft_top > avg_sig_top * 1.05) ? "softmax" : "sigmoid";
-    qDebug() << "Decoding strategy chosen:" << chosen_method << "avg_sig_top=" << avg_sig_top << "avg_soft_top=" << avg_soft_top;
-
-    // Second pass: filter using chosen method
-    for (int i = 0; i < R; ++i) {
-        const float* row = dets2.ptr<float>(i);
-        float cx = row[0];
-        float cy = row[1];
-        float w  = row[2];
-        float h  = row[3];
-
-        double conf = (strcmp(chosen_method, "softmax") == 0) ? conf_soft_all[i] : conf_sig_all[i];
-        if (conf < confThreshold_) continue;
-
-        int chosen_cls = (strcmp(chosen_method, "softmax") == 0) ? cls_soft_all[i] : cls_sig_all[i];
-
-        // remove padding, then scale by 1/r to original image
-        double x = (cx - dw) / r;
-        double y = (cy - dh) / r;
-        double ww = w / r;
-        double hh = h / r;
-
-        int x1 = int(x - ww/2.0);
-        int y1 = int(y - hh/2.0);
-        int boxw = int(ww);
-        int boxh = int(hh);
-
-        boxes.emplace_back(x1, y1, boxw, boxh);
-        scores.emplace_back((float)conf);
-        classIds.emplace_back(chosen_cls);
+    
+    // 应用NMS
+    if (!results.empty()) {
+        std::vector<int> indices;
+        std::vector<float> confidences;
+        std::vector<cv::Rect> boxes;
+        
+        for (const auto& result : results) {
+            boxes.push_back(result.boundingBox);
+            confidences.push_back(result.confidence);
+        }
+        
+        cv::dnn::NMSBoxes(boxes, confidences, 0.5f, nmsThreshold_, indices);  // 使用0.5作为NMS置信度阈值
+        
+        std::vector<DetectionResult> filteredResults;
+        for (int idx : indices) {
+            filteredResults.push_back(results[idx]);
+        }
+        results = filteredResults;
     }
-
-    vector<int> idxs;
-    dnn::NMSBoxes(boxes, scores, confThreshold_, nmsThreshold_, idxs);
-    for (int id : idxs) {
-        DetectionResult dr;
-        dr.classId = classIds[id];
-        dr.confidence = scores[id];
-        if (dr.classId >=0 && dr.classId < (int)classLabels_.size()) dr.className = classLabels_[dr.classId];
-        // clip box to image
-        Rect clipped = boxes[id] & Rect(0,0,frame.cols, frame.rows);
-        dr.boundingBox = clipped;
-        detections.push_back(dr);
-    }
-
-    return detections;
+    
+    return results;
 }
 
-void YOLOProcessorORT::DrawDetectionResults(Mat& frame, const vector<DetectionResult>& results)
+void YOLOProcessorORT::DrawDetectionResults(cv::Mat& frame, const std::vector<DetectionResult>& results)
 {
-    for (const auto& r : results) {
-        Scalar color = (r.classId==0)? Scalar(0,255,0) : Scalar(0,0,255);
-        rectangle(frame, r.boundingBox, color, 2);
-        std::ostringstream oss;
-        oss.setf(std::ios::fixed); oss.precision(2);
-        string cname = r.className.empty() ? string("class_") + std::to_string(r.classId) : r.className;
-        oss << cname << ":" << r.confidence;
-        string lbl = oss.str();
-        int baseLine=0;
-        Size tsize = getTextSize(lbl, FONT_HERSHEY_SIMPLEX, 0.6, 1, &baseLine);
-        int tx = max(r.boundingBox.x, 0);
-        int ty = max(r.boundingBox.y - tsize.height - 4, 0);
-        rectangle(frame, Point(tx, ty), Point(tx+tsize.width, ty+tsize.height+4), color, FILLED);
-        putText(frame, lbl, Point(tx, ty+tsize.height), FONT_HERSHEY_SIMPLEX, 0.6, Scalar(255,255,255), 1);
+    // 为每个类别生成不同颜色
+    std::vector<cv::Scalar> colors;
+    for (int i = 0; i < 80; ++i) {  // 假设最多80个类别
+        int b = rand() % 256;
+        int g = rand() % 256;
+        int r = rand() % 256;
+        colors.push_back(cv::Scalar(b, g, r));
+    }
+    
+    for (const auto& result : results) {
+        // 绘制边界框
+        cv::Scalar color = colors[result.classId % colors.size()];
+        cv::rectangle(frame, result.boundingBox, color, 2);
+        
+        // 准备标签文本
+        std::string label;
+        if (!result.className.empty()) {
+            // 有用户标签，使用用户提供的标签
+            label = result.className + " " + cv::format("%.2f", result.confidence);
+        } else {
+            // 没有用户标签，显示数字标签
+            label = "class_" + std::to_string(result.classId) + " " + cv::format("%.2f", result.confidence);
+        }
+        
+        // 绘制标签
+        int baseLine;
+        cv::Size labelSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
+        int top = std::max(result.boundingBox.y, labelSize.height);
+        
+        // 绘制标签背景
+        cv::rectangle(frame, 
+                     cv::Point(result.boundingBox.x, top - labelSize.height),
+                     cv::Point(result.boundingBox.x + labelSize.width, top + baseLine),
+                     color, cv::FILLED);
+        
+        // 绘制文本
+        cv::putText(frame, label, 
+                   cv::Point(result.boundingBox.x, top),
+                   cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0), 1);
     }
 }
