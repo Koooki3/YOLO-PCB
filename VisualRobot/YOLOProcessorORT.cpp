@@ -321,54 +321,76 @@ vector<DetectionResult> YOLOProcessorORT::PostProcess(const Mat& frame, const Ma
     double dw = letterbox_dw_;
     double dh = letterbox_dh_;
 
-    for (int i = 0; i < dets2.rows; ++i) {
-        const float* row = dets2.ptr<float>(i);
-        float cx = row[0];
-        float cy = row[1];
-        float w  = row[2];
-        float h  = row[3];
-        float obj = row[4];
-        // find class
-        // Robustly decode logits/probabilities: compute sigmoid and softmax and choose best
-        vector<double> class_raw;
-        class_raw.reserve(nc);
-        for (int c=0;c<nc;++c) class_raw.push_back((double)row[5+c]);
+    // First pass: compute per-row candidate confidences using both sigmoid and softmax strategies
+    int R = dets2.rows;
+    vector<double> conf_sig_all; conf_sig_all.resize(R);
+    vector<double> conf_soft_all; conf_soft_all.resize(R);
+    vector<int> cls_sig_all(R, 0);
+    vector<int> cls_soft_all(R, 0);
+    vector<double> obj_sig_all(R, 0.0);
 
-        // sigmoid probabilities
-        vector<double> class_sig(nc);
+    for (int i = 0; i < R; ++i) {
+        const float* row = dets2.ptr<float>(i);
+        double obj = (double)row[4];
+        // build class raw vector
+        vector<double> class_raw(nc);
+        for (int c=0;c<nc;++c) class_raw[c] = (double)row[5+c];
+
+        // sigmoid class probs
         double max_sig = -1.0; int cls_sig = 0;
         for (int c=0;c<nc;++c) {
-            class_sig[c] = 1.0 / (1.0 + exp(-class_raw[c]));
-            if (class_sig[c] > max_sig) { max_sig = class_sig[c]; cls_sig = c; }
+            double p = 1.0 / (1.0 + exp(-class_raw[c]));
+            if (p > max_sig) { max_sig = p; cls_sig = c; }
         }
 
-        // softmax probabilities
-        vector<double> class_soft(nc);
-        double max_soft = -1.0; int cls_soft = 0;
+        // softmax class probs
         double ssum = 0.0;
         for (int c=0;c<nc;++c) ssum += exp(class_raw[c]);
+        double max_soft = -1.0; int cls_soft = 0;
         if (ssum > 0) {
             for (int c=0;c<nc;++c) {
-                class_soft[c] = exp(class_raw[c]) / ssum;
-                if (class_soft[c] > max_soft) { max_soft = class_soft[c]; cls_soft = c; }
+                double p = exp(class_raw[c]) / ssum;
+                if (p > max_soft) { max_soft = p; cls_soft = c; }
             }
         } else {
             max_soft = max_sig; cls_soft = cls_sig;
         }
 
-        // objectness
         double obj_sig = 1.0 / (1.0 + exp(-obj));
 
-        // choose which class decoding to use: prefer softmax if it produces noticeably higher peak
-        double chosen_max = max_sig;
-        int chosen_cls = cls_sig;
-        const char* method = "sigmoid";
-        if (max_soft > max_sig + 0.1) {
-            chosen_max = max_soft; chosen_cls = cls_soft; method = "softmax";
-        }
+        conf_sig_all[i] = obj_sig * max_sig;
+        conf_soft_all[i] = obj_sig * max_soft;
+        cls_sig_all[i] = cls_sig;
+        cls_soft_all[i] = cls_soft;
+        obj_sig_all[i] = obj_sig;
+    }
 
-        double conf = obj_sig * chosen_max;
+    // compare top-N averages to choose global decoding strategy
+    int topN = std::min(50, (int)R);
+    auto avg_top = [&](vector<double>& arr) {
+        vector<double> s = arr;
+        sort(s.begin(), s.end(), greater<double>());
+        double sum = 0.0;
+        for (int k=0;k<topN && k<(int)s.size();++k) sum += s[k];
+        return (topN>0) ? sum / topN : 0.0;
+    };
+    double avg_sig_top = avg_top(conf_sig_all);
+    double avg_soft_top = avg_top(conf_soft_all);
+    const char* chosen_method = (avg_soft_top > avg_sig_top * 1.05) ? "softmax" : "sigmoid";
+    qDebug() << "Decoding strategy chosen:" << chosen_method << "avg_sig_top=" << avg_sig_top << "avg_soft_top=" << avg_soft_top;
+
+    // Second pass: filter using chosen method
+    for (int i = 0; i < R; ++i) {
+        const float* row = dets2.ptr<float>(i);
+        float cx = row[0];
+        float cy = row[1];
+        float w  = row[2];
+        float h  = row[3];
+
+        double conf = (strcmp(chosen_method, "softmax") == 0) ? conf_soft_all[i] : conf_sig_all[i];
         if (conf < confThreshold_) continue;
+
+        int chosen_cls = (strcmp(chosen_method, "softmax") == 0) ? cls_soft_all[i] : cls_sig_all[i];
 
         // remove padding, then scale by 1/r to original image
         double x = (cx - dw) / r;
@@ -409,7 +431,8 @@ void YOLOProcessorORT::DrawDetectionResults(Mat& frame, const vector<DetectionRe
         rectangle(frame, r.boundingBox, color, 2);
         std::ostringstream oss;
         oss.setf(std::ios::fixed); oss.precision(2);
-        oss << r.className << ":" << r.confidence;
+        string cname = r.className.empty() ? string("class_") + std::to_string(r.classId) : r.className;
+        oss << cname << ":" << r.confidence;
         string lbl = oss.str();
         int baseLine=0;
         Size tsize = getTextSize(lbl, FONT_HERSHEY_SIMPLEX, 0.6, 1, &baseLine);

@@ -205,23 +205,22 @@ vector<DetectionResult> YOLOProcessor::PostProcess(const Mat& frame, const Mat& 
     double dw = letterbox_dw_;
     double dh = letterbox_dh_;
 
-    for (int i = 0; i < dets.rows; ++i) {
+    // Adaptive decode: compute both sigmoid and softmax based confidences globally, then choose best
+    int R = dets.rows;
+    vector<double> conf_sig_all(R, 0.0), conf_soft_all(R, 0.0);
+    vector<int> cls_sig_all(R, 0), cls_soft_all(R, 0);
+    for (int i = 0; i < R; ++i) {
         const float* row = dets.ptr<float>(i);
-        float cx = row[0];
-        float cy = row[1];
-        float w  = row[2];
-        float h  = row[3];
-        float obj = row[4];
-        // Robust decode: consider sigmoid and softmax on class scores
+        double obj = (double)row[4];
         vector<double> class_raw(nc);
         for (int c=0;c<nc;++c) class_raw[c] = (double)row[5+c];
-        // sigmoid
+        // sigmoid best
         double max_sig = -1.0; int cls_sig = 0;
         for (int c=0;c<nc;++c) {
             double p = 1.0 / (1.0 + exp(-class_raw[c]));
             if (p > max_sig) { max_sig = p; cls_sig = c; }
         }
-        // softmax
+        // softmax best
         double ssum = 0.0;
         for (int c=0;c<nc;++c) ssum += exp(class_raw[c]);
         double max_soft = -1.0; int cls_soft = 0;
@@ -231,14 +230,36 @@ vector<DetectionResult> YOLOProcessor::PostProcess(const Mat& frame, const Mat& 
                 if (p > max_soft) { max_soft = p; cls_soft = c; }
             }
         } else { max_soft = max_sig; cls_soft = cls_sig; }
-
         double obj_sig = 1.0 / (1.0 + exp(-obj));
-        double chosen_max = max_sig; int chosen_cls = cls_sig;
-        if (max_soft > max_sig + 0.1) { chosen_max = max_soft; chosen_cls = cls_soft; }
-        double conf = obj_sig * chosen_max;
+        conf_sig_all[i] = obj_sig * max_sig;
+        conf_soft_all[i] = obj_sig * max_soft;
+        cls_sig_all[i] = cls_sig;
+        cls_soft_all[i] = cls_soft;
+    }
+    // choose by comparing avg of top-k
+    int topN = min(50, R);
+    auto avg_top = [&](vector<double>& arr){
+        vector<double> s = arr; sort(s.begin(), s.end(), greater<double>());
+        double sum = 0; for (int k=0;k<topN && k<(int)s.size(); ++k) sum += s[k];
+        return topN>0 ? sum/topN : 0.0;
+    };
+    double avg_sig_top = avg_top(conf_sig_all);
+    double avg_soft_top = avg_top(conf_soft_all);
+    bool use_soft = (avg_soft_top > avg_sig_top * 1.05);
+    qDebug() << "YOLOProcessor decode choose softmax=" << use_soft << " avg_sig=" << avg_sig_top << " avg_soft=" << avg_soft_top;
+
+    // Second pass: filter using chosen method and build boxes
+    for (int i = 0; i < R; ++i) {
+        const float* row = dets.ptr<float>(i);
+        float cx = row[0];
+        float cy = row[1];
+        float w  = row[2];
+        float h  = row[3];
+
+        double conf = use_soft ? conf_soft_all[i] : conf_sig_all[i];
         if (conf < confThreshold_) continue;
 
-        int cls = chosen_cls;
+        int chosen_cls = use_soft ? cls_soft_all[i] : cls_sig_all[i];
 
         // convert center x,y,w,h (in model input coords) -> corner coords in original image
         double x = (cx - dw) / r;
@@ -252,7 +273,7 @@ vector<DetectionResult> YOLOProcessor::PostProcess(const Mat& frame, const Mat& 
 
         boxes.emplace_back(x1, y1, boxw, boxh);
         scores.emplace_back((float)conf);
-        classIds.emplace_back(cls);
+        classIds.emplace_back(chosen_cls);
     }
 
     // NMS
@@ -275,10 +296,11 @@ void YOLOProcessor::DrawDetectionResults(Mat& frame, const vector<DetectionResul
     for (const auto& r : results) {
         Scalar color = (r.classId==0)? Scalar(0,255,0) : Scalar(0,0,255);
         rectangle(frame, r.boundingBox, color, 2);
-        // show confidence as decimal with two digits
+        // show confidence as decimal with two digits, fallback to numeric class id if name missing
         std::ostringstream oss;
         oss.setf(std::ios::fixed); oss.precision(2);
-        oss << r.className << ":" << r.confidence;
+        string cname = r.className.empty() ? string("class_") + std::to_string(r.classId) : r.className;
+        oss << cname << ":" << r.confidence;
         string lbl = oss.str();
         int baseLine=0;
         Size tsize = getTextSize(lbl, FONT_HERSHEY_SIMPLEX, 0.6, 1, &baseLine);
