@@ -229,7 +229,7 @@ if __name__ == "__main__":
     # 创建参数解析器以处理命令行参数
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, default=r"D:\VisualRobot-Git\VisualRobot\models\yolopcb.onnx", help="输入你的 ONNX 模型路径。")
-    parser.add_argument("--img", type=str, default=r"D:\VisualRobot-Git\VisualRobot\Img\04_missing_hole_04.jpg", help="输入图像的路径。")
+    parser.add_argument("--img", type=str, default=r"D:\Python-Git\datasets\PKU-Market-PCB\raw\PKU-Market-PCB_coco\images\val_labeled\04_spurious_copper_19.jpg", help="输入图像的路径。")
     parser.add_argument("--conf-thres", type=float, default=0.5, help="置信度阈值")
     parser.add_argument("--iou-thres", type=float, default=0.45, help="NMS IoU 阈值")
     args = parser.parse_args()

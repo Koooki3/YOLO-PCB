@@ -49,6 +49,10 @@ private:
     Scalar meanValues_;
     bool swapRB_;
     vector<string> classLabels_;
+    // letterbox params (stored during preprocess)
+    double letterbox_r_;
+    double letterbox_dw_;
+    double letterbox_dh_;
 
     // helpers
     vector<DetectionResult> PostProcess(const Mat& frame, const Mat& outputs);

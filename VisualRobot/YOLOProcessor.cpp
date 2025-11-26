@@ -73,7 +73,31 @@ bool YOLOProcessor::DetectObjects(const Mat& frame, vector<DetectionResult>& res
 
     Mat blob;
     try {
-        dnn::blobFromImage(frame, blob, scaleFactor_, inputSize_, meanValues_, swapRB_, false);
+        // Preprocess using letterbox to keep aspect ratio (match Python behavior)
+        int orig_w = frame.cols;
+        int orig_h = frame.rows;
+        int target_w = inputSize_.width;
+        int target_h = inputSize_.height;
+        double r = std::min((double)target_w / orig_w, (double)target_h / orig_h);
+        int new_unpad_w = (int)round(orig_w * r);
+        int new_unpad_h = (int)round(orig_h * r);
+        int dw = target_w - new_unpad_w;
+        int dh = target_h - new_unpad_h;
+        int top = int(round(dh / 2.0));
+        int bottom = dh - top;
+        int left = int(round(dw / 2.0));
+        int right = dw - left;
+        Mat resized;
+        if (orig_w != new_unpad_w || orig_h != new_unpad_h) cv::resize(frame, resized, Size(new_unpad_w, new_unpad_h));
+        else resized = frame.clone();
+        Mat padded;
+        copyMakeBorder(resized, padded, top, bottom, left, right, BORDER_CONSTANT, Scalar(114,114,114));
+        // store letterbox params
+        letterbox_r_ = r;
+        letterbox_dw_ = dw / 2.0;
+        letterbox_dh_ = dh / 2.0;
+
+        dnn::blobFromImage(padded, blob, scaleFactor_, inputSize_, meanValues_, swapRB_, false);
         net_.setInput(blob);
         vector<Mat> outs;
         net_.forward(outs, net_.getUnconnectedOutLayersNames());
@@ -176,8 +200,10 @@ vector<DetectionResult> YOLOProcessor::PostProcess(const Mat& frame, const Mat& 
     vector<float> scores;
     vector<int> classIds;
 
-    float gain_x = (float)frame.cols / inputSize_.width;
-    float gain_y = (float)frame.rows / inputSize_.height;
+    // map from model space (letterbox padded input) back to original image using stored letterbox params
+    double r = letterbox_r_;
+    double dw = letterbox_dw_;
+    double dh = letterbox_dh_;
 
     for (int i = 0; i < dets.rows; ++i) {
         const float* row = dets.ptr<float>(i);
@@ -197,11 +223,15 @@ vector<DetectionResult> YOLOProcessor::PostProcess(const Mat& frame, const Mat& 
 
         int cls = classIdPoint.x;
 
-        // Convert xywh (center) -> x1y1w h in original image scale
-        int x1 = int((cx - w/2.0) * gain_x);
-        int y1 = int((cy - h/2.0) * gain_y);
-        int boxw = int(w * gain_x);
-        int boxh = int(h * gain_y);
+        // convert center x,y,w,h (in model input coords) -> corner coords in original image
+        double x = (cx - dw) / r;
+        double y = (cy - dh) / r;
+        double ww = w / r;
+        double hh = h / r;
+        int x1 = int(x - ww/2.0);
+        int y1 = int(y - hh/2.0);
+        int boxw = int(ww);
+        int boxh = int(hh);
 
         boxes.emplace_back(x1, y1, boxw, boxh);
         scores.emplace_back((float)conf);
