@@ -282,7 +282,7 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
         }
 
         // now call PostProcess with the correct parameters
-        vector<DetectionResult> dr = PostProcess(outputs, frame.size());
+        vector<DetectionResult> dr = PostProcess(singleOuts, frame.size());
         results = dr;
 
         return true;
