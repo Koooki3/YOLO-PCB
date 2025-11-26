@@ -183,7 +183,10 @@ void YOLOExample::RunDetect()
     QJsonArray detArray;
     for (const auto &d : results) {
         QJsonObject obj;
-        obj["class"] = QString::fromStdString(d.className);
+        // include numeric class id and a fallback class name if labels weren't loaded
+        obj["class_id"] = d.classId;
+        QString clsName = d.className.empty() ? QString("class_%1").arg(d.classId) : QString::fromStdString(d.className);
+        obj["class"] = clsName;
         obj["confidence"] = d.confidence;
         QJsonArray bbox;
         int x1 = d.boundingBox.x;
