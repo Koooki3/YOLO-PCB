@@ -212,16 +212,33 @@ vector<DetectionResult> YOLOProcessor::PostProcess(const Mat& frame, const Mat& 
         float w  = row[2];
         float h  = row[3];
         float obj = row[4];
-        // find class with max score
-        Mat scoresRow(1, nc, CV_32F);
-        for (int c=0;c<nc;++c) scoresRow.at<float>(0,c) = row[5+c];
-        Point classIdPoint;
-        double maxClassScore;
-        minMaxLoc(scoresRow, 0, &maxClassScore, 0, &classIdPoint);
-        double conf = obj * maxClassScore;
+        // Robust decode: consider sigmoid and softmax on class scores
+        vector<double> class_raw(nc);
+        for (int c=0;c<nc;++c) class_raw[c] = (double)row[5+c];
+        // sigmoid
+        double max_sig = -1.0; int cls_sig = 0;
+        for (int c=0;c<nc;++c) {
+            double p = 1.0 / (1.0 + exp(-class_raw[c]));
+            if (p > max_sig) { max_sig = p; cls_sig = c; }
+        }
+        // softmax
+        double ssum = 0.0;
+        for (int c=0;c<nc;++c) ssum += exp(class_raw[c]);
+        double max_soft = -1.0; int cls_soft = 0;
+        if (ssum > 0) {
+            for (int c=0;c<nc;++c) {
+                double p = exp(class_raw[c]) / ssum;
+                if (p > max_soft) { max_soft = p; cls_soft = c; }
+            }
+        } else { max_soft = max_sig; cls_soft = cls_sig; }
+
+        double obj_sig = 1.0 / (1.0 + exp(-obj));
+        double chosen_max = max_sig; int chosen_cls = cls_sig;
+        if (max_soft > max_sig + 0.1) { chosen_max = max_soft; chosen_cls = cls_soft; }
+        double conf = obj_sig * chosen_max;
         if (conf < confThreshold_) continue;
 
-        int cls = classIdPoint.x;
+        int cls = chosen_cls;
 
         // convert center x,y,w,h (in model input coords) -> corner coords in original image
         double x = (cx - dw) / r;
@@ -258,7 +275,11 @@ void YOLOProcessor::DrawDetectionResults(Mat& frame, const vector<DetectionResul
     for (const auto& r : results) {
         Scalar color = (r.classId==0)? Scalar(0,255,0) : Scalar(0,0,255);
         rectangle(frame, r.boundingBox, color, 2);
-        string lbl = r.className + ":" + to_string((int)(r.confidence*100)) + "%";
+        // show confidence as decimal with two digits
+        std::ostringstream oss;
+        oss.setf(std::ios::fixed); oss.precision(2);
+        oss << r.className << ":" << r.confidence;
+        string lbl = oss.str();
         int baseLine=0;
         Size tsize = getTextSize(lbl, FONT_HERSHEY_SIMPLEX, 0.6, 1, &baseLine);
         int tx = max(r.boundingBox.x, 0);
