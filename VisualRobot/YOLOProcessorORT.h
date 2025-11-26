@@ -51,8 +51,10 @@ private:
     double letterbox_dh_;
 
     vector<Mat> OrtOutputToMats(const std::vector<Ort::Value>& outputs);
-    // 使用基于max_raw_scores的置信度策略
-    std::vector<DetectionResult> PostProcess(const std::vector<Ort::Value>& outputs, const cv::Size& frameSize);
+    
+    // 处理ONNX输出，生成检测结果，使用基于max_raw_scores的置信度策略
+    std::vector<DetectionResult> PostProcess(const std::vector<Ort::Value>& outputs, const cv::Size& frameSize, 
+                                            const std::string& imagePath = "", const std::string& expectedClass = "");
 };
 
 #endif // YOLOPROCESSORORT_H
