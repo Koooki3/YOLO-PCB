@@ -167,9 +167,10 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
         copyMakeBorder(resized, padded, top, bottom, left, right, BORDER_CONSTANT, Scalar(114,114,114));
 
         // store letterbox params for postprocess
+        // store dw/dh as float half-padding (before integer rounding) to match Python letterbox
         letterbox_r_ = r;
-        letterbox_dw_ = left;
-        letterbox_dh_ = top;
+        letterbox_dw_ = dw / 2.0; // half padding as float
+        letterbox_dh_ = dh / 2.0;
         qDebug() << "letterbox r, dw, dh:" << letterbox_r_ << letterbox_dw_ << letterbox_dh_;
 
         Mat rgb;
@@ -218,8 +219,10 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
             qDebug() << "  output" << oi << s;
         }
 
-        // convert outputs to mats (each mat: rows = H*W, cols = C)
-        auto mats = OrtOutputToMats(outputTensors);
+        // convert FIRST output to mat (mimic TestOnnx.py behavior)
+        std::vector<Ort::Value> singleOuts;
+        singleOuts.push_back(outputTensors[0]);
+        auto mats = OrtOutputToMats(singleOuts);
 
         // debug: print first few values of first mat
         if (!mats.empty()) {
@@ -233,19 +236,9 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
             }
         }
 
-        // merge mats into dets: vertical concat (rows are candidates, cols=C)
+        // Use only the first output's mat (this matches TestOnnx.py / run_yolo_ort.py)
         Mat dets;
-        if (!mats.empty()) {
-            dets = mats[0];
-            for (size_t i = 1; i < mats.size(); ++i) {
-                if (mats[i].cols == dets.cols) {
-                    vconcat(dets, mats[i], dets);
-                } else {
-                    // fallback: try to reshape mats[i] to have same cols if possible
-                    vconcat(dets, mats[i], dets);
-                }
-            }
-        }
+        if (!mats.empty()) dets = mats[0];
 
         // Debug: print column-wise stats and confidence distribution
         if (!dets.empty()) {
