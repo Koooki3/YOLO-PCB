@@ -159,8 +159,13 @@ void YOLOExample::RunDetect()
         return;
     }
 
-    // 调用更新后的DetectObjects方法，该方法现在返回检测结果向量
-    std::vector<DetectionResult> results = yoloProcessor_->DetectObjects(img);
+    // 调用DetectObjects方法，使用引用参数获取结果
+    std::vector<DetectionResult> results;
+    bool success = yoloProcessor_->DetectObjects(img, results);
+    if (!success) {
+        qDebug() << "Object detection failed";
+        return;
+    }
 
     // 在图像上绘制
     Mat out = img.clone();

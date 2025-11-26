@@ -281,8 +281,8 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
             qDebug() << "counts: >0.001=" << cnt_gt_001 << " >0.1=" << cnt_gt_01 << " >0.5=" << cnt_gt_05;
         }
 
-        // now call PostProcess expecting dets where each row is candidate vector
-        vector<DetectionResult> dr = PostProcess(frame, dets);
+        // now call PostProcess with the correct parameters
+        vector<DetectionResult> dr = PostProcess(outputs, frame.size());
         results = dr;
 
         return true;
