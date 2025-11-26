@@ -519,92 +519,88 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
         std::cout << "  No detections found. Trying with lower threshold (0.1f)..." << std::endl;
         float lowerThreshold = 0.1f;
         std::vector<DetectionResult> lowThresholdResults;
-        
-        // 重新遍历处理后的输出，使用更低的阈值
-        for (int i = 0; i < num_boxes; ++i) {
-            // 处理低阈值的边界框信息，与主处理逻辑保持一致
-            float x_center = output_data[i * num_attributes + 0];
-            float y_center = output_data[i * num_attributes + 1];
-            float width = output_data[i * num_attributes + 2];
-            float height = output_data[i * num_attributes + 3];
-            
-            // 找到最高分数的类别和对应的分数
-            float max_raw_score = -1.0f;
+
+        // num_attributes / num_boxes 对应当前输出布局
+        int num_attributes = rows; // e.g., 10
+        int num_boxes = cols;      // e.g., 8400
+
+        // 使用 get_val(row, col) 访问以避免错误的索引计算
+        for (int c = 0; c < num_boxes; ++c) {
+            float x_center = get_val(0, c);
+            float y_center = get_val(1, c);
+            float width = get_val(2, c);
+            float height = get_val(3, c);
+
+            float max_raw_score = -std::numeric_limits<float>::infinity();
             int max_class_id = -1;
-            
-            for (int c = 0; c < NUM_CLASSES; ++c) {  // 适配6类训练集
-                if (c + 5 >= num_attributes) break;
-                float raw_score = output_data[i * num_attributes + (c + 5)];  // 原始分数，使用新的索引计算方式
+            for (int k = 0; k < NUM_CLASSES; ++k) {
+                float raw_score = get_val(4 + k, c);
                 if (raw_score > max_raw_score) {
                     max_raw_score = raw_score;
-                    max_class_id = c;
+                    max_class_id = k;
                 }
             }
-            
-            // 使用更低的阈值过滤
+
             if (max_raw_score > lowerThreshold && max_class_id >= 0 && max_class_id < NUM_CLASSES) {
-                // 转换边界框坐标
                 float input_w = inputSize_.width;
                 float input_h = inputSize_.height;
-                
+
                 float x_center_pix = x_center * input_w;
                 float y_center_pix = y_center * input_h;
                 float width_pix = width * input_w;
                 float height_pix = height * input_h;
-                
-                // 应用letterbox逆变换
+
                 float real_x_center = (x_center_pix - letterbox_dw_) / letterbox_r_;
                 float real_y_center = (y_center_pix - letterbox_dh_) / letterbox_r_;
                 float real_width = width_pix / letterbox_r_;
                 float real_height = height_pix / letterbox_r_;
-                
+
                 float x1 = real_x_center - real_width / 2.0f;
                 float y1 = real_y_center - real_height / 2.0f;
                 float x2 = real_x_center + real_width / 2.0f;
                 float y2 = real_y_center + real_height / 2.0f;
-                
-                // 确保坐标有效
+
                 x1 = std::max(0.0f, std::min(x1, static_cast<float>(frameSize.width)));
                 y1 = std::max(0.0f, std::min(y1, static_cast<float>(frameSize.height)));
                 x2 = std::max(0.0f, std::min(x2, static_cast<float>(frameSize.width)));
                 y2 = std::max(0.0f, std::min(y2, static_cast<float>(frameSize.height)));
-                
+
                 if (x2 > x1 + 1.0f && y2 > y1 + 1.0f) {
                     DetectionResult result;
                     result.boundingBox = cv::Rect2i(static_cast<int>(x1), static_cast<int>(y1),
                                                   static_cast<int>(x2 - x1), static_cast<int>(y2 - y1));
                     result.classId = max_class_id;
                     result.confidence = max_raw_score;
-                    
+
                     if (!classLabels_.empty() && max_class_id < classLabels_.size()) {
                         result.className = classLabels_[max_class_id];
                     }
-                    
+
                     lowThresholdResults.push_back(result);
                 }
             }
         }
-        
+
         if (!lowThresholdResults.empty()) {
             std::cout << "  Found " << lowThresholdResults.size() << " detections with threshold " << lowerThreshold << std::endl;
-            
+
             // 对低阈值结果应用NMS
             std::vector<int> indices;
             std::vector<float> confidences;
             std::vector<cv::Rect> boxes;
-            
+
             for (const auto& result : lowThresholdResults) {
                 boxes.push_back(result.boundingBox);
                 confidences.push_back(result.confidence);
             }
-            
+
             cv::dnn::NMSBoxes(boxes, confidences, lowerThreshold, nmsThreshold_, indices);
-            
+
             std::vector<DetectionResult> filteredResults;
             for (int idx : indices) {
                 filteredResults.push_back(lowThresholdResults[idx]);
             }
-            
+
             std::cout << "  After NMS with low threshold: " << filteredResults.size() << " detections" << std::endl;
             results = filteredResults;
         }
