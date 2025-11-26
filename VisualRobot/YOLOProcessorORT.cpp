@@ -221,7 +221,8 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
 
         // convert FIRST output to mat (mimic TestOnnx.py behavior)
         std::vector<Ort::Value> singleOuts;
-        singleOuts.push_back(outputTensors[0]);
+        // Ort::Value is move-only; avoid copy by moving the element into the new vector
+        singleOuts.emplace_back(std::move(outputTensors[0]));
         auto mats = OrtOutputToMats(singleOuts);
 
         // debug: print first few values of first mat
@@ -328,15 +329,45 @@ vector<DetectionResult> YOLOProcessorORT::PostProcess(const Mat& frame, const Ma
         float h  = row[3];
         float obj = row[4];
         // find class
-        // Apply sigmoid to objectness and class scores if outputs are logits
-        double maxClassScore = -1e9; int cls = 0;
+        // Robustly decode logits/probabilities: compute sigmoid and softmax and choose best
+        vector<double> class_raw;
+        class_raw.reserve(nc);
+        for (int c=0;c<nc;++c) class_raw.push_back((double)row[5+c]);
+
+        // sigmoid probabilities
+        vector<double> class_sig(nc);
+        double max_sig = -1.0; int cls_sig = 0;
         for (int c=0;c<nc;++c) {
-            double raw = row[5+c];
-            double score = 1.0 / (1.0 + exp(-raw));
-            if (score > maxClassScore) { maxClassScore = score; cls = c; }
+            class_sig[c] = 1.0 / (1.0 + exp(-class_raw[c]));
+            if (class_sig[c] > max_sig) { max_sig = class_sig[c]; cls_sig = c; }
         }
+
+        // softmax probabilities
+        vector<double> class_soft(nc);
+        double max_soft = -1.0; int cls_soft = 0;
+        double ssum = 0.0;
+        for (int c=0;c<nc;++c) ssum += exp(class_raw[c]);
+        if (ssum > 0) {
+            for (int c=0;c<nc;++c) {
+                class_soft[c] = exp(class_raw[c]) / ssum;
+                if (class_soft[c] > max_soft) { max_soft = class_soft[c]; cls_soft = c; }
+            }
+        } else {
+            max_soft = max_sig; cls_soft = cls_sig;
+        }
+
+        // objectness
         double obj_sig = 1.0 / (1.0 + exp(-obj));
-        double conf = obj_sig * maxClassScore;
+
+        // choose which class decoding to use: prefer softmax if it produces noticeably higher peak
+        double chosen_max = max_sig;
+        int chosen_cls = cls_sig;
+        const char* method = "sigmoid";
+        if (max_soft > max_sig + 0.1) {
+            chosen_max = max_soft; chosen_cls = cls_soft; method = "softmax";
+        }
+
+        double conf = obj_sig * chosen_max;
         if (conf < confThreshold_) continue;
 
         // remove padding, then scale by 1/r to original image
@@ -352,7 +383,7 @@ vector<DetectionResult> YOLOProcessorORT::PostProcess(const Mat& frame, const Ma
 
         boxes.emplace_back(x1, y1, boxw, boxh);
         scores.emplace_back((float)conf);
-        classIds.emplace_back(cls);
+        classIds.emplace_back(chosen_cls);
     }
 
     vector<int> idxs;
@@ -376,7 +407,10 @@ void YOLOProcessorORT::DrawDetectionResults(Mat& frame, const vector<DetectionRe
     for (const auto& r : results) {
         Scalar color = (r.classId==0)? Scalar(0,255,0) : Scalar(0,0,255);
         rectangle(frame, r.boundingBox, color, 2);
-        string lbl = r.className + ":" + to_string((int)(r.confidence*100)) + "%";
+        std::ostringstream oss;
+        oss.setf(std::ios::fixed); oss.precision(2);
+        oss << r.className << ":" << r.confidence;
+        string lbl = oss.str();
         int baseLine=0;
         Size tsize = getTextSize(lbl, FONT_HERSHEY_SIMPLEX, 0.6, 1, &baseLine);
         int tx = max(r.boundingBox.x, 0);
