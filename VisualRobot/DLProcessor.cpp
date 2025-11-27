@@ -22,7 +22,6 @@ DLProcessor::DLProcessor(QObject *parent)
     , isModelLoaded_(false)
     , isQuantized_(false)
     , quantizationType_("")
-    , useYOLOPreprocessing_(false)
 {
     // 初始化DataProcessor实例
     dataProcessor_ = make_unique<DataProcessor>(this);
@@ -37,39 +36,14 @@ DLProcessor::~DLProcessor()
 
 void DLProcessor::InitDefaultParams()
 {
-    // 初始化默认参数 - 调整为适合YOLO模型的参数
-    inputSize_ = Size(640, 640);                // YOLOv8默认输入尺寸
-    meanValues_ = Scalar(0.0, 0.0, 0.0);        // YOLO通常使用0均值
-    scaleFactor_ = 1.0 / 255.0;                 // YOLO通常使用1/255归一化
-    swapRB_ = true;                             // OpenCV默认BGR，YOLO需要RGB
+    // 初始化默认参数 - 适合二分类模型的参数
+    inputSize_ = Size(224, 224);                // 通用分类模型默认输入尺寸
+    meanValues_ = Scalar(0.0, 0.0, 0.0);        // 通用均值设置
+    scaleFactor_ = 1.0 / 255.0;                 // 归一化因子
+    swapRB_ = true;                             // OpenCV默认BGR，模型通常需要RGB
 
     // 默认二分类标签
     classLabels_ = {"Class_0", "Class_1"};
-}
-
-void DLProcessor::EnableYOLOMode(bool enable)
-{
-    useYOLOPreprocessing_ = enable;
-    
-    if (enable) {
-        qDebug() << "YOLO模式已启用 - 将使用YOLO专用预处理和后处理";
-        // YOLO模式下使用合适的参数
-        confThreshold_ = 0.5f;  // 适度调整置信度阈值
-        nmsThreshold_ = 0.45f;  // 适度的NMS阈值
-
-        if (inputSize_.empty())
-        {
-            inputSize_ = Size(640, 640);
-        }
-    } else {
-        qDebug() << "YOLO模式已禁用 - 将使用标准预处理和后处理";
-    }
-    
-    qDebug() << "当前参数 - 置信度阈值:" << confThreshold_ << ", NMS阈值:" << nmsThreshold_;
-    if (enable)
-    {
-        qDebug() << "YOLO输入尺寸: " << inputSize_.width << "x" << inputSize_.height;
-    }
 }
 
 bool DLProcessor::InitModel(const string& modelPath, const string& configPath)
@@ -125,11 +99,6 @@ bool DLProcessor::InitModel(const string& modelPath, const string& configPath)
             if (inputSize_.empty())
             {
                 inputSize_ = Size(640, 640);
-                qDebug() << "Auto-setting default ONNX input size to 640*640";
-            }
-            else
-            {
-                qDebug() << "Using configured ONNX input size: " << inputSize_.width << "x" << inputSize_.height;
             }
 
             qDebug() << "ONNX model configured - fix will be applied during preprocessing";
@@ -268,7 +237,7 @@ bool DLProcessor::ClassifyImage(const Mat& frame, ClassificationResult& result)
         }
 
         return result.isValid;
-    }
+    } 
     catch (const Exception& e) 
     {
         qDebug() << "Error classifying image:" << QString::fromStdString(e.msg);
@@ -350,36 +319,16 @@ Mat DLProcessor::PreProcess(const Mat& frame)
     {
         qDebug() << "预处理开始 - 输入图像尺寸:" << frame.cols << "x" << frame.rows;
         
-        // 检查是否使用YOLO预处理
-        if (useYOLOPreprocessing_ && dataProcessor_)
+        // 转换颜色空间 (如果需要) 
+        Mat processedFrame = frame;
+        if (frame.channels() == 1 && inputSize_.width > 0) 
         {
-            qDebug() << "使用YOLO专用预处理";
-            if (inputSize_.empty())
-            {
-                inputSize_ = Size(640, 640);
-            }
-            
-            // 使用DataProcessor的YOLO预处理方法
-            Mat yoloProcessed = dataProcessor_->PreprocessForYOLO(frame, inputSize_);
-            
-            // 创建blob - 使用OpenCV DNN的标准方法
-            dnn::blobFromImage(yoloProcessed, blob, 1.0, inputSize_, Scalar(0,0,0), true, false, CV_32F);
+            // 灰度图转RGB
+            cvtColor(frame, processedFrame, COLOR_GRAY2RGB);
         }
-        else
-        {
-            qDebug() << "使用标准预处理";
-            
-            // 转换颜色空间 (如果需要) 
-            Mat processedFrame = frame;
-            if (frame.channels() == 1 && inputSize_.width > 0) 
-            {
-                // 灰度图转RGB
-                cvtColor(frame, processedFrame, COLOR_GRAY2RGB);
-            }
 
-            // 创建blob - 使用标准方法
-            dnn::blobFromImage(processedFrame, blob, scaleFactor_, inputSize_, meanValues_, swapRB_, false, CV_32F);
-        }
+        // 创建blob - 使用标准方法
+        dnn::blobFromImage(processedFrame, blob, scaleFactor_, inputSize_, meanValues_, swapRB_, false, CV_32F);
 
         qDebug() << "预处理完成 - Blob形状: [" << blob.size[0] << ","
                  << blob.size[1] << "," << blob.size[2] << "," << blob.size[3] << "]";
@@ -394,783 +343,6 @@ Mat DLProcessor::PreProcess(const Mat& frame)
     return blob;
 }
 
-bool DLProcessor::DetectObjects(const Mat& frame, vector<DetectionResult>& results)
-{
-    // 变量定义
-    Mat blob;                            // 预处理后的blob数据
-    vector<Mat> outs;                    // 网络输出结果
-    DataProcessor tempProcessor;         // 临时数据处理器用于获取预处理参数
-
-    if (!isModelLoaded_)
-    {
-        emit errorOccurred("Model not loaded!");
-        return false;
-    }
-
-    if (!ValidateInput(frame))
-    {
-        return false;
-    }
-
-    try
-    {
-        // 预处理 - 注意YOLO通常使用不同的预处理参数
-        blob = PreProcess(frame);
-
-        // 如果启用了YOLO模式，记录预处理参数用于后处理
-        if (useYOLOPreprocessing_ && dataProcessor_)
-        {
-            qDebug() << "保存YOLO预处理参数用于后处理";
-            // 预处理参数已经在DataProcessor中设置，我们可以在后处理中获取
-            if (inputSize_.empty())
-            {
-                inputSize_ = Size(640,640);
-            }
-        }
-
-        // 前向传播
-        qDebug() << "Prepare for forward - Blob shape: " << blob.size[0] << "x" << blob.size[1] << "x"
-                 << blob.size[2] << "x" << blob.size[3];
-
-        net_.setInput(blob);
-        vector<string> outNames = net_.getUnconnectedOutLayersNames();
-        qDebug() << "Output Layers count: " << outNames.size();
-
-        net_.forward(outs, outNames);
-        qDebug() << "Forward complete, outputs count: " << outs.size();
-
-        // YOLO后处理 - 包括边界框检测和实例分割
-        results = PostProcessYolo(frame, outs, confThreshold_, nmsThreshold_);
-
-        qDebug() << "检测完成 - 检测到" << results.size() << "个目标";
-        return !results.empty();
-    }
-    catch (const Exception& e)
-    {
-        qDebug() << "检测错误:" << QString::fromStdString(e.msg);
-        emit errorOccurred(QString::fromStdString(e.msg));
-        return false;
-    }
-}
-
-bool DLProcessor::ProcessYoloFrame(const Mat& frame, Mat& output)
-{
-    // 变量定义
-    vector<DetectionResult> results;
-
-    // 执行检测
-    if (!DetectObjects(frame, results))
-    {
-        return false;
-    }
-
-    // 复制原始图像并绘制结果
-    output = frame.clone();
-// 添加调试输出，确认检测结果数量
-    qDebug() << "Number of detection results before drawing:" << results.size();
-    
-    // 绘制检测结果
-    DrawDetectionResults(output, results);
-    
-    // 添加调试输出，确认绘制后图像尺寸
-    qDebug() << "Output image size after drawing: width=" << output.cols << " height=" << output.rows;
-    
-    // 保存检测结果图片
-    string savePath = "/home/orangepi/Desktop/VisualRobot_Local/Img/Yolo_Detected.jpg";
-    try {
-        // 确保保存目录存在
-        string directory = "/home/orangepi/Desktop/VisualRobot_Local/Img";
-        
-        // 创建目录（如果不存在）
-        #ifdef _WIN32
-            // Windows系统
-            CreateDirectoryA(directory.c_str(), NULL);
-        #else
-            // Linux/macOS系统
-            system((string("mkdir -p ") + directory).c_str());
-        #endif
-        
-        // 使用OpenCV的imwrite保存图片
-        if (imwrite(savePath, output)) {
-            qDebug() << "检测结果已保存到:" << QString::fromStdString(savePath);
-        } else {
-            qDebug() << "保存检测结果失败:" << QString::fromStdString(savePath);
-        }
-    } catch (const Exception& e) {
-        qDebug() << "保存图片时出错:" << QString::fromStdString(e.msg);
-    }
-
-    // 发送处理完成信号
-    emit processingComplete(output);
-    return true;
-}
-
-vector<DetectionResult> DLProcessor::PostProcessYolo(const Mat& frame, const vector<Mat>& outs, float confThreshold, float nmsThreshold)
-{
-    vector<DetectionResult> results;
-    vector<int> classIds;
-    vector<float> confidences;
-    vector<Rect> boxes;
-    vector<Mat> masks;
-
-    // 如果启用YOLO模式，获取预处理参数用于后处理
-    vector<float> scaleRatio = {1.0f, 1.0f};
-    vector<float> fillPadding = {0.0f, 0.0f};
-    Size yoloInputSize(640, 640);
-    
-    if (useYOLOPreprocessing_ && dataProcessor_)
-    {
-        scaleRatio = dataProcessor_->GetYoloScaleRatio();
-        fillPadding = dataProcessor_->GetYoloFillPadding();
-        yoloInputSize = dataProcessor_->GetYoloInputSize();
-        qDebug() << "使用YOLO预处理参数: scale=" << scaleRatio[0] << "," << scaleRatio[1] << ", fill=" << fillPadding[0]
-                 << "," << fillPadding[1] << ", input_size=" << yoloInputSize.width << "x" << yoloInputSize.height;
-    }
-
-    // YOLO模型输出解析 - 参考test-YOLO.py的正确实现
-    for (size_t i = 0; i < outs.size(); ++i)
-    {
-        qDebug() << "Processing output layer" << i;
-        qDebug() << "Output shape: dimensions=" << outs[i].dims;
-        for (int d = 0; d < outs[i].dims; ++d)
-        {
-            qDebug() << "  dim[" << d << "]=" << outs[i].size[d];
-        }
-
-        // 处理YOLOv8 ONNX输出格式 - 正确识别两种主要格式
-        if (outs[i].dims == 3)
-        {
-            int batchSize = outs[i].size[0];
-            int dim1 = outs[i].size[1];  // 可能是属性数或检测数
-            int dim2 = outs[i].size[2];  // 可能是检测数或属性数
-            
-            qDebug() << "Model output shape: [" << batchSize << ", " << dim1 << ", " << dim2 << "]";
-            
-            // 存储原始输出用于调试
-            float all_scores[10]; // 存储前10个置信度用于调试
-            vector<float> debug_scores;
-            vector<int> debug_class_ids;
-            
-            // 处理格式1: (1, 84, 8400) - 格式1: (batch, attributes, num_detections)
-            if (dim1 == 84 && dim2 == 8400)  // 格式1: (1, 84, 8400)
-            {
-                qDebug() << "Detected YOLOv8 format 1: (1, 84, 8400)";
-                
-                // 对于这种格式，我们需要重新整形为 (1, 8400, 84)
-                Mat reshaped_output = outs[i].reshape(1, batchSize); // [1, 8400, 84]
-                reshaped_output = reshaped_output.reshape(1, {batchSize, dim2, dim1});
-                
-                for (int b = 0; b < batchSize; ++b)
-                {
-                    for (int d = 0; d < dim2; ++d)  // 遍历每个检测 (8400个)
-                    {
-                        // 获取当前检测的所有属性
-                        float x_center = reshaped_output.at<float>(b, d, 0);  // 中心点x坐标（相对于输入尺寸）
-                        float y_center = reshaped_output.at<float>(b, d, 1);  // 中心点y坐标（相对于输入尺寸）
-                        float width = reshaped_output.at<float>(b, d, 2);     // 宽度（相对于输入尺寸）
-                        float height = reshaped_output.at<float>(b, d, 3);    // 高度（相对于输入尺寸）
-                        float object_conf = reshaped_output.at<float>(b, d, 4);  // 对象置信度
-                        
-                        // 收集置信度用于调试
-                        debug_scores.push_back(object_conf);
-                        
-                        // 直接使用object_conf作为筛选条件（与Python实现一致）
-                        if (object_conf < confThreshold)
-                            continue;
-                        
-                        // 获取类别得分并找到最高得分的类别
-                        vector<float> class_scores;
-                        int num_classes = dim1 - 5;
-                        for (int c = 0; c < num_classes && c < 80; ++c)  // COCO数据集80个类别
-                        {
-                            float classConf = reshaped_output.at<float>(b, d, 5 + c);
-                            class_scores.push_back(classConf);
-                        }
-                        
-                        int classId = max_element(class_scores.begin(), class_scores.end()) - class_scores.begin();
-                        float class_score = class_scores[classId];
-                        
-                        // 调试输出前10个检测结果
-                        if (d < 10) {
-                            qDebug() << "  Detection " << d << ": confidence=" << object_conf 
-                                     << ", class_score=" << class_score << ", class_id=" << classId;
-                        }
-                        
-                        // 与Python实现一致的坐标转换逻辑
-                        float x, y, w, h;
-                        
-                        // Python中的关键后处理逻辑：先移除填充，再除以缩放比例
-                        x = x_center - fillPadding[0];  // 移除填充
-                        y = y_center - fillPadding[1];
-                        w = width;
-                        h = height;
-                        
-                        // 然后除以缩放比例
-                        x /= scaleRatio[0];
-                        y /= scaleRatio[1];
-                        w /= scaleRatio[0];
-                        h /= scaleRatio[1];
-                        
-                        // 转换为左上角坐标和尺寸
-                        int left = static_cast<int>(x - w / 2);
-                        int top = static_cast<int>(y - h / 2);
-                        int width_int = static_cast<int>(w);
-                        int height_int = static_cast<int>(h);
-                        
-                        // 确保边界框在图像范围内
-                        left = max(0, left);
-                        top = max(0, top);
-                        if (left + width_int > frame.cols) width_int = frame.cols - left;
-                        if (top + height_int > frame.rows) height_int = frame.rows - top;
-                        
-                        if (width_int > 0 && height_int > 0)
-                        {
-                            classIds.push_back(classId);
-                            confidences.push_back(object_conf);  // 使用原始置信度（与Python一致）
-                            boxes.push_back(Rect(left, top, width_int, height_int));
-                        }
-                    }
-                }
-            }
-            // 处理格式2: (1, 25200, 84) - 格式2: (batch, num_detections, attributes)
-            else if (dim1 == 25200 && dim2 == 84)  // 格式2: (1, 25200, 84)
-            {
-                qDebug() << "Detected YOLOv8 format 2: (1, 25200, 84)";
-                
-                for (int b = 0; b < batchSize; ++b)
-                {
-                    for (int d = 0; d < dim1; ++d)  // 遍历每个检测 (25200个)
-                    {
-                        // 获取当前检测的所有属性
-                        float x_center = outs[i].at<float>(b, d, 0);  // 中心点x坐标（相对于输入尺寸）
-                        float y_center = outs[i].at<float>(b, d, 1);  // 中心点y坐标（相对于输入尺寸）
-                        float width = outs[i].at<float>(b, d, 2);     // 宽度（相对于输入尺寸）
-                        float height = outs[i].at<float>(b, d, 3);    // 高度（相对于输入尺寸）
-                        float object_conf = outs[i].at<float>(b, d, 4);  // 对象置信度
-                        
-                        // 收集置信度用于调试
-                        debug_scores.push_back(object_conf);
-                        
-                        // 直接使用object_conf作为筛选条件（与Python实现一致）
-                        if (object_conf < confThreshold)
-                            continue;
-                        
-                        // 获取类别得分并找到最高得分的类别
-                        vector<float> class_scores;
-                        int num_classes = 84 - 5;
-                        for (int c = 0; c < num_classes && c < 80; ++c)  // COCO数据集80个类别
-                        {
-                            float classConf = outs[i].at<float>(b, d, 5 + c);
-                            class_scores.push_back(classConf);
-                        }
-                        
-                        int classId = max_element(class_scores.begin(), class_scores.end()) - class_scores.begin();
-                        float class_score = class_scores[classId];
-                        
-                        // 调试输出前10个检测结果
-                        if (d < 10) {
-                            qDebug() << "  Detection " << d << ": confidence=" << object_conf 
-                                     << ", class_score=" << class_score << ", class_id=" << classId;
-                        }
-                        
-                        // 与Python实现一致的坐标转换逻辑
-                        float x, y, w, h;
-                        
-                        // Python中的关键后处理逻辑：先移除填充，再除以缩放比例
-                        x = x_center - fillPadding[0];  // 移除填充
-                        y = y_center - fillPadding[1];
-                        w = width;
-                        h = height;
-                        
-                        // 然后除以缩放比例
-                        x /= scaleRatio[0];
-                        y /= scaleRatio[1];
-                        w /= scaleRatio[0];
-                        h /= scaleRatio[1];
-                        
-                        // 转换为左上角坐标和尺寸
-                        int left = static_cast<int>(x - w / 2);
-                        int top = static_cast<int>(y - h / 2);
-                        int width_int = static_cast<int>(w);
-                        int height_int = static_cast<int>(h);
-                        
-                        // 确保边界框在图像范围内
-                        left = max(0, left);
-                        top = max(0, top);
-                        if (left + width_int > frame.cols) width_int = frame.cols - left;
-                        if (top + height_int > frame.rows) height_int = frame.rows - top;
-                        
-                        if (width_int > 0 && height_int > 0)
-                        {
-                            classIds.push_back(classId);
-                            confidences.push_back(object_conf);  // 使用原始置信度（与Python一致）
-                            boxes.push_back(Rect(left, top, width_int, height_int));
-                        }
-                    }
-                }
-            }
-            else
-            {
-                // 尝试通用处理
-                qDebug() << "Unknown output format: [" << batchSize << ", " << dim1 << ", " << dim2 
-                         << "], trying generic processing";
-                
-                // 假设最后一个维度是特征维度
-                if (dim2 == 84)  // 特征维度是最后一维
-                {
-                    qDebug() << "Processing with feature dimension as last dimension";
-                    
-                    for (int b = 0; b < batchSize; ++b)
-                    {
-                        for (int d = 0; d < dim1; ++d)
-                        {
-                            float x_center = outs[i].at<float>(b, 0, d);
-                            float y_center = outs[i].at<float>(b, 1, d);
-                            float width = outs[i].at<float>(b, 2, d);
-                            float height = outs[i].at<float>(b, 3, d);
-                            float object_conf = outs[i].at<float>(b, 4, d);
-                            
-                            if (object_conf < confThreshold)
-                                continue;
-                            
-                            vector<float> class_scores;
-                            int num_classes = min(dim2 - 5, 80);
-                            for (int c = 0; c < 80; ++c)
-                            {
-                                float classConf = outs[i].at<float>(b, 5 + c, d);
-                                class_scores.push_back(classConf);
-                            }
-                            
-                            int classId = max_element(class_scores.begin(), class_scores.end()) - class_scores.begin();
-                            
-                            // 与Python实现一致的坐标转换逻辑
-                            float x, y, w, h;
-                            
-                            // Python中的关键后处理逻辑：先移除填充，再除以缩放比例
-                            x = x_center - fillPadding[0];  // 移除填充
-                            y = y_center - fillPadding[1];
-                            w = width;
-                            h = height;
-                            
-                            // 然后除以缩放比例
-                            x /= scaleRatio[0];
-                            y /= scaleRatio[1];
-                            w /= scaleRatio[0];
-                            h /= scaleRatio[1];
-                            
-                            // 转换为左上角坐标和尺寸
-                            int left = static_cast<int>(x - w / 2);
-                            int top = static_cast<int>(y - h / 2);
-                            int width_int = static_cast<int>(w);
-                            int height_int = static_cast<int>(h);
-                            
-                            // 确保边界框在图像范围内
-                            left = max(0, left);
-                            top = max(0, top);
-                            if (left + width_int > frame.cols) width_int = frame.cols - left;
-                            if (top + height_int > frame.rows) height_int = frame.rows - top;
-                            
-                            if (width_int > 0 && height_int > 0)
-                            {
-                                classIds.push_back(classId);
-                                confidences.push_back(object_conf);
-                                boxes.push_back(Rect(left, top, width_int, height_int));
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    qDebug() << "Warning: Cannot determine output format, feature dimension is " << dim2;
-                }
-            }
-            
-            // 显示置信度统计信息（与Python实现一致）
-            if (!debug_scores.empty()) {
-                float max_conf = *max_element(debug_scores.begin(), debug_scores.end());
-                float min_conf = *min_element(debug_scores.begin(), debug_scores.end());
-                float avg_conf = accumulate(debug_scores.begin(), debug_scores.end(), 0.0f) / debug_scores.size();
-                int high_conf_count = count_if(debug_scores.begin(), debug_scores.end(), 
-                                             [confThreshold](float score) { return score > confThreshold; });
-                
-                qDebug() << "\nConfidence statistics:";
-                qDebug() << "  Max: " << max_conf;
-                qDebug() << "  Min: " << min_conf;
-                qDebug() << "  Average: " << avg_conf;
-                qDebug() << "  Count above threshold " << confThreshold << ": " << high_conf_count;
-            }
-            
-            qDebug() << "Detections before NMS: " << boxes.size();
-        }
-        else if (outs[i].dims == 2)
-        {
-            // 传统的YOLO输出格式
-            float* data = (float*)outs[i].data;
-            
-            // 对于每个检测结果
-            for (int j = 0; j < outs[i].rows; ++j, data += outs[i].cols)
-            {
-                // 提取边界框信息
-                float x = data[0];
-                float y = data[1];
-                float w = data[2];
-                float h = data[3];
-                float confidence = data[4];
-                
-                // 应用置信度阈值 - 第一层过滤
-                if (confidence > confThreshold)
-                {
-                    // 获取置信度最高的类别
-                    int classId = -1;
-                    float maxClassConf = 0.0f;
-                    
-                    for (int c = 0; c < outs[i].cols - 5; ++c)
-                    {
-                        if (data[5 + c] > maxClassConf)
-                        {
-                            maxClassConf = data[5 + c];
-                            classId = c;
-                        }
-                    }
-                    
-                    // 计算最终置信度 = 对象置信度 * 类别置信度
-                    float finalConfidence = confidence * maxClassConf;
-                    
-                    // 应用最终置信度阈值 - 第二层过滤
-                    if (finalConfidence > confThreshold)
-                    {
-                        // 传统YOLO格式的坐标转换逻辑 (与Python实现一致)
-                        float x_min = x - w / 2;
-                        float y_min = y - h / 2;
-                        float width = w;
-                        float height = h;
-                        
-                        int left, top, width_int, height_int;
-                        
-                        // 使用与Python一致的坐标转换
-                        if (useYOLOPreprocessing_ && dataProcessor_)
-                        {
-                            // YOLO模式：使用预处理参数进行坐标转换
-                            x_min = x_min - fillPadding[0];  // 移除填充
-                            y_min = y_min - fillPadding[1];
-                            width = width;
-                            height = height;
-                            
-                            // 然后除以缩放比例
-                            x_min /= scaleRatio[0];
-                            y_min /= scaleRatio[1];
-                            width /= scaleRatio[0];
-                            height /= scaleRatio[1];
-                            
-                            // 转换为像素坐标
-                            left = static_cast<int>(x_min);
-                            top = static_cast<int>(y_min);
-                            width_int = static_cast<int>(width);
-                            height_int = static_cast<int>(height);
-                        }
-                        else
-                        {
-                            // 标准模式：直接转换为像素坐标并缩放
-                            left = static_cast<int>(x_min * frame.cols);
-                            top = static_cast<int>(y_min * frame.rows);
-                            width_int = static_cast<int>(width * frame.cols);
-                            height_int = static_cast<int>(height * frame.rows);
-                        }
-                        
-                        // 确保边界框在图像范围内
-                        left = max(0, left);
-                        top = max(0, top);
-                        if (left + width_int > frame.cols) width_int = frame.cols - left;
-                        if (top + height_int > frame.rows) height_int = frame.rows - top;
-                        
-                        classIds.push_back(classId);
-                        confidences.push_back(finalConfidence);
-                        boxes.push_back(Rect(left, top, width_int, height_int));
-                    }
-                }
-            }
-        }
-    }
-    
-    // 应用非极大值抑制 (NMS) - 与Python实现保持完全一致
-    vector<int> indices;
-    if (!boxes.empty())
-    {
-        qDebug() << "Applying NMS with conf_threshold=" << confThreshold << ", iou_threshold=" << nmsThreshold;
-        
-        try {
-            // 为NMS准备边界框格式，OpenCV需要[x, y, width, height]格式
-            vector<Rect> nms_boxes;
-            vector<float> nms_scores = confidences; // 复制置信度
-            
-            for (const Rect& box : boxes) {
-                nms_boxes.push_back(box);
-            }
-            
-            // NMSBoxes参数说明：boxes, confidences, score_threshold, nms_threshold, indices
-            dnn::NMSBoxes(nms_boxes, nms_scores, confThreshold, nmsThreshold, indices);
-            
-            qDebug() << "NMS selected" << indices.size() << "detections from" << boxes.size() << "candidates";
-            
-            if (indices.empty()) {
-                qDebug() << "No detections survived NMS filtering";
-            }
-        } catch (const cv::Exception& e) {
-            qDebug() << "NMS processing error:" << QString::fromStdString(e.what());
-            // 如果NMS出错，使用所有检测结果
-            for (int i = 0; i < static_cast<int>(boxes.size()); ++i) {
-                indices.push_back(i);
-            }
-        }
-        
-        // 构建最终结果 - 与Python实现保持完全一致
-        vector<int> final_class_ids;
-        vector<float> final_scores;
-        vector<Rect> final_boxes;
-        
-        for (size_t i = 0; i < indices.size(); ++i)
-        {
-            int idx = indices[i];
-            
-            // 确保索引在有效范围内
-            if (idx < 0 || idx >= static_cast<int>(classIds.size()) ||
-                idx >= static_cast<int>(confidences.size()) ||
-                idx >= static_cast<int>(boxes.size())) {
-                qDebug() << "Warning: Invalid index" << idx << "skipping";
-                continue;
-            }
-            
-            // 收集最终结果进行一致性检查
-            final_class_ids.push_back(classIds[idx]);
-            final_scores.push_back(confidences[idx]);
-            final_boxes.push_back(boxes[idx]);
-        }
-        
-        // 验证最终结果的类别ID范围
-        if (!final_class_ids.empty()) {
-            int min_class_id = *min_element(final_class_ids.begin(), final_class_ids.end());
-            int max_class_id = *max_element(final_class_ids.begin(), final_class_ids.end());
-            qDebug() << "Final detection class ID range: min=" << min_class_id << ", max=" << max_class_id;
-        }
-        
-        // 创建最终结果
-        for (size_t i = 0; i < final_boxes.size(); ++i)
-        {
-            DetectionResult result;
-            
-            // 验证类别ID - 与Python实现完全一致
-            result.classId = final_class_ids[i];
-            if (result.classId < 0 || result.classId >= 1000) {
-                qDebug() << "Warning: Invalid class ID" << result.classId << "detected, setting to 0";
-                result.classId = 0;
-            }
-            
-            // 验证置信度 - 与Python实现完全一致
-            result.confidence = final_scores[i];
-            if (result.confidence < 0.0f || result.confidence > 1.0f) {
-                qDebug() << "Warning: Abnormal confidence value" << result.confidence << "detected";
-                result.confidence = max(0.0f, min(1.0f, result.confidence));
-            }
-            
-            // 获取并验证边界框 - 与Python实现完全一致
-            Rect bbox = final_boxes[i];
-            
-            // 边界框有效性检查和修复 - 采用Python风格
-            int frameWidth = frame.cols;
-            int frameHeight = frame.rows;
-            int min_size = 2; // 与Python一致
-            
-            // 转换为角点坐标进行验证
-            int x1 = bbox.x;
-            int y1 = bbox.y;
-            int x2 = bbox.x + bbox.width;
-            int y2 = bbox.y + bbox.height;
-            
-            // 基本有效性检查
-            if (bbox.width <= 0 || bbox.height <= 0) {
-                qDebug() << "Invalid detection skipped: Box has zero or negative size";
-                continue;
-            }
-            
-            // 修复边界框使其完全在图像范围内 - Python风格
-            x1 = max(0, x1);
-            y1 = max(0, y1);
-            x2 = min(frameWidth - 1, x2);
-            y2 = min(frameHeight - 1, y2);
-            
-            // 重新计算边界框
-            bbox.x = x1;
-            bbox.y = y1;
-            bbox.width = x2 - x1;
-            bbox.height = y2 - y1;
-            
-            // 最终验证 - 与Python实现完全一致
-            if (bbox.width < min_size || bbox.height < min_size ||
-                x1 >= frameWidth || y1 >= frameHeight ||
-                x2 <= 0 || y2 <= 0) {
-                qDebug() << "Invalid detection skipped after boundary adjustment";
-                qDebug() << "  Box:" << bbox.x << "," << bbox.y 
-                         << "," << bbox.width << "," << bbox.height;
-                qDebug() << "  Frame size:" << frameWidth << "x" << frameHeight;
-                continue;
-            }
-            
-            result.boundingBox = bbox;
-            
-            // 设置类别名称 - 与Python实现保持一致
-            if (!classLabels_.empty() && result.classId >= 0 && 
-                result.classId < static_cast<int>(classLabels_.size()))
-            {
-                result.className = classLabels_[result.classId];
-            }
-            else
-            {
-                // 如果没有标签或索引超出范围，使用未知类别格式
-                result.className = "Class_" + to_string(result.classId);
-            }
-            
-            // 详细调试输出 - 与Python一致
-            qDebug() << "Added detection result" << i << ":";
-            qDebug() << "  Class:" << QString::fromStdString(result.className) << "(ID:" << result.classId << ")";
-            qDebug() << "  Confidence:" << QString::number(result.confidence, 'f', 4);
-            qDebug() << "  Bounding box:" << result.boundingBox.x << "," << result.boundingBox.y 
-                     << "," << result.boundingBox.width << "," << result.boundingBox.height;
-            
-            results.push_back(result);
-        }
-    }
-    
-    qDebug() << "Final detection results count:" << results.size();
-    return results;
-}
-
-void DLProcessor::DrawDetectionResults(Mat& frame, const vector<DetectionResult>& results)
-{
-    // 添加调试输出
-    qDebug() << "DrawDetectionResults called with" << results.size() << "results, target frame size:" << frame.cols << "x" << frame.rows;
-    
-    // 绘制每个检测结果 - 与Python实现保持一致
-    for (size_t i = 0; i < results.size(); ++i)
-    {
-        const DetectionResult& result = results[i];
-        
-        // 添加调试输出，显示当前检测结果
-        qDebug() << "  Drawing result" << i << ": class=" << QString::fromStdString(result.className)
-                 << " confidence=" << result.confidence
-                 << " bbox=" << result.boundingBox.x << "," << result.boundingBox.y
-                 << "," << result.boundingBox.width << "," << result.boundingBox.height;
-        
-        // 使用与Python相同的颜色生成逻辑
-        // 基于类别ID生成固定的颜色，而不是基于索引
-        Scalar color = Scalar(255, 0, 0); // 默认红色
-        if (result.classId >= 0)
-        {
-            // 使用哈希方式生成颜色，与Python实现一致
-            int colorIndex = result.classId % 80; // 假设最多80个类别（COCO数据集标准）
-            int r = (37 * colorIndex) % 255;
-            int g = (179 * colorIndex) % 255;
-            int b = (119 * colorIndex) % 255;
-            color = Scalar(b, g, r); // OpenCV使用BGR格式
-        }
-        
-        // 严格验证边界框有效性 - 与Python实现一致
-        Rect bbox = result.boundingBox;
-        if (bbox.width <= 0 || bbox.height <= 0 || 
-            bbox.x < 0 || bbox.y < 0 || 
-            bbox.x + bbox.width > frame.cols || 
-            bbox.y + bbox.height > frame.rows)
-        {
-            qDebug() << "  Warning: Skipping invalid bounding box for result" << i;
-            qDebug() << "    Box:" << bbox.x << "," << bbox.y 
-                     << "," << bbox.width << "," << bbox.height;
-            qDebug() << "    Frame size:" << frame.cols << "x" << frame.rows;
-            continue;
-        }
-        
-        // 绘制边界框 - 使用抗锯齿线条，与Python一致
-        rectangle(frame, bbox, color, 2, LINE_AA);
-        qDebug() << "  Bounding box drawn";
-        
-        // 创建标签文本 - 与Python格式一致："类别 置信度"
-        string labelText;
-        if (!result.className.empty())
-        {
-            labelText = result.className;
-        }
-        else if (result.classId >= 0)
-        {
-            labelText = "Class " + to_string(result.classId);
-        }
-        else
-        {
-            labelText = "Unknown";
-        }
-        
-        // 格式化置信度为两位小数 - 与Python实现一致
-        char confStr[10];
-        sprintf(confStr, "%.2f", max(0.0f, min(1.0f, result.confidence)));
-        labelText += " " + string(confStr);
-        
-        // 计算标签大小和位置 - 与Python实现一致
-        int fontFace = FONT_HERSHEY_SIMPLEX;
-        double fontScale = 0.5;
-        int thickness = 1;
-        int baseline = 0;
-        Size textSize = getTextSize(labelText, fontFace, fontScale, thickness, &baseline);
-        
-        // 标签位置和背景 - 确保在图像范围内
-        Point labelOrg(bbox.x, max(0, bbox.y - 5)); // 标签在边界框上方
-        Rect labelBg(bbox.x, max(0, bbox.y - textSize.height - 10), 
-                    textSize.width + 10, textSize.height + 10);
-        
-        // 额外检查，确保标签完全在图像范围内
-        if (labelBg.x < 0) labelBg.x = 0;
-        if (labelBg.y < 0) labelBg.y = 0;
-        if (labelBg.x + labelBg.width > frame.cols)
-            labelBg.width = frame.cols - labelBg.x;
-        if (labelBg.y + labelBg.height > frame.rows)
-            labelBg.height = frame.rows - labelBg.y;
-        
-        // 绘制标签背景
-        rectangle(frame, labelBg, color, FILLED);
-        qDebug() << "  Label background drawn";
-        
-        // 绘制标签文本 - 使用抗锯齿
-        putText(frame, labelText, 
-                Point(labelBg.x + 5, labelBg.y + textSize.height + 5 - baseline), 
-                fontFace, fontScale, Scalar(0, 0, 0), thickness, LINE_AA);
-        qDebug() << "  Label text drawn";
-        
-        // 如果有分割掩码，绘制掩码
-        if (!result.mask.empty())
-        {
-            qDebug() << "  Drawing mask";
-            // 创建彩色掩码
-            Mat coloredMask(result.mask.size(), CV_8UC3, color);
-            
-            // 确保ROI在图像范围内
-            Rect safeRoi = bbox & Rect(0, 0, frame.cols, frame.rows);
-            if (safeRoi.width > 0 && safeRoi.height > 0)
-            {
-                // 调整掩码大小以匹配边界框
-                Mat resizedMask;
-                resize(coloredMask, resizedMask, bbox.size(), 0, 0, INTER_LINEAR);
-                
-                // 将掩码应用到原始图像的相应区域
-                Mat roi = frame(safeRoi);
-                Mat maskROI;
-                resizedMask.copyTo(maskROI, result.mask);
-                
-                // 添加半透明效果 - 与Python一致的透明度0.4
-                addWeighted(maskROI, 0.4, roi, 0.6, 0, roi);
-                qDebug() << "  Mask applied successfully";
-            }
-        }
-        qDebug() << "  Result" << i << "drawing completed";
-    }
-    
-    qDebug() << "Total results drawn:" << results.size();
-}
 ClassificationResult DLProcessor::PostProcessClassification(const vector<Mat>& outs)
 {
     // 变量定义
@@ -1527,7 +699,7 @@ bool DLProcessor::QuantizeModel(const string& quantizationType, const vector<Mat
 //        emit errorOccurred("Cannot quantize: model not loaded");
 //        return false;
 //    }
-
+//
 //    try
 //    {
 //        qDebug() << "Starting model quantization with type:" << QString::fromStdString(quantizationType);
@@ -1637,26 +809,30 @@ bool DLProcessor::QuantizeModel(const string& quantizationType, const vector<Mat
 //        }
 
 //        // 替换原始网络
-//        net_ = quantizedNet;
+//        net_ = std::move(quantizedNet);
 //        isQuantized_ = true;
 //        quantizationType_ = quantizationType;
 
-//        qDebug() << "Model quantization successful. Type:" << QString::fromStdString(quantizationType);
-
-//        // 预热量化后的模型
-//        WarmUp();
-
+//        qDebug() << "Model quantization completed successfully with type:" << QString::fromStdString(quantizationType);
 //        return true;
 //    }
-//    catch (const Exception& e)
+//    catch (const cv::Exception& e)
 //    {
-//        qDebug() << "Error during model quantization:" << QString::fromStdString(e.msg);
-//        emit errorOccurred(QString::fromStdString(e.msg));
+//        qDebug() << "OpenCV exception during quantization:" << e.what();
+//        emit errorOccurred(QString("Quantization failed: %1").arg(e.what()));
 //        return false;
 //    }
-//    catch (const Exception& e)
+//    catch (const std::exception& e)
 //    {
-//        qDebug() << "Error during warm-up:" << QString::fromStdString(e.msg);
+//        qDebug() << "Standard exception during quantization:" << e.what();
+//        emit errorOccurred(QString("Quantization failed: %1").arg(e.what()));
 //        return false;
 //    }
+//    catch(...)
+//    {
+//        qDebug() << "Unknown exception during quantization";
+//        emit errorOccurred("Quantization failed: Unknown error");
+//        return false;
+//    }
+    return false;
 }
