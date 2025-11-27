@@ -29,7 +29,6 @@ SOURCES += \
     mainwindow_systemstats.cpp \
     DLExample.cpp \
     YOLOExample.cpp \
-    YOLOProcessor.cpp \
     YOLOProcessorORT.cpp \
     Undistort.cpp \
     DefectDetection.cpp \
@@ -39,7 +38,6 @@ HEADERS += \
     DIP.h \
     DLProcessor.h \
     DataProcessor.h \
-    YOLOProcessor.h \
     YOLOExample.h \
     YOLOProcessorORT.h \
     MvCamera.h \
