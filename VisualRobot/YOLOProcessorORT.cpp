@@ -137,11 +137,15 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
 {
     results.clear();
     if (!session_) {
-        emit errorOccurred("ORT session not initialized");
+        emit errorOccurred("ORT会话未初始化");
+        return false;
+    }
+    if (classLabels_.empty()) {
+        emit errorOccurred("类别标签未加载");
         return false;
     }
     if (frame.empty()) {
-        emit errorOccurred("Empty frame");
+        emit errorOccurred("空帧输入");
         return false;
     }
 
@@ -307,22 +311,12 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
     }
 }
 
-// 修改后的PostProcess方法，适配6类训练集，与Python实现相符
+// YOLO模型后处理方法，根据标签文件动态适配类别数量
 std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort::Value>& outputs, const cv::Size& frameSize, const std::string& imagePath, const std::string& expectedClass)
 {
     std::vector<DetectionResult> results;
     
-    // 输出调试信息
-    std::cout << "图像路径: " << imagePath << std::endl;
-    std::cout << "期望类别: " << expectedClass << std::endl;
-    std::cout << "Original image size: " << frameSize.width << "x" << frameSize.height << std::endl;
-    
-    // 输出letterbox结果信息
-    std::cout << "Letterbox result: (" << inputSize_.width << ", " << inputSize_.height << ", 3), ratio: " << letterbox_r_ 
-              << ", padding: (" << letterbox_dw_ << ", " << letterbox_dh_ << ")" << std::endl;
-    
     if (outputs.empty()) {
-        std::cout << "Empty outputs received" << std::endl;
         return results;
     }
     
@@ -332,35 +326,20 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
     auto tensor_info = output_info.GetTensorTypeAndShapeInfo();
     auto output_shape = tensor_info.GetShape();
     
-    // 输出原始输出形状
-    std::cout << "Raw output shape: (" << output_shape[0] << ", " << output_shape[1] << ", " << output_shape[2] << ")" << std::endl;
-    
     // 对于YOLOv8输出，形状应该是 [1, 10, 8400]
     // 检查是否为3维张量
     if (output_shape.size() != 3) {
-        std::cout << "Unexpected output shape dimension: " << output_shape.size() << std::endl;
         return results;
     }
     
     // 获取输出数据
     const float* output_data = output.GetTensorData<float>();
     
-    // 计算输出数据的最小值和最大值
-    float min_val = std::numeric_limits<float>::max();
-    float max_val = std::numeric_limits<float>::lowest();
-    int total_elements = output_shape[0] * output_shape[1] * output_shape[2];
-    for (int i = 0; i < total_elements; i++) {
-        min_val = std::min(min_val, output_data[i]);
-        max_val = std::max(max_val, output_data[i]);
-    }
-    std::cout << "Raw output min/max: " << min_val << "/" << max_val << std::endl;
-    std::cout << "Processed output shape: (" << 8400 << ", " << 10 << ")" << std::endl << std::endl;
-    
     // 按照用户提供的输出结构 (1,10,N) -> squeeze -> (10,N)
-    // 每列代表一个候选框: [cx, cy, w, h, cls0, cls1, ..., cls5]
+    // 每列代表一个候选框: [cx, cy, w, h, cls0, cls1, ..., clsN]
     int rows = static_cast<int>(output_shape[1]);
     int cols = static_cast<int>(output_shape[2]);
-    const int NUM_CLASSES = 6;
+    const int NUM_CLASSES = static_cast<int>(classLabels_.size());
 
     // 辅助函数：按 (row, col) 读取值，layout: [1, rows, cols] -> index = row*cols + col
     auto get_val = [&](int r, int c)->float {
@@ -430,99 +409,20 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
             dr.boundingBox = cand_boxes[idx];
             dr.classId = cand_class_ids[idx];
             dr.confidence = cand_scores[idx];
-            if (!classLabels_.empty() && dr.classId >=0 && dr.classId < (int)classLabels_.size()) dr.className = classLabels_[dr.classId];
+            if (dr.classId >=0 && dr.classId < (int)classLabels_.size()) dr.className = classLabels_[dr.classId];
             else dr.className = "";
             results.push_back(dr);
         }
     }
     
-    // 对top候选进行排序并输出
-    std::sort(top_candidates.begin(), top_candidates.end(), 
-              [](const auto& a, const auto& b) { return std::get<1>(a) > std::get<1>(b); });
-    
-    // 输出max sigmoid scores top10
-    std::cout << "\nAnalyzing output structure (using class scores as confidence)..." << std::endl;
-    std::cout << "max sigmoid scores top10: [";
-    for (int i = 0; i < std::min(10, static_cast<int>(top_candidates.size())); i++) {
-        if (i > 0) std::cout << ", ";
-        std::cout << '"' << std::fixed << std::setprecision(6) << std::get<1>(top_candidates[i]) << '"';
-    }
-    std::cout << "]" << std::endl;
-    
-    // 输出对应的class IDs
-    std::cout << "corresponding class IDs: [";
-    for (int i = 0; i < std::min(10, static_cast<int>(top_candidates.size())); i++) {
-        if (i > 0) std::cout << ", ";
-        std::cout << std::get<3>(top_candidates[i]);
-    }
-    std::cout << "]" << std::endl;
-    
-    // 输出max raw scores top10
-    std::cout << "max raw scores top10: [";
-    for (int i = 0; i < std::min(10, static_cast<int>(top_candidates.size())); i++) {
-        if (i > 0) std::cout << ", ";
-        std::cout << '"' << std::fixed << std::setprecision(6) << std::get<2>(top_candidates[i]) << '"';
-    }
-    std::cout << "]" << std::endl;
-    
-    // 计算不同阈值的计数
-    int count_gt_05_raw = 0, count_gt_01_raw = 0, count_gt_005_raw = 0;
-    int count_gt_05_sigmoid = 0, count_gt_01_sigmoid = 0, count_gt_005_sigmoid = 0;
-    
-    for (const auto& candidate : top_candidates) {
-        float sigmoid_score = std::get<1>(candidate);
-        float raw_score = std::get<2>(candidate);
-        
-        if (sigmoid_score > 0.5f) count_gt_05_sigmoid++;
-        if (sigmoid_score > 0.1f) count_gt_01_sigmoid++;
-        if (sigmoid_score > 0.05f) count_gt_005_sigmoid++;
-        
-        if (raw_score > 0.5f) count_gt_05_raw++;
-        if (raw_score > 0.1f) count_gt_01_raw++;
-        if (raw_score > 0.05f) count_gt_005_raw++;
-    }
-    
-    std::cout << "max sigmoid scores count > 0.5: " << count_gt_05_sigmoid << std::endl;
-    std::cout << "max sigmoid scores count > 0.1: " << count_gt_01_sigmoid << std::endl;
-    std::cout << "max sigmoid scores count > 0.05: " << count_gt_005_sigmoid << std::endl;
-    std::cout << "max raw scores count > 0.5: " << count_gt_05_raw << std::endl;
-    std::cout << "max raw scores count > 0.1: " << count_gt_01_raw << std::endl;
-    std::cout << "max raw scores count > 0.05: " << count_gt_005_raw << std::endl;
-    
-    // 输出top候选详细信息
-    std::cout << "\nTop candidates (index, max_sigmoid_score, raw_score, class_id):" << std::endl;
-    for (int i = 0; i < std::min(10, static_cast<int>(top_candidates.size())); i++) {
-        int idx = std::get<0>(top_candidates[i]);
-        float sigmoid_score = std::get<1>(top_candidates[i]);
-        float raw_score = std::get<2>(top_candidates[i]);
-        int class_id = std::get<3>(top_candidates[i]);
-        
-        std::string class_name = "";
-        if (!classLabels_.empty() && class_id >= 0 && class_id < classLabels_.size()) {
-            class_name = classLabels_[class_id];
-        }
-        
-        std::cout << idx << ": max_sigmoid_score=" << std::fixed << std::setprecision(7) << sigmoid_score 
-                  << ", raw_score=" << std::fixed << std::setprecision(7) << raw_score 
-                  << ", class_id=" << class_id;
-        if (!class_name.empty()) {
-            std::cout << ", class_name=" << class_name;
-        }
-        std::cout << std::endl;
-    }
-    
-    // 输出NMS前的检测数量
-    std::cout << "Found " << results.size() << " detections before NMS with raw score > " << confThreshold_ << std::endl;
-    
     // 如果没有检测结果，尝试降低阈值并重新过滤
     if (results.empty() && confThreshold_ > 0.1f) {
-        std::cout << "  No detections found. Trying with lower threshold (0.1f)..." << std::endl;
         float lowerThreshold = 0.1f;
         std::vector<DetectionResult> lowThresholdResults;
 
         // num_attributes / num_boxes 对应当前输出布局
-        int num_attributes = rows; // e.g., 10
-        int num_boxes = cols;      // e.g., 8400
+        int num_attributes = rows; // 例如：10
+        int num_boxes = cols;      // 例如：8400
 
         // 使用 get_val(row, col) 访问以避免错误的索引计算
         for (int c = 0; c < num_boxes; ++c) {
@@ -572,7 +472,7 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
                     result.classId = max_class_id;
                     result.confidence = max_raw_score;
 
-                    if (!classLabels_.empty() && max_class_id < classLabels_.size()) {
+                    if (max_class_id < classLabels_.size()) {
                         result.className = classLabels_[max_class_id];
                     }
 
@@ -582,8 +482,6 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
         }
 
         if (!lowThresholdResults.empty()) {
-            std::cout << "  Found " << lowThresholdResults.size() << " detections with threshold " << lowerThreshold << std::endl;
-
             // 对低阈值结果应用NMS
             std::vector<int> indices;
             std::vector<float> confidences;
@@ -601,7 +499,6 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
                 filteredResults.push_back(lowThresholdResults[idx]);
             }
 
-            std::cout << "  After NMS with low threshold: " << filteredResults.size() << " detections" << std::endl;
             results = filteredResults;
         }
     }
@@ -611,28 +508,33 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
 
 void YOLOProcessorORT::DrawDetectionResults(cv::Mat& frame, const std::vector<DetectionResult>& results)
 {
-    // 输出绘制信息
-    std::cout << "Drawing " << results.size() << " detection results on frame" << std::endl;
+    // 为每个类别生成不同颜色，根据标签数量动态扩展
+    std::vector<cv::Scalar> colors = {
+        cv::Scalar(255, 0, 0),    // 蓝色 - class 0
+        cv::Scalar(0, 255, 0),    // 绿色 - class 1
+        cv::Scalar(0, 0, 255),    // 红色 - class 2
+        cv::Scalar(255, 255, 0),  // 青色 - class 3
+        cv::Scalar(255, 0, 255),  // 品红 - class 4
+        cv::Scalar(0, 255, 255),  // 黄色 - class 5
+        cv::Scalar(128, 0, 0),    // 深蓝色 - class 6
+        cv::Scalar(0, 128, 0),    // 深绿色 - class 7
+        cv::Scalar(0, 0, 128),    // 深红色 - class 8
+        cv::Scalar(128, 128, 0),  // 深青色 - class 9
+        cv::Scalar(128, 0, 128),  // 深品红 - class 10
+        cv::Scalar(0, 128, 128)   // 深黄色 - class 11
+    };
     
-    // 为每个类别生成不同颜色，适配6类训练集
-    std::vector<cv::Scalar> colors;
-    // 使用固定的颜色方案，确保一致性
-    colors.push_back(cv::Scalar(255, 0, 0));    // 蓝色 - class 0
-    colors.push_back(cv::Scalar(0, 255, 0));    // 绿色 - class 1
-    colors.push_back(cv::Scalar(0, 0, 255));    // 红色 - class 2
-    colors.push_back(cv::Scalar(255, 255, 0));  // 青色 - class 3
-    colors.push_back(cv::Scalar(255, 0, 255));  // 品红 - class 4
-    colors.push_back(cv::Scalar(0, 255, 255));  // 黄色 - class 5
+    // 如果标签数量超过预设颜色数量，动态扩展颜色列表
+    while (colors.size() < classLabels_.size()) {
+        int idx = colors.size();
+        colors.push_back(cv::Scalar(
+            (idx * 137) % 255,  // 简单的哈希函数生成不同颜色
+            (idx * 271) % 255,
+            (idx * 383) % 255
+        ));
+    }
     
-    for (size_t i = 0; i < results.size(); ++i) {
-        const auto& result = results[i];
-        
-        // 输出当前绘制的检测结果信息
-        std::cout << "  Drawing detection " << i << ": class_id=" << result.classId 
-                  << ", confidence=" << result.confidence 
-                  << ", box=([" << result.boundingBox.x << "," << result.boundingBox.y 
-                  << "," << result.boundingBox.width << "," << result.boundingBox.height << "]" << std::endl;
-        
+    for (const auto& result : results) {
         // 确保类别ID在有效范围内
         int color_idx = result.classId;
         if (color_idx < 0 || color_idx >= static_cast<int>(colors.size())) {
@@ -650,7 +552,6 @@ void YOLOProcessorORT::DrawDetectionResults(cv::Mat& frame, const std::vector<De
             label = result.className + " " + cv::format("%.2f", result.confidence);
         } else {
             // 没有用户标签，使用数字类别ID和置信度
-            // 直接使用数字而不是前缀"class_"，简化显示
             label = std::to_string(result.classId) + " " + cv::format("%.2f", result.confidence);
         }
         

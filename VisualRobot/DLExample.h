@@ -99,11 +99,7 @@ private slots:
      */
     void OnClassificationComplete(const ClassificationResult& result);
     
-    /**
-     * @brief 处理图像处理完成信号
-     * @param resultImage 处理后的图像
-     */
-    void OnProcessingComplete(const cv::Mat& resultImage);
+    
     
     /**
      * @brief 处理批量分类完成信号
