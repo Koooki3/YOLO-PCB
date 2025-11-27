@@ -15,7 +15,7 @@ YOLOProcessorORT::YOLOProcessorORT(QObject* parent)
     , env_(ORT_LOGGING_LEVEL_WARNING, "YOLOORT")
     , session_(nullptr)
     , inputSize_(640,640)
-    , confThreshold_(0.25f)
+    , confThreshold_(50.0f)
     , nmsThreshold_(0.45f)
     , scaleFactor_(1.0/255.0)
     , swapRB_(true)
@@ -390,8 +390,8 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
             }
         }
 
-        // 按要求将类别分数乘以10000用于筛选
-        float scaled_conf = max_raw * 10000.0f;
+        // 按要求将类别分数乘以100用于筛选
+        float scaled_conf = max_raw * 100.0f;
         top_candidates.emplace_back(c, 0.0f, max_raw, best_cls); // 保存以便后续分析（sigmoid 未计算）
 
         if (scaled_conf < confThreshold_) continue; // 置信度阈值由调用方设置（请注意阈值单位：scaled）
