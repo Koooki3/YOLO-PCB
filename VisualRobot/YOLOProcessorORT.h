@@ -27,6 +27,7 @@ public:
     void SetClassLabels(const vector<string>& labels);
 
     bool IsModelLoaded() const { return session_ != nullptr; }
+    bool AreLabelsLoaded() const { return !classLabels_.empty(); }
 
     void DrawDetectionResults(Mat& frame, const vector<DetectionResult>& results);
 
@@ -57,4 +58,4 @@ private:
                                             const std::string& imagePath = "", const std::string& expectedClass = "");
 };
 
-#endif // YOLOPROCESSORORT_H
+#endif // YOLOPROCESSORORT_H

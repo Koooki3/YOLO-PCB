@@ -78,7 +78,7 @@ void DLExample::SetupUI()
     // 任务类型选择
     paramLayout->addWidget(new QLabel("任务类型:"));
     taskTypeComboBox_ = new QComboBox();
-    taskTypeComboBox_->addItems({"图像分类", "目标检测", "实例分割"});
+    taskTypeComboBox_->addItems({"图像分类"});
     connect(taskTypeComboBox_, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, &DLExample::OnTaskTypeChanged);
     paramLayout->addWidget(taskTypeComboBox_);
     
@@ -171,7 +171,6 @@ void DLExample::ConnectSignals()
 {
     // 连接DLProcessor信号
     connect(dlProcessor_, &DLProcessor::classificationComplete, this, &DLExample::OnClassificationComplete);
-    connect(dlProcessor_, &DLProcessor::processingComplete, this, &DLExample::OnProcessingComplete);
     connect(dlProcessor_, &DLProcessor::batchProcessingComplete, this, &DLExample::OnBatchProcessingComplete);
     connect(dlProcessor_, &DLProcessor::errorOccurred, this, &DLExample::OnDLError);
 }
@@ -640,24 +639,9 @@ void DLExample::QuantizeModel()
 // 任务类型改变处理槽函数
 void DLExample::OnTaskTypeChanged(int index)
 {
-    // 根据任务类型更新按钮文本
-    switch(index)
-    {
-    case 0: // 图像分类
-        classifyBtn_->setText("开始分类");
-        batchBtn_->setText("批量分类");
-        break;
-    case 1: // 目标检测
-        classifyBtn_->setText("开始检测");
-        batchBtn_->setText("批量检测");
-        break;
-    case 2: // 实例分割
-        classifyBtn_->setText("开始分割");
-        batchBtn_->setText("批量分割");
-        break;
-    default:
-        break;
-    }
+    // 当前只有图像分类任务类型，无需其他处理
+    classifyBtn_->setText("开始分类");
+    batchBtn_->setText("批量分类");
 }
 
 // 通用图像处理方法
