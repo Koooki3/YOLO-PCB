@@ -644,13 +644,12 @@ void DLExample::OnTaskTypeChanged(int index)
     batchBtn_->setText("批量分类");
 }
 
-// 通用图像处理方法
+// 图像分类处理方法
 void DLExample::ProcessImage()
 {
     // 变量定义
     Mat image;                      // OpenCV图像矩阵
     ClassificationResult result;    // 分类结果
-    Mat processedImage;             // 处理后的图像
 
     // 检查模型是否已加载
     if (!isModelLoaded_) 
@@ -674,40 +673,22 @@ void DLExample::ProcessImage()
         return;
     }
 
-    statusLabel_->setText("正在处理...");
+    statusLabel_->setText("正在分类...");
     statusLabel_->setStyleSheet("QLabel { color: orange; }");
 
-    // 获取当前任务类型
-    int taskType = taskTypeComboBox_->currentIndex();
-    
-    // 根据任务类型执行不同操作
-    if (taskType == 0) // 图像分类
+    // 执行图像分类
+    if (dlProcessor_->ClassifyImage(image, result))
     {
-        if (dlProcessor_->ClassifyImage(image, result))
-        {
-            // 结果会通过信号槽处理
-        }
-        else 
-        {
-            statusLabel_->setText("处理失败");
-            statusLabel_->setStyleSheet("QLabel { color: red; }");
-        }
+        // 结果会通过信号槽处理
     }
-    else if (taskType == 1 || taskType == 2) // 目标检测或实例分割
+    else 
     {
-        if (dlProcessor_->ProcessYoloFrame(image, processedImage))
-        {
-            // 结果会通过信号槽处理
-        }
-        else 
-        {
-            statusLabel_->setText("处理失败");
-            statusLabel_->setStyleSheet("QLabel { color: red; }");
-        }
+        statusLabel_->setText("分类失败");
+        statusLabel_->setStyleSheet("QLabel { color: red; }");
     }
 }
 
-// 通用批量处理方法
+// 批量分类处理方法
 void DLExample::BatchProcess()
 {
     // 变量定义
@@ -724,16 +705,13 @@ void DLExample::BatchProcess()
     }
 
     // 打开文件对话框选择多个图像文件
-    fileNames = QFileDialog::getOpenFileNames(this, "选择要处理的图像", "", "图像文件 (*.jpg *.jpeg *.png *.bmp *.tiff)");
+    fileNames = QFileDialog::getOpenFileNames(this, "选择要批量分类的图像", "", "图像文件 (*.jpg *.jpeg *.png *.bmp *.tiff)");
 
     if (fileNames.isEmpty()) 
     {
         return;
     }
 
-    // 获取当前任务类型
-    int taskType = taskTypeComboBox_->currentIndex();
-    
     // 加载所有图像
     for (const QString& fileName : fileNames) 
     {
@@ -757,56 +735,14 @@ void DLExample::BatchProcess()
     progressBar_->setRange(0, images.size());
     progressBar_->setValue(0);
 
-    statusLabel_->setText(QString("正在批量处理 %1 张图像...").arg(images.size()));
+    statusLabel_->setText(QString("正在批量分类 %1 张图像...").arg(images.size()));
     statusLabel_->setStyleSheet("QLabel { color: orange; }");
 
     // 保存文件名用于结果显示
     batchFileNames_ = validFiles;
 
-    // 根据任务类型执行不同的批量处理
-    if (taskType == 0) // 图像分类
-    {
-        dlProcessor_->ClassifyBatch(images, results);
-    }
-    else // 目标检测或实例分割
-    {
-        // 这里可以扩展支持YOLO模型的批量处理
-        QMessageBox::information(this, "信息", "YOLO批量处理功能即将推出");
-        progressBar_->setVisible(false);
-    }
+    // 执行批量分类
+    dlProcessor_->ClassifyBatch(images, results);
 }
 
-// YOLO处理结果显示槽函数
-void DLExample::OnProcessingComplete(const cv::Mat& resultImage)
-{
-    // 变量定义
-    Mat rgbImage; // RGB格式图像
-    QImage qImage; // Qt图像对象
-    QPixmap pixmap; // Qt像素图对象
-    
-    try
-    {
-        // 将OpenCV图像转换为Qt格式
-        cvtColor(resultImage, rgbImage, COLOR_BGR2RGB);
-        qImage = QImage(rgbImage.data, rgbImage.cols, rgbImage.rows, rgbImage.step, QImage::Format_RGB888);
-        
-        // 调整图像大小以适应显示区域
-        pixmap = QPixmap::fromImage(qImage).scaled(imageLabel_->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        
-        // 显示处理后的图像
-        imageLabel_->setPixmap(pixmap);
-        
-        // 更新状态
-        statusLabel_->setText("处理完成");
-        statusLabel_->setStyleSheet("QLabel { color: green; }");
-        
-        // 显示简单的结果统计
-        resultLabel_->setText("YOLO处理完成 - 已在图像上绘制检测框和分割掩码");
-    }
-    catch (const exception& e)
-    {
-        statusLabel_->setText("结果显示失败");
-        statusLabel_->setStyleSheet("QLabel { color: red; }");
-        qDebug() << "Error displaying result image:" << QString::fromStdString(e.what());
-    }
-}
+
