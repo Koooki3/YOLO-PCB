@@ -16,32 +16,61 @@
 
 using namespace std;
 
+/**
+ * @brief SystemMonitor构造函数
+ * @param parent 父对象指针
+ * 
+ * 初始化系统监控对象，创建定时器并连接信号槽
+ */
 SystemMonitor::SystemMonitor(QObject *parent)
     : QObject(parent)
-    , m_updateTimer(new QTimer(this))
-    , m_lastTotalUser(0)
+    , m_updateTimer(new QTimer(this))  // 创建定时器
+    , m_lastTotalUser(0)               // 初始化CPU统计变量
     , m_lastTotalUserLow(0)
     , m_lastTotalSys(0)
     , m_lastTotalIdle(0)
 {
+    // 连接定时器超时信号到更新系统状态槽函数
     connect(m_updateTimer, &QTimer::timeout, this, &SystemMonitor::updateSystemStats);
 }
 
+/**
+ * @brief SystemMonitor析构函数
+ * 
+ * 停止监控并释放资源
+ */
 SystemMonitor::~SystemMonitor()
 {
-    stopMonitoring();
+    stopMonitoring();  // 停止监控
 }
 
+/**
+ * @brief 开始监控系统状态
+ * @param interval 监控更新间隔（毫秒）
+ * 
+ * 启动定时器，开始定期更新系统状态
+ */
 void SystemMonitor::startMonitoring(int interval)
 {
-    m_updateTimer->start(interval);
+    m_updateTimer->start(interval);  // 启动定时器
 }
 
+/**
+ * @brief 停止监控系统状态
+ * 
+ * 停止定时器，不再更新系统状态
+ */
 void SystemMonitor::stopMonitoring()
 {
-    m_updateTimer->stop();
+    m_updateTimer->stop();  // 停止定时器
 }
 
+/**
+ * @brief 获取CPU使用率
+ * @return CPU使用率（%）
+ * 
+ * 通过读取/proc/stat文件获取CPU统计信息，计算CPU使用率
+ */
 float SystemMonitor::GetCpuUsage()
 {
     // 变量定义
@@ -103,6 +132,7 @@ float SystemMonitor::GetCpuUsage()
         float cpuUsage = 0.0f;
         if (totalDelta > 0) 
         {
+            // CPU使用率 = (总时间 - 空闲时间) / 总时间 * 100%
             cpuUsage = 100.0f * (totalDelta - idleTimeDelta) / totalDelta;
         }
         
@@ -112,6 +142,7 @@ float SystemMonitor::GetCpuUsage()
         m_lastTotalSys = totalSys;
         m_lastTotalIdle = totalIdle;
         
+        // 确保CPU使用率在0-100%之间
         return min(100.0f, max(0.0f, cpuUsage));
     }
     
@@ -119,6 +150,12 @@ float SystemMonitor::GetCpuUsage()
     return 0.0f;
 }
 
+/**
+ * @brief 获取内存使用率
+ * @return 内存使用率（%）
+ * 
+ * 通过读取/proc/meminfo文件获取内存信息，计算内存使用率
+ */
 float SystemMonitor::GetMemoryUsage()
 {
     // 变量定义
@@ -136,23 +173,24 @@ float SystemMonitor::GetMemoryUsage()
         return 0.0f;
     }
     
+    // 读取内存信息
     while (getline(memFile, line)) 
     {
         if (line.find("MemTotal:") != string::npos) 
         {
-            sscanf(line.c_str(), "MemTotal: %lu", &totalMem);
+            sscanf(line.c_str(), "MemTotal: %lu", &totalMem);  // 读取总内存
         } 
         else if (line.find("MemFree:") != string::npos) 
         {
-            sscanf(line.c_str(), "MemFree: %lu", &freeMem);
+            sscanf(line.c_str(), "MemFree: %lu", &freeMem);  // 读取空闲内存
         } 
         else if (line.find("Buffers:") != string::npos) 
         {
-            sscanf(line.c_str(), "Buffers: %lu", &buffers);
+            sscanf(line.c_str(), "Buffers: %lu", &buffers);  // 读取缓冲区大小
         } 
         else if (line.find("Cached:") != string::npos) 
         {
-            sscanf(line.c_str(), "Cached: %lu", &cached);
+            sscanf(line.c_str(), "Cached: %lu", &cached);  // 读取缓存大小
             break;  // 已经找到所需的所有信息
         }
     }
@@ -167,9 +205,16 @@ float SystemMonitor::GetMemoryUsage()
     unsigned long usedMem = totalMem - freeMem - buffers - cached;
     float memUsage = 100.0f * static_cast<float>(usedMem) / totalMem;
     
+    // 确保内存使用率在0-100%之间
     return min(100.0f, max(0.0f, memUsage));
 }
 
+/**
+ * @brief 获取系统温度
+ * @return 系统温度（摄氏度）
+ * 
+ * 尝试从多个可能的温度传感器路径读取温度，失败则尝试通过系统命令获取
+ */
 float SystemMonitor::GetTemperature()
 {
     // 变量定义
@@ -237,12 +282,17 @@ float SystemMonitor::GetTemperature()
     return 0.0f;
 }
 
+/**
+ * @brief 更新系统状态槽函数
+ * 
+ * 定期调用该函数获取系统状态并发送信号
+ */
 void SystemMonitor::updateSystemStats()
 {
     // 获取系统状态数据
-    float cpuUsage = GetCpuUsage();
-    float memUsage = GetMemoryUsage();
-    float temperature = GetTemperature();
+    float cpuUsage = GetCpuUsage();        // 获取CPU使用率
+    float memUsage = GetMemoryUsage();     // 获取内存使用率
+    float temperature = GetTemperature();  // 获取系统温度
     
     // 发送系统状态更新信号
     emit systemStatsUpdated(cpuUsage, memUsage, temperature);

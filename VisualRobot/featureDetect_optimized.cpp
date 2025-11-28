@@ -5,27 +5,43 @@
 #include <algorithm>
 #include <numeric>
 
-// 静态成员变量定义
-static std::vector<std::thread> g_threadPool;
-static std::atomic<bool> g_threadPoolRunning{false};
-static std::mutex g_threadPoolMutex;
-static std::condition_variable g_threadPoolCV;
+// 静态成员变量定义 - 线程池相关
+static std::vector<std::thread> g_threadPool;              // 线程池
+static std::atomic<bool> g_threadPoolRunning{false};       // 线程池运行状态
+static std::mutex g_threadPoolMutex;                       // 线程池互斥锁
+static std::condition_variable g_threadPoolCV;             // 线程池条件变量
 
+/**
+ * @brief 构造函数
+ * 
+ * 初始化优化版特征检测器，默认创建4线程的线程池
+ */
 FeatureDetectorOptimized::FeatureDetectorOptimized()
 {
-    // 默认初始化线程池
+    // 默认初始化线程池，使用4个线程
     InitializeThreadPool(4);
 }
 
+/**
+ * @brief 析构函数
+ * 
+ * 关闭线程池，释放资源
+ */
 FeatureDetectorOptimized::~FeatureDetectorOptimized()
 {
     ShutdownThreadPool();
 }
 
+/**
+ * @brief 初始化线程池
+ * 
+ * @param numThreads 线程池大小
+ */
 void FeatureDetectorOptimized::InitializeThreadPool(int numThreads)
 {
     std::lock_guard<std::mutex> lock(g_threadPoolMutex);
 
+    // 如果线程池已运行，先关闭
     if (g_threadPoolRunning)
     {
         ShutdownThreadPool();
@@ -34,12 +50,14 @@ void FeatureDetectorOptimized::InitializeThreadPool(int numThreads)
     g_threadPoolRunning = true;
     g_threadPool.clear();
 
+    // 创建指定数量的线程
     for (int i = 0; i < numThreads; ++i)
     {
         g_threadPool.emplace_back([]() {
             while (g_threadPoolRunning)
             {
                 std::unique_lock<std::mutex> lock(g_threadPoolMutex);
+                // 等待线程池关闭信号
                 g_threadPoolCV.wait(lock, []() {
                     return !g_threadPoolRunning;
                 });
@@ -50,6 +68,11 @@ void FeatureDetectorOptimized::InitializeThreadPool(int numThreads)
     qDebug() << "Thread pool initialized with" << numThreads << "threads";
 }
 
+/**
+ * @brief 关闭线程池
+ * 
+ * 停止所有线程并释放资源
+ */
 void FeatureDetectorOptimized::ShutdownThreadPool()
 {
     {
@@ -57,8 +80,10 @@ void FeatureDetectorOptimized::ShutdownThreadPool()
         g_threadPoolRunning = false;
     }
 
+    // 通知所有线程
     g_threadPoolCV.notify_all();
 
+    // 等待所有线程结束
     for (auto& thread : g_threadPool)
     {
         if (thread.joinable())
@@ -71,6 +96,17 @@ void FeatureDetectorOptimized::ShutdownThreadPool()
     qDebug() << "Thread pool shutdown";
 }
 
+/**
+ * @brief 并行特征匹配和筛选
+ * 
+ * @param keypoints1 第一张图像的特征点
+ * @param keypoints2 第二张图像的特征点
+ * @param knnMatches KNN匹配结果
+ * @param points1 输出的第一张图像匹配点坐标
+ * @param points2 输出的第二张图像匹配点坐标
+ * @param params 特征检测参数
+ * @return 筛选后的匹配点对
+ */
 std::vector<cv::DMatch> FeatureDetectorOptimized::FilterMatchesParallel(
     const std::vector<cv::KeyPoint>& keypoints1,
     const std::vector<cv::KeyPoint>& keypoints2,
@@ -82,10 +118,11 @@ std::vector<cv::DMatch> FeatureDetectorOptimized::FilterMatchesParallel(
     QElapsedTimer timer;
     timer.start();
 
-    std::vector<cv::DMatch> goodMatches;
+    std::vector<cv::DMatch> goodMatches; // 存储筛选后的优质匹配
     points1.clear();
     points2.clear();
 
+    // 根据参数决定是否使用并行处理
     if (!params.enableParallel || params.numThreads <= 1)
     {
         // 串行版本 - 回退到原始算法
@@ -130,9 +167,11 @@ std::vector<cv::DMatch> FeatureDetectorOptimized::FilterMatchesParallel(
         std::vector<bool> validKeypoints2(keypoints2.size(), false);
 
         std::vector<std::thread> threads;
+        // 计算每个线程处理的特征点数量
         const size_t chunkSize1 = (keypoints1.size() + numThreads - 1) / numThreads;
         const size_t chunkSize2 = (keypoints2.size() + numThreads - 1) / numThreads;
 
+        // 为每个线程分配任务
         for (int i = 0; i < numThreads; ++i)
         {
             const size_t start1 = i * chunkSize1;
@@ -151,6 +190,7 @@ std::vector<cv::DMatch> FeatureDetectorOptimized::FilterMatchesParallel(
             }
         }
 
+        // 等待所有线程完成
         for (auto& thread : threads)
         {
             if (thread.joinable())
@@ -165,8 +205,10 @@ std::vector<cv::DMatch> FeatureDetectorOptimized::FilterMatchesParallel(
         std::vector<std::vector<cv::Point2f>> threadPoints2(numThreads);
 
         threads.clear();
+        // 计算每个线程处理的匹配数量
         const size_t chunkSizeMatches = (knnMatches.size() + numThreads - 1) / numThreads;
 
+        // 为每个线程分配比率测试任务
         for (int i = 0; i < numThreads; ++i)
         {
             const size_t start = i * chunkSizeMatches;
@@ -174,13 +216,14 @@ std::vector<cv::DMatch> FeatureDetectorOptimized::FilterMatchesParallel(
 
             if (start < knnMatches.size())
             {
-                threads.emplace_back(ParallelRatioTest,
+                threads.emplace_back(ParallelRatioTest, 
                     std::cref(knnMatches), std::cref(validKeypoints1), std::cref(validKeypoints2),
                     std::ref(threadGoodMatches[i]), std::ref(threadPoints1[i]), std::ref(threadPoints2[i]),
                     std::cref(keypoints1), std::cref(keypoints2), params.ratioThresh, start, end);
             }
         }
 
+        // 等待所有线程完成
         for (auto& thread : threads)
         {
             if (thread.joinable())
@@ -189,7 +232,7 @@ std::vector<cv::DMatch> FeatureDetectorOptimized::FilterMatchesParallel(
             }
         }
 
-        // 合并结果
+        // 合并所有线程的结果
         for (int i = 0; i < numThreads; ++i)
         {
             goodMatches.insert(goodMatches.end(), threadGoodMatches[i].begin(), threadGoodMatches[i].end());
@@ -203,6 +246,7 @@ std::vector<cv::DMatch> FeatureDetectorOptimized::FilterMatchesParallel(
     {
         if (params.enableParallel && params.numThreads > 1)
         {
+            // 并行RANSAC
             goodMatches = ParallelRANSAC(goodMatches, points1, points2, params);
         }
         else
@@ -217,6 +261,7 @@ std::vector<cv::DMatch> FeatureDetectorOptimized::FilterMatchesParallel(
                 std::vector<cv::Point2f> inlierPoints1;
                 std::vector<cv::Point2f> inlierPoints2;
 
+                // 提取内点
                 for (size_t i = 0; i < inlierMask.size(); i++)
                 {
                     if (inlierMask[i])
@@ -227,6 +272,7 @@ std::vector<cv::DMatch> FeatureDetectorOptimized::FilterMatchesParallel(
                     }
                 }
 
+                // 检查内点数量是否满足要求
                 if (ransacMatches.size() >= static_cast<size_t>(params.minInliers))
                 {
                     points1 = inlierPoints1;
@@ -241,6 +287,15 @@ std::vector<cv::DMatch> FeatureDetectorOptimized::FilterMatchesParallel(
     return goodMatches;
 }
 
+/**
+ * @brief 并行特征点筛选函数
+ * 
+ * @param keypoints 特征点列表
+ * @param validFlags 有效特征点标志
+ * @param responseThresh 响应值阈值
+ * @param startIdx 起始索引
+ * @param endIdx 结束索引
+ */
 void FeatureDetectorOptimized::ParallelKeypointFilter(
     const std::vector<cv::KeyPoint>& keypoints,
     std::vector<bool>& validFlags,
@@ -248,6 +303,7 @@ void FeatureDetectorOptimized::ParallelKeypointFilter(
     size_t startIdx,
     size_t endIdx)
 {
+    // 筛选响应值大于阈值的特征点
     for (size_t i = startIdx; i < endIdx; ++i)
     {
         if (keypoints[i].response > responseThresh)
@@ -257,6 +313,21 @@ void FeatureDetectorOptimized::ParallelKeypointFilter(
     }
 }
 
+/**
+ * @brief 并行比率测试函数
+ * 
+ * @param knnMatches KNN匹配结果
+ * @param validKeypoints1 第一张图像的有效特征点标志
+ * @param validKeypoints2 第二张图像的有效特征点标志
+ * @param goodMatches 优质匹配结果
+ * @param points1 第一张图像的匹配点坐标
+ * @param points2 第二张图像的匹配点坐标
+ * @param keypoints1 第一张图像的特征点
+ * @param keypoints2 第二张图像的特征点
+ * @param ratioThresh 比率阈值
+ * @param startIdx 起始索引
+ * @param endIdx 结束索引
+ */
 void FeatureDetectorOptimized::ParallelRatioTest(
     const std::vector<std::vector<cv::DMatch>>& knnMatches,
     const std::vector<bool>& validKeypoints1,
@@ -270,6 +341,7 @@ void FeatureDetectorOptimized::ParallelRatioTest(
     size_t startIdx,
     size_t endIdx)
 {
+    // 应用比率测试筛选优质匹配
     for (size_t i = startIdx; i < endIdx; ++i)
     {
         const auto& match = knnMatches[i];
@@ -282,6 +354,15 @@ void FeatureDetectorOptimized::ParallelRatioTest(
     }
 }
 
+/**
+ * @brief 并行RANSAC函数
+ * 
+ * @param goodMatches 优质匹配结果
+ * @param points1 第一张图像的匹配点坐标
+ * @param points2 第二张图像的匹配点坐标
+ * @param params 特征检测参数
+ * @return 经过RANSAC验证的匹配点对
+ */
 std::vector<cv::DMatch> FeatureDetectorOptimized::ParallelRANSAC(
     const std::vector<cv::DMatch>& goodMatches,
     std::vector<cv::Point2f>& points1,
@@ -291,9 +372,10 @@ std::vector<cv::DMatch> FeatureDetectorOptimized::ParallelRANSAC(
     // 由于RANSAC算法本身是随机采样，难以直接并行化
     // 这里采用多次RANSAC并行执行，选择最佳结果的方法
 
-    const int numRANSACRuns = std::min(params.numThreads, 8); // 限制最大运行次数
+    const int numRANSACRuns = std::min(params.numThreads, 8); // 限制最大运行次数为8
     std::vector<std::future<std::tuple<std::vector<cv::DMatch>, std::vector<cv::Point2f>, std::vector<cv::Point2f>, int>>> futures;
 
+    // 启动多个RANSAC并行执行
     for (int i = 0; i < numRANSACRuns; ++i)
     {
         futures.push_back(std::async(std::launch::async, [&, i]() {
@@ -310,6 +392,7 @@ std::vector<cv::DMatch> FeatureDetectorOptimized::ParallelRANSAC(
             std::vector<cv::Point2f> inlierPoints2;
             int inlierCount = 0;
 
+            // 提取内点
             for (size_t j = 0; j < inlierMask.size(); j++)
             {
                 if (inlierMask[j])
@@ -353,6 +436,14 @@ std::vector<cv::DMatch> FeatureDetectorOptimized::ParallelRANSAC(
     return goodMatches; // 如果没有找到更好的结果，返回原始匹配
 }
 
+/**
+ * @brief 并行特征检测测试函数
+ * 
+ * @param imagePath1 第一张图像路径
+ * @param imagePath2 第二张图像路径
+ * 
+ * 测试不同特征提取器的性能，包括SIFT、ORB和AKAZE
+ */
 void FeatureDetectorOptimized::TestFeatureDetectionParallel(const QString& imagePath1, const QString& imagePath2)
 {
     FeatureParams_optimize params;
@@ -436,6 +527,14 @@ void FeatureDetectorOptimized::TestFeatureDetectionParallel(const QString& image
     qDebug() << "==============================\n";
 }
 
+/**
+ * @brief 处理图像对
+ * 
+ * @param imagePath1 第一张图像路径
+ * @param imagePath2 第二张图像路径
+ * @param params 特征检测参数
+ * @return 并行处理结果
+ */
 ParallelResult FeatureDetectorOptimized::ProcessImagePair(
     const QString& imagePath1,
     const QString& imagePath2,
@@ -502,6 +601,13 @@ ParallelResult FeatureDetectorOptimized::ProcessImagePair(
     return result;
 }
 
+/**
+ * @brief 批量特征检测
+ * 
+ * @param imagePairs 图像对列表
+ * @param params 特征检测参数
+ * @return 批量处理结果
+ */
 std::vector<ParallelResult> FeatureDetectorOptimized::BatchFeatureDetection(
     const std::vector<std::pair<QString, QString>>& imagePairs,
     const FeatureParams_optimize& params)
@@ -531,6 +637,14 @@ std::vector<ParallelResult> FeatureDetectorOptimized::BatchFeatureDetection(
     return results;
 }
 
+/**
+ * @brief 异步特征检测
+ * 
+ * @param imagePath1 第一张图像路径
+ * @param imagePath2 第二张图像路径
+ * @param params 特征检测参数
+ * @return 异步处理结果的future对象
+ */
 std::future<ParallelResult> FeatureDetectorOptimized::AsyncFeatureDetection(
     const QString& imagePath1,
     const QString& imagePath2,
@@ -543,6 +657,12 @@ std::future<ParallelResult> FeatureDetectorOptimized::AsyncFeatureDetection(
         });
 }
 
+/**
+ * @brief 记录性能指标
+ * 
+ * @param operation 操作名称
+ * @param elapsedMs 耗时（毫秒）
+ */
 void FeatureDetectorOptimized::LogPerformanceMetrics(const QString& operation, qint64 elapsedMs)
 {
     qDebug() << "Performance:" << operation << "took" << elapsedMs << "ms";

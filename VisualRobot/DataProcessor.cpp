@@ -4,18 +4,31 @@
 using namespace std;
 using namespace cv;
 
+/**
+ * @brief 构造函数
+ * 
+ * 初始化数据处理器，设置默认特征提取器类型为SIFT，并初始化所有特征检测器
+ * 
+ * @param parent 父对象指针
+ */
 DataProcessor::DataProcessor(QObject *parent)
     : QObject(parent)
-    , rng_(random_device{}())
-    , currentFeatureType_(FeatureType::SIFT)
+    , rng_(random_device{}()) // 初始化随机数生成器
+    , currentFeatureType_(FeatureType::SIFT) // 默认使用SIFT特征提取器
 {
-    InitializeDetectors();
+    InitializeDetectors(); // 初始化所有特征检测器
 }
 
+/**
+ * @brief 初始化特征检测器
+ * 
+ * 尝试初始化SIFT、ORB和AKAZE特征检测器，并处理可能的异常
+ */
 void DataProcessor::InitializeDetectors()
 {
     try 
     {
+        // 初始化SIFT特征检测器
         siftDetector_ = SIFT::create();
     } 
     catch (const cv::Exception& e) 
@@ -23,10 +36,18 @@ void DataProcessor::InitializeDetectors()
         qDebug() << "警告: 无法初始化SIFT检测器:" << e.what();
     }
     
-
-    
     try 
     {
+        // 初始化ORB特征检测器，参数说明：
+        // 500: 最大特征点数
+        // 1.2f: 金字塔缩放因子
+        // 8: 金字塔层数
+        // 31: 边缘阈值
+        // 0: 第一个通道的像素值偏移
+        // 2: 方向数量
+        // ORB::HARRIS_SCORE: 角点检测算法
+        // 31: 描述符长度
+        // 20: 匹配距离阈值
         orbDetector_ = ORB::create(500, 1.2f, 8, 31, 0, 2, ORB::HARRIS_SCORE, 31, 20);
     } 
     catch (const cv::Exception& e) 
@@ -36,6 +57,7 @@ void DataProcessor::InitializeDetectors()
     
     try 
     {
+        // 初始化AKAZE特征检测器
         akazeDetector_ = AKAZE::create();
     } 
     catch (const cv::Exception& e) 
@@ -44,16 +66,36 @@ void DataProcessor::InitializeDetectors()
     }
 }
 
+/**
+ * @brief 设置特征提取器类型
+ * 
+ * @param type 特征提取器类型
+ */
 void DataProcessor::SetFeatureType(FeatureType type)
 {
     currentFeatureType_ = type;
 }
 
+/**
+ * @brief 获取当前特征提取器类型
+ * 
+ * @return 当前使用的特征提取器类型
+ */
 FeatureType DataProcessor::GetFeatureType() const
 {
     return currentFeatureType_;
 }
 
+/**
+ * @brief 图像归一化处理
+ * 
+ * 将图像像素值归一化到指定的均值和标准差
+ * 
+ * @param input 输入图像
+ * @param targetMean 目标均值
+ * @param targetStd 目标标准差
+ * @return 归一化后的图像
+ */
 Mat DataProcessor::NormalizeImage(const Mat& input, double targetMean, double targetStd)
 {
     // 定义局部变量
@@ -67,15 +109,23 @@ Mat DataProcessor::NormalizeImage(const Mat& input, double targetMean, double ta
     // 计算当前均值和标准差
     meanStdDev(normalized, mean, stddev);
     
-    // 标准化处理
+    // 标准化处理: (x - mean) / stddev
     normalized = (normalized - mean[0]) / stddev[0];
     
-    // 调整到目标均值和标准差
+    // 调整到目标均值和标准差: x * targetStd + targetMean
     normalized = normalized * targetStd + targetMean;
     
     return normalized;
 }
 
+/**
+ * @brief 图像标准化处理
+ * 
+ * 将图像像素值映射到0-255范围
+ * 
+ * @param input 输入图像
+ * @return 标准化后的图像
+ */
 Mat DataProcessor::StandardizeImage(const Mat& input)
 {
     // 定义局部变量
@@ -92,6 +142,15 @@ Mat DataProcessor::StandardizeImage(const Mat& input)
     return standardized;
 }
 
+/**
+ * @brief 保持宽高比调整图像大小
+ * 
+ * 按照指定的目标大小，保持图像宽高比进行缩放
+ * 
+ * @param input 输入图像
+ * @param targetSize 目标最大尺寸
+ * @return 调整大小后的图像
+ */
 Mat DataProcessor::ResizeWithAspectRatio(const Mat& input, int targetSize)
 {
     // 定义局部变量
@@ -101,12 +160,20 @@ Mat DataProcessor::ResizeWithAspectRatio(const Mat& input, int targetSize)
     // 计算缩放比例，保持宽高比
     ratio = static_cast<double>(targetSize) / max(input.rows, input.cols);
     
-    // 执行图像缩放
+    // 执行图像缩放，使用INTER_AREA插值方法
     resize(input, resized, Size(), ratio, ratio, INTER_AREA);
     
     return resized;
 }
 
+/**
+ * @brief 提取HOG特征
+ * 
+ * 从输入图像中提取HOG（方向梯度直方图）特征
+ * 
+ * @param input 输入图像
+ * @return HOG特征矩阵
+ */
 Mat DataProcessor::ExtractHOGFeatures(const Mat& input)
 {
     // 定义局部变量
@@ -126,7 +193,7 @@ Mat DataProcessor::ExtractHOGFeatures(const Mat& input)
         gray = input.clone();
     }
         
-    // 调整大小为标准尺寸
+    // 调整大小为标准尺寸 (64x128)
     resize(gray, resized, Size(64, 128));
     
     // 计算HOG特征
@@ -137,6 +204,15 @@ Mat DataProcessor::ExtractHOGFeatures(const Mat& input)
     return hogFeatures;
 }
 
+/**
+ * @brief 检测特征点并计算描述符
+ * 
+ * 根据当前设置的特征提取器类型，检测图像中的特征点并计算相应的描述符
+ * 
+ * @param input 输入图像
+ * @param descriptors 输出的特征描述符
+ * @return 检测到的特征点
+ */
 vector<KeyPoint> DataProcessor::DetectKeypoints(const Mat& input, Mat& descriptors)
 {
     // 定义局部变量
@@ -181,6 +257,13 @@ vector<KeyPoint> DataProcessor::DetectKeypoints(const Mat& input, Mat& descripto
     return keypoints;
 }
 
+/**
+ * @brief 调整图像亮度
+ * 
+ * @param input 输入图像
+ * @param alpha 亮度调整值，正值增加亮度，负值降低亮度
+ * @return 调整亮度后的图像
+ */
 Mat DataProcessor::AdjustBrightness(const Mat& input, double alpha)
 {
     // 定义局部变量
@@ -190,11 +273,19 @@ Mat DataProcessor::AdjustBrightness(const Mat& input, double alpha)
     adjusted = input.clone();
     
     // 调整亮度: alpha控制亮度偏移量
+    // 公式: output = input * 1 + alpha
     adjusted.convertTo(adjusted, -1, 1, alpha);
     
     return adjusted;
 }
 
+/**
+ * @brief 调整图像对比度
+ * 
+ * @param input 输入图像
+ * @param beta 对比度调整值，大于1增加对比度，小于1降低对比度
+ * @return 调整对比度后的图像
+ */
 Mat DataProcessor::AdjustContrast(const Mat& input, double beta)
 {
     // 定义局部变量
@@ -204,12 +295,21 @@ Mat DataProcessor::AdjustContrast(const Mat& input, double beta)
     adjusted = input.clone();
     
     // 调整对比度: beta控制对比度比例
+    // 公式: output = input * beta + 0
     adjusted.convertTo(adjusted, -1, beta, 0);
     
     return adjusted;
 }
 
-Mat DataProcessor::AddNoise(const Mat& input, double mean = 0, double stddev = 25)
+/**
+ * @brief 为图像添加高斯噪声
+ * 
+ * @param input 输入图像
+ * @param mean 噪声均值，默认为0
+ * @param stddev 噪声标准差，默认为25
+ * @return 添加噪声后的图像
+ */
+Mat DataProcessor::AddNoise(const Mat& input, double mean, double stddev)
 {
     // 定义局部变量
     Mat noise;      // 噪声矩阵
@@ -225,14 +325,21 @@ Mat DataProcessor::AddNoise(const Mat& input, double mean = 0, double stddev = 2
     input.convertTo(noisy, CV_32F);
     noisy += noise;
     
-    // 确保像素值在有效范围内
+    // 确保像素值在有效范围内 (0-255)
     normalize(noisy, noisy, 0, 255, NORM_MINMAX);
     noisy.convertTo(noisy, input.type());
     
     return noisy;
 }
 
-Mat DataProcessor::RandomRotate(const Mat& input, double maxAngle = 30)
+/**
+ * @brief 随机旋转图像
+ * 
+ * @param input 输入图像
+ * @param maxAngle 最大旋转角度（正负），默认为30度
+ * @return 旋转后的图像
+ */
+Mat DataProcessor::RandomRotate(const Mat& input, double maxAngle)
 {
     // 定义局部变量
     double angle;               // 旋转角度
@@ -240,7 +347,7 @@ Mat DataProcessor::RandomRotate(const Mat& input, double maxAngle = 30)
     Mat rotationMatrix;         // 旋转矩阵
     Mat rotated;                // 旋转后的图像
 
-    // 生成随机旋转角度
+    // 生成随机旋转角度 (-maxAngle 到 maxAngle)
     angle = RandomDouble(-maxAngle, maxAngle);
     
     // 计算图像中心点
@@ -255,6 +362,14 @@ Mat DataProcessor::RandomRotate(const Mat& input, double maxAngle = 30)
     return rotated;
 }
 
+/**
+ * @brief 随机翻转图像
+ * 
+ * 随机选择水平翻转或垂直翻转
+ * 
+ * @param input 输入图像
+ * @return 翻转后的图像
+ */
 Mat DataProcessor::RandomFlip(const Mat& input)
 {
     // 定义局部变量
@@ -277,7 +392,14 @@ Mat DataProcessor::RandomFlip(const Mat& input)
     return flipped;
 }
 
-Mat DataProcessor::RandomCrop(const Mat& input, double scale = 0.8)
+/**
+ * @brief 随机裁剪图像
+ * 
+ * @param input 输入图像
+ * @param scale 裁剪比例，默认为0.8（裁剪为原图像的80%大小）
+ * @return 裁剪并调整大小后的图像
+ */
+Mat DataProcessor::RandomCrop(const Mat& input, double scale)
 {
     // 定义局部变量
     int width;              // 裁剪宽度
@@ -307,7 +429,16 @@ Mat DataProcessor::RandomCrop(const Mat& input, double scale = 0.8)
     return cropped;
 }
 
-vector<Mat> DataProcessor::ApplyAugmentation(const Mat& input, int numAugmentations = 5)
+/**
+ * @brief 批量应用数据增强
+ * 
+ * 对输入图像应用多种随机数据增强操作，生成多个增强版本
+ * 
+ * @param input 输入图像
+ * @param numAugmentations 增强版本数量，默认为5
+ * @return 增强后的图像集合
+ */
+vector<Mat> DataProcessor::ApplyAugmentation(const Mat& input, int numAugmentations)
 {
     // 定义局部变量
     vector<Mat> augmented;  // 增强后的图像集合
@@ -322,7 +453,8 @@ vector<Mat> DataProcessor::ApplyAugmentation(const Mat& input, int numAugmentati
         // 克隆原始图像
         current = input.clone();
         
-        // 随机应用数据增强操作
+        // 随机应用数据增强操作，每个操作有50%的概率被应用
+        
         // 亮度调整 (50%概率) 
         if (RandomDouble(0, 1) > 0.5)
         {
@@ -366,6 +498,13 @@ vector<Mat> DataProcessor::ApplyAugmentation(const Mat& input, int numAugmentati
     return augmented;
 }
 
+/**
+ * @brief 生成指定范围内的随机浮点数
+ * 
+ * @param min 最小值
+ * @param max 最大值
+ * @return 随机浮点数
+ */
 double DataProcessor::RandomDouble(double min, double max)
 {
     // 定义局部变量
@@ -375,12 +514,19 @@ double DataProcessor::RandomDouble(double min, double max)
     return dist(rng_);
 }
 
+/**
+ * @brief 生成指定范围内的随机整数
+ * 
+ * @param min 最小值
+ * @param max 最大值
+ * @return 随机整数
+ */
 int DataProcessor::RandomInt(int min, int max)
 {
     // 定义局部变量
     uniform_int_distribution<int> dist(min, max);  // 均匀整数分布对象
 
-    // 生成随机浮点数
+    // 生成随机整数
     return dist(rng_);
 }
 
