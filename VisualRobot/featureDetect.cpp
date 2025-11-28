@@ -2,16 +2,34 @@
 #include "DataProcessor.h"
 #include "DLProcessor.h"
 
+/**
+ * @brief 构造函数
+ */
 featureDetector::featureDetector()
 {
 
 }
 
+/**
+ * @brief 析构函数
+ */
 featureDetector::~featureDetector()
 {
 
 }
 
+/**
+ * @brief 特征匹配和几何验证函数
+ * @param keypoints1 第一张图像的特征点
+ * @param keypoints2 第二张图像的特征点
+ * @param knnMatches KNN匹配结果
+ * @param points1 输出的第一张图像的匹配点坐标
+ * @param points2 输出的第二张图像的匹配点坐标
+ * @param params 特征检测参数
+ * @return 筛选后的匹配点对
+ * 
+ * 对特征匹配进行多阶段筛选，包括响应值筛选、比率测试和RANSAC几何验证
+ */
 std::vector<cv::DMatch> featureDetector::FilterMatches(
     const std::vector<cv::KeyPoint>& keypoints1,
     const std::vector<cv::KeyPoint>& keypoints2,
@@ -51,6 +69,7 @@ std::vector<cv::DMatch> featureDetector::FilterMatches(
     // 2. 应用比率测试进行初步筛选
     for (const auto& match : knnMatches)
     {
+        // 比率测试：最佳匹配与次佳匹配的距离比率小于阈值，且特征点响应值有效
         if (match[0].distance < params.ratioThresh * match[1].distance && validKeypoints1[match[0].queryIdx] && validKeypoints2[match[0].trainIdx])
         {
             goodMatches.push_back(match[0]);
@@ -65,6 +84,7 @@ std::vector<cv::DMatch> featureDetector::FilterMatches(
         std::vector<uchar> inlierMask;    // RANSAC内点掩码
         cv::Mat H;                        // 单应性矩阵
         
+        // 计算单应性矩阵并获取内点掩码
         H = cv::findHomography(points1, points2, cv::RANSAC, params.ransacReprojThresh, inlierMask);
 
         if (!H.empty())
@@ -73,6 +93,7 @@ std::vector<cv::DMatch> featureDetector::FilterMatches(
             std::vector<cv::Point2f> inlierPoints1;     // 图像1的内点点集
             std::vector<cv::Point2f> inlierPoints2;     // 图像2的内点点集
 
+            // 提取内点
             for (size_t i = 0; i < inlierMask.size(); i++)
             {
                 if (inlierMask[i])
@@ -83,6 +104,7 @@ std::vector<cv::DMatch> featureDetector::FilterMatches(
                 }
             }
 
+            // 如果内点数量足够，返回RANSAC筛选后的匹配
             if (ransacMatches.size() >= static_cast<size_t>(params.minInliers))
             {
                 points1 = inlierPoints1;
@@ -92,9 +114,17 @@ std::vector<cv::DMatch> featureDetector::FilterMatches(
         }
     }
 
+    // 如果RANSAC验证失败或未启用，返回初步筛选后的匹配
     return goodMatches;
 }
 
+/**
+ * @brief 特征识别测试函数
+ * @param imagePath1 第一张图像的路径
+ * @param imagePath2 第二张图像的路径
+ * 
+ * 完整的特征检测流程测试，包括图像读取、预处理、特征提取、匹配和结果可视化
+ */
 void featureDetector::TestFeatureDetection(const QString& imagePath1, const QString& imagePath2)
 {
     // 定义局部变量
@@ -120,20 +150,21 @@ void featureDetector::TestFeatureDetection(const QString& imagePath1, const QStr
     image1 = cv::imread(imagePath1.toStdString());
     image2 = cv::imread(imagePath2.toStdString());
 
+    // 检查图像是否读取成功
     if (image1.empty() || image2.empty())
     {
         qDebug() << "Error: Could not read the images";
         return;
     }
 
-    // 1. 图像预处理
+    // 1. 图像预处理：标准化图像
     standardized1 = dataProcessor.StandardizeImage(image1);
     standardized2 = dataProcessor.StandardizeImage(image2);
 
     // 2. 设置特征提取器类型
     dataProcessor.SetFeatureType(params.featureType);
 
-    // 3. 提取特征
+    // 3. 提取特征：检测关键点并计算描述符
     keypoints1 = dataProcessor.DetectKeypoints(standardized1, descriptors1);
     keypoints2 = dataProcessor.DetectKeypoints(standardized2, descriptors2);
 
@@ -144,17 +175,19 @@ void featureDetector::TestFeatureDetection(const QString& imagePath1, const QStr
     params.minInliers = 10;             // 最小内点数量
     params.useRansac = true;            // 启用RANSAC验证
 
-    // 3. 特征匹配
+    // 4. 特征匹配：使用FLANN匹配器进行KNN匹配
     matcher = cv::DescriptorMatcher::create(cv::DescriptorMatcher::FLANNBASED);
     matcher->knnMatch(descriptors1, descriptors2, knnMatches, 2);
 
-    // 4. 特征点筛选和几何验证
+    // 5. 特征点筛选和几何验证
     goodMatches = FilterMatches(keypoints1, keypoints2, knnMatches, points1, points2, params);
 
-    // 5. 绘制匹配结果
-    cv::drawMatches(image1, keypoints1, image2, keypoints2, goodMatches, imgMatches, cv::Scalar::all(-1), cv::Scalar::all(-1), std::vector<char>(), cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+    // 6. 绘制匹配结果
+    cv::drawMatches(image1, keypoints1, image2, keypoints2, goodMatches, imgMatches, 
+                    cv::Scalar::all(-1), cv::Scalar::all(-1), std::vector<char>(), 
+                    cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
 
-    // 6. 如果有足够的匹配点，绘制变换关系
+    // 7. 如果有足够的匹配点，绘制变换关系
     if (points1.size() >= 4)
     {
         cv::Mat H; // 单应性矩阵
@@ -180,7 +213,7 @@ void featureDetector::TestFeatureDetection(const QString& imagePath1, const QStr
         cv::line(imgMatches, sceneCorners[3] + cv::Point2f(image1.cols, 0), sceneCorners[0] + cv::Point2f(image1.cols, 0), cv::Scalar(0, 255, 0), 2);
     }
 
-    // 7. 保存结果图像
+    // 8. 保存结果图像
     cv::imwrite("../feature_matches.jpg", imgMatches);
 
     // 输出匹配信息

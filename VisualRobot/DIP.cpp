@@ -31,7 +31,14 @@ using namespace Eigen;
 using namespace std;
 using namespace cv;
 
-// 创建目录的辅助函数
+/**
+ * @brief 创建目录的辅助函数
+ * @param path 要创建的目录路径
+ * @return 创建成功返回true，失败返回false
+ * 
+ * 使用Qt的QDir类创建指定路径的目录，包括所有必要的父目录。
+ * 如果目录已存在，也会返回true。
+ */
 bool CreateDirectory(const string& path)
 {
     // 变量定义
@@ -256,18 +263,28 @@ bool CreateDirectory(const string& path)
 //}
 
 
-// OpenCV版本的圆形检测算法
-// 参数:
-//   WorldCoord - 输出参数，存储检测到的世界坐标
-//   PixelCoord - 输出参数，存储检测到的像素坐标  
-//   size - 标定板尺寸，默认为100.0
-// 返回值:
-//   成功返回0，失败返回1
+/**
+ * @brief 使用OpenCV检测标定板上的圆形标记并获取坐标
+ * @param WorldCoord 输出参数，存储检测到的世界坐标
+ * @param PixelCoord 输出参数，存储检测到的像素坐标
+ * @param size 标定板尺寸，默认为100.0
+ * @return 成功返回0，失败返回1
+ * 
+ * 该函数实现了基于OpenCV的圆形检测算法，用于检测标定板上的圆形标记。
+ * 主要步骤包括：
+ * 1. 读取图像
+ * 2. 计算圆形检测参数
+ * 3. 定义搜索区域
+ * 4. 图像预处理（灰度化、二值化）
+ * 5. 使用Hough圆变换检测圆
+ * 6. 亚像素精度优化圆心坐标
+ * 7. 存储结果并绘制
+ */
 int GetCoordsOpenCV(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double size = 100.0)
 {
     // 变量定义
     Mat image;                              // 输入图像
-    int height, width; // 图像高度和宽度
+    int height, width;                      // 图像高度和宽度
     double r, dis_col, dis_row, rmin, rmax; // 圆形检测参数
     vector<Rect> searchAreas;               // 搜索区域列表
     vector<Point2f> worldCoords;            // 世界坐标列表
@@ -295,17 +312,17 @@ int GetCoordsOpenCV(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, 
     width = image.cols;
 
     // 计算参数 (基于原始代码中的比例) 
-    r = (height * 316.0) / 2182.0;
-    dis_col = (width * 1049.0) / 2734.0;
-    dis_row = (height * 774.0) / 2182.0;
-    rmin = r - 10;
-    rmax = r + 10;
+    r = (height * 316.0) / 2182.0;          // 预期圆半径
+    dis_col = (width * 1049.0) / 2734.0;    // 列方向圆心间距
+    dis_row = (height * 774.0) / 2182.0;    // 行方向圆心间距
+    rmin = r - 10;                         // 最小圆半径
+    rmax = r + 10;                         // 最大圆半径
     
-    // 计算世界坐标
-    world_dis_col = 1049.0 * size / 2734.0;
-    world_dis_row = 774.0 * size / 2734.0;
+    // 计算世界坐标间距
+    world_dis_col = 1049.0 * size / 2734.0;  // 世界坐标列间距
+    world_dis_row = 774.0 * size / 2734.0;   // 世界坐标行间距
 
-    // 定义9个区域的世界坐标
+    // 定义9个区域的世界坐标（3x3网格）
     for(int row = 0; row < 3; row++) 
     {
         for(int col = 0; col < 3; col++) 
@@ -324,7 +341,7 @@ int GetCoordsOpenCV(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, 
     // 转换为灰度图
     cvtColor(image, grayImage, COLOR_BGR2GRAY);
 
-    // 二值化
+    // 二值化处理
     threshold(grayImage, binaryImage, 200, 255, THRESH_BINARY);
 
     // 在每个区域中检测圆
@@ -332,6 +349,7 @@ int GetCoordsOpenCV(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, 
 
     for(size_t i = 0; i < searchAreas.size(); i++) 
     {
+        // 获取当前搜索区域的ROI
         Mat roi = binaryImage(searchAreas[i]);
         vector<Vec3f> circles;
 
@@ -341,7 +359,7 @@ int GetCoordsOpenCV(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, 
                         40, 5,       // Canny阈值，累加器阈值
                         rmin, rmax); // 最小和最大半径
 
-        // 找到最佳匹配的圆
+        // 找到最佳匹配的圆（与预期半径最接近的圆）
         double bestFit = numeric_limits<double>::max();
         Vec3f bestCircle;
         bool found = false;
@@ -405,10 +423,11 @@ int GetCoordsOpenCV(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, 
     // 存储优化后的结果并绘制
     for (size_t i = 0; i < detectedCenters.size(); i++) 
     {
+        // 保存世界坐标和像素坐标
         WorldCoord.append(QPointF(detectedWorldCoords[i].x, detectedWorldCoords[i].y));
         PixelCoord.append(QPointF(detectedCenters[i].x, detectedCenters[i].y));
 
-        // 绘制结果
+        // 绘制结果：绿色圆圈表示圆的边界，红色圆点表示圆心
         circle(result, detectedCenters[i], detectedRadii[i], Scalar(0, 255, 0), 10);
         circle(result, detectedCenters[i], 10, Scalar(0, 0, 255), -1);
     }
@@ -416,14 +435,19 @@ int GetCoordsOpenCV(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, 
     // 保存结果图像
     imwrite("/home/orangepi/Desktop/VisualRobot_Local/Img/circle_detected.jpg", result);
 
+    // 如果没有检测到圆，返回失败；否则返回成功
     return detectedCenters.empty() ? 1 : 0;
 }
 
-// 从文件读取变换矩阵
-// 参数:
-//   filename - 矩阵文件路径
-// 返回值:
-//   成功返回变换矩阵，失败抛出异常
+/**
+ * @brief 从文件读取变换矩阵
+ * @param filename 矩阵文件路径
+ * @return 读取到的3x3变换矩阵
+ * @throws runtime_error 如果文件打开失败或解析错误
+ * 
+ * 从指定文件中读取3x3变换矩阵，文件格式应为3行3列的浮点数矩阵。
+ * 每行的元素之间用空格分隔。
+ */
 Matrix3d ReadTransformationMatrix(const string& filename)
 {
     // 变量定义
@@ -432,13 +456,14 @@ Matrix3d ReadTransformationMatrix(const string& filename)
     string line;       // 文件行内容
     istringstream iss; // 字符串流用于解析
     
+    // 打开文件
     file.open(filename);
     if (!file)
     {
         throw runtime_error("Cannot open file: " + filename);
     }
 
-    // 逐行读取文件内容
+    // 逐行读取文件内容，解析3x3矩阵
     for (int i = 0; i < 3; ++i)
     {
         string line;
@@ -460,13 +485,24 @@ Matrix3d ReadTransformationMatrix(const string& filename)
     return matrix;
 }
 
-// OpenCV版本的矩形检测算法
-// 参数:
-//   imgPath - 输入图像路径
-//   Row - 输出参数，存储矩形角点的行坐标
-//   Col - 输出参数，存储矩形角点的列坐标
-// 返回值:
-//   成功返回0，失败返回1
+/**
+ * @brief 使用OpenCV检测图像中的矩形
+ * @param imgPath 输入图像路径
+ * @param Row 输出参数，存储矩形角点的行坐标
+ * @param Col 输出参数，存储矩形角点的列坐标
+ * @return 成功返回0，失败返回1
+ * 
+ * 该函数实现了基于OpenCV的矩形检测算法，主要步骤包括：
+ * 1. 读取图像
+ * 2. 图像预处理（灰度化、二值化、平滑处理）
+ * 3. 使用Canny边缘检测
+ * 4. 轮廓提取和过滤
+ * 5. 寻找最大的矩形轮廓
+ * 6. 亚像素精度优化角点坐标
+ * 7. 可视化结果并保存
+ * 
+ * 检测到的矩形角点按照顺时针顺序存储，顺序为：左上角、右上角、左下角、右下角。
+ */
 int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<double>& Col)
 {
     // 变量定义
@@ -500,10 +536,10 @@ int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<dou
     // 转换为灰度图
     cvtColor(image, grayImage, COLOR_BGR2GRAY);
 
-    // 二值化
+    // 二值化处理
     threshold(grayImage, binaryImage, 128, 255, THRESH_BINARY);
 
-    // 高斯滤波平滑处理
+    // 高斯滤波平滑处理，减少噪声
     GaussianBlur(binaryImage, smoothedImage, Size(3, 3), 0);
 
     // Canny边缘检测
@@ -512,7 +548,7 @@ int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<dou
     // 查找轮廓
     findContours(edges, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
 
-    // 过滤短轮廓
+    // 过滤短轮廓，只保留周长大于50的轮廓
     for(const auto& contour : contours) 
     {
         if(arcLength(contour, true) > 50) 
@@ -528,6 +564,7 @@ int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<dou
         double area = contourArea(contour);
         if(area > maxArea) 
         {
+            // 计算最小外接矩形
             rect = minAreaRect(contour);
             boxPoints.resize(4);
             rect.points(boxPoints.data());
@@ -571,7 +608,7 @@ int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<dou
             Col.push_back(pt.x);
         }
 
-        // 亚像素精度优化
+        // 亚像素精度优化角点坐标
         if (!rectContour.empty()) 
         {
             // 将角点转换为Point2f格式用于亚像素优化
@@ -582,9 +619,9 @@ int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<dou
             }
             
             // 配置亚像素优化参数
-            winSize = Size(5, 5);
-            zeroZone = Size(-1, -1);
-            criteria = TermCriteria(TermCriteria::EPS + TermCriteria::MAX_ITER, 40, 0.001);
+            winSize = Size(5, 5);                  // 搜索窗口大小
+            zeroZone = Size(-1, -1);               // 死区大小，(-1,-1)表示没有死区
+            criteria = TermCriteria(TermCriteria::EPS + TermCriteria::MAX_ITER, 40, 0.001); // 终止条件
             
             // 执行亚像素角点优化
             cornerSubPix(grayImage, corners, winSize, zeroZone, criteria);
@@ -600,7 +637,7 @@ int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<dou
         // 可视化结果
         result = image.clone();
 
-        // 然后绘制红色的1像素精确矩形轮廓
+        // 绘制矩形轮廓
         for(int i = 0; i < 4; i++) 
         {
             line(result, rectContour[i], rectContour[(i+1)%4], Scalar(0, 255, 0), 1);
@@ -628,13 +665,21 @@ int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<dou
 }
 
 
-// 处理图像并计算尺寸的函数
-// 参数:
-//   input - 输入图像
-//   params - 处理参数
-//   bias - 比例偏差
-// 返回值:
-//   包含宽度、高度、角度和图像的结果结构体
+/**
+ * @brief 处理图像并计算单个物体的尺寸
+ * @param input 输入图像
+ * @param params 处理参数，包含阈值、模糊核大小等
+ * @param bias 比例偏差，用于将像素单位转换为实际单位
+ * @return 包含宽度、高度、角度和处理后图像的结果结构体
+ * 
+ * 该函数实现了单个物体的尺寸测量功能，主要步骤包括：
+ * 1. 图像预处理（灰度化、滤波、二值化、形态学操作）
+ * 2. 轮廓提取和过滤
+ * 3. 寻找最大面积的轮廓
+ * 4. 计算最小外接矩形
+ * 5. 计算物体尺寸和角度
+ * 6. 绘制结果并返回
+ */
 Result CalculateLength(const Mat& input, const Params& params, double bias)
 {
     // 变量定义
@@ -644,15 +689,16 @@ Result CalculateLength(const Mat& input, const Params& params, double bias)
     static Mat kernel;                        // 形态学核
     vector<vector<Point>> contours;           // 轮廓列表
     vector<Vec4i> hierarchy;                  // 轮廓层级
-    vector<vector<Point>> preservedContours;  // 保留的轮廓
-    vector<vector<Point>> filteredContours;   // 过滤的轮廓
+    vector<vector<Point>> preservedContours;  // 保留的轮廓（面积大于阈值）
+    vector<vector<Point>> filteredContours;   // 过滤的轮廓（面积小于阈值）
     int thickness;                            // 绘制线宽
     RotatedRect rotatedRect;                  // 旋转矩形
     Size2f rotatedSize;                       // 旋转矩形尺寸
-    float spring_length, spring_width, angle; // 弹簧尺寸和角度
+    float spring_length, spring_width, angle; // 物体尺寸和角度
     Point2f vertices[4];                      // 矩形顶点
     int thickBorder;                          // 边框厚度
     
+    // 检查输入图像是否为空
     if (input.empty()) 
     {
         cerr << "图像读取失败" << endl;
@@ -669,27 +715,28 @@ Result CalculateLength(const Mat& input, const Params& params, double bias)
         source = input;
     }
 
-    // 多阶段滤波
+    // 多阶段滤波：双边滤波 + 高斯模糊
     if (params.blurK >= 3) 
     {
+        // 确保滤波核大小为奇数
         k = (params.blurK % 2 == 0) ? params.blurK - 1 : params.blurK;
         if (k >= 3) 
         {
             Mat dst;
-            bilateralFilter(source, dst, 5, 30, 2);  // 双边滤波
-            GaussianBlur(dst, source, Size(k, k), 2.0, 2.0); // 高斯模糊
+            bilateralFilter(source, dst, 5, 30, 2);  // 双边滤波，保留边缘同时去除噪声
+            GaussianBlur(dst, source, Size(k, k), 2.0, 2.0); // 高斯模糊，进一步平滑图像
         }
     }
 
-    // 预计算核
+    // 预计算形态学操作核
     kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
 
-    // 阈值处理
+    // 阈值处理：将图像转换为二值图
     binary = source > params.thresh;
-    binary = 255 - binary;
+    binary = 255 - binary;  // 反转二值图，使目标变为白色
 
-    // 形态学操作
-    morphologyEx(binary, binary, MORPH_DILATE, kernel);  // 仅膨胀操作
+    // 形态学操作：膨胀，连接断裂的边缘
+    morphologyEx(binary, binary, MORPH_DILATE, kernel);
 
     // 查找轮廓
     findContours(binary, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
@@ -699,11 +746,11 @@ Result CalculateLength(const Mat& input, const Params& params, double bias)
     {
         if (contourArea(contour) < params.areaMin) 
         {
-            filteredContours.push_back(contour);
+            filteredContours.push_back(contour);  // 面积小于阈值，过滤掉
         } 
         else 
         {
-            preservedContours.push_back(contour);
+            preservedContours.push_back(contour);  // 面积大于阈值，保留
         }
     }
 
@@ -721,10 +768,11 @@ Result CalculateLength(const Mat& input, const Params& params, double bias)
 
     if (max_it != preservedContours.end()) 
     {
-        // 获取旋转矩形
+        // 获取最小外接矩形
         rotatedRect = minAreaRect(*max_it);
         rotatedSize = rotatedRect.size;
 
+        // 计算物体尺寸：长度为矩形的长边，宽度为短边
         spring_length = max(rotatedSize.width, rotatedSize.height);
         spring_width = min(rotatedSize.width, rotatedSize.height);
         result.widths.push_back(spring_width*bias);
@@ -739,6 +787,7 @@ Result CalculateLength(const Mat& input, const Params& params, double bias)
             line(colorImage, vertices[i], vertices[(i+1)%4], Scalar(0, 255, 0),  thickBorder);
         }
 
+        // 输出测量结果
         cout << "物件长度: " << spring_length*bias << ", 物件宽度: " << spring_width*bias << endl;
         angle = rotatedRect.angle;
         cout << "检测角度: " << angle << "°" << endl;
@@ -746,23 +795,37 @@ Result CalculateLength(const Mat& input, const Params& params, double bias)
     } 
     else 
     {
+        // 未找到有效轮廓，返回默认值
         result.widths.push_back(0);
         result.heights.push_back(0);
         result.angles.push_back(0);
         cerr << "未找到有效轮廓" << endl;
     }
 
+    // 设置结果图像
     result.image = colorImage;
     return result;
 }
 
-// 基于连通域的多目标检长函数
-// 参数:
-//   input - 输入图像
-//   params - 处理参数
-//   bias - 比例偏差
-// 返回值:
-//   包含所有目标宽度、高度、角度和图像的结果结构体
+/**
+ * @brief 基于连通域的多目标检测与测量函数
+ * @param input 输入图像
+ * @param params 处理参数，包含阈值、模糊核大小、面积最小值等
+ * @param bias 比例偏差，用于将像素单位转换为实际物理单位
+ * @return 包含所有检测目标的宽度、高度、角度和结果图像的结构体
+ * 
+ * 该函数实现了基于连通域的多目标检测与测量算法，主要步骤包括：
+ * 1. 图像预处理（灰度化、滤波、二值化、形态学操作）
+ * 2. 轮廓提取和面积过滤
+ * 3. 第一阶段：处理所有轮廓，收集信息并执行Canny边缘检测
+ * 4. 边缘处理：排除与轮廓近似的边缘，对剩余边缘进行平滑拟合
+ * 5. 第二阶段：绘制轮廓边界框和序号，根据边缘情况决定颜色
+ * 6. 计算每个目标的尺寸和角度，并保存结果
+ * 
+ * 检测到的目标将按照从1开始的序号进行标记，边界框颜色根据是否存在非轮廓边缘决定：
+ * - 红色：存在非轮廓边缘
+ * - 绿色：无非轮廓边缘
+ */
 Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double bias)
 {
     // 变量定义
