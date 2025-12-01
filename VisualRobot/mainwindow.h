@@ -20,6 +20,7 @@
 #include <QThread>
 #include <QTime>
 #include "YOLOProcessorORT.h"
+#include <QWaitCondition>
 
 using namespace std;
 using namespace cv;
@@ -64,6 +65,8 @@ private slots:
     void on_GetLength_clicked();
     void on_genMatrix_clicked();
     void on_CallDLwindow_clicked();
+    // 新增的槽函数
+    void on_bnCapture_clicked();                // 拍照按钮点击事件
 
 private:
     Ui::MainWindow *ui;
@@ -226,8 +229,6 @@ private:
     void DrawYoloResults(Mat& frame, const vector<DetectionResult>& results); // 绘制YOLO检测结果
     void UpdateYoloDisplay();                   // 更新YOLO显示
     
-    // 新增的槽函数
-    void on_bnCapture_clicked();                // 拍照按钮点击事件
 };
 
 #endif // MAINWINDOW_H
