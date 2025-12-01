@@ -367,6 +367,19 @@
      <bool>false</bool>
     </property>
    </widget>
+   <widget class="QPushButton" name="bnCapture">
+    <property name="geometry">
+     <rect>
+      <x>300</x>
+      <y>820</y>
+      <width>171</width>
+      <height>41</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>YOLO实时检测</string>
+    </property>
+   </widget>
   </widget>
   <widget class="QStatusBar" name="statusBar"/>
  </widget>
