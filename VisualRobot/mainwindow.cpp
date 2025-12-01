@@ -3172,7 +3172,7 @@ void MainWindow::YoloRealTimeDetectionThread()
     
     // 重置统计信息定时器，确保它在主线程中执行
     QMetaObject::invokeMethod(this, [this]() {
-        m_yoloStatsTimer->start(60000); // 每1分钟触发一次，符合需求
+        m_yoloStatsTimer->start(1000); // 每1秒钟触发一次，符合需求
     }, Qt::QueuedConnection);    
     Mat currentFrame;
     vector<DetectionResult> results;
@@ -3330,7 +3330,7 @@ void MainWindow::UpdateYoloStats()
     
     // 使用QMetaObject::invokeMethod确保AppendLog在主线程中执行
     QMetaObject::invokeMethod(this, [this, fps, avgProcessingTime]() {
-        AppendLog(QString("YOLO实时检测统计- 帧率: %.2f FPS, 平均处理延时: %.2f ms").arg(fps).arg(avgProcessingTime), INFO);
+        AppendLog(QString("YOLO实时检测统计- 帧率: %1 FPS, 平均处理延时: %2 ms").arg(fps).arg(avgProcessingTime), INFO);
     }, Qt::QueuedConnection);
     
     // 重置统计信息
