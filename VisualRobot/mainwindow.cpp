@@ -105,6 +105,17 @@ MainWindow::MainWindow(QWidget *parent) :
     m_yoloFrameCount = 0;
     m_yoloTotalProcessingTime = 0.0;
     
+    // 初始化YOLO显示线程相关
+    m_yoloDisplayRunning = false;
+    m_yoloDisplayThread = nullptr;
+    m_displayUpdateInterval = 100; // 显示更新间隔100ms，约10FPS
+    
+    // 初始化双缓冲
+    m_writeBufferIndex = 0;
+    m_readBufferIndex = 1;
+    m_yoloBuffers[0].newDataAvailable = false;
+    m_yoloBuffers[1].newDataAvailable = false;
+    
     // 初始化YOLO统计信息定时器，每1分钟触发一次
     m_yoloStatsTimer = new QTimer(this);
     connect(m_yoloStatsTimer, &QTimer::timeout, this, &MainWindow::UpdateYoloStats);
@@ -3241,21 +3252,25 @@ void MainWindow::YoloRealTimeDetectionThread()
             m_yoloFrameCount++;
             m_yoloTotalProcessingTime += processingTime;
             
-            // 缓存检测结果
+            // 将检测结果写入双缓冲
             {   
-                QMutexLocker locker(&m_yoloResultsMutex);
-                m_lastYoloResults = results;
-                m_lastYoloFrame = currentFrame.clone();
+                QMutexLocker locker(&m_bufferMutex);
+                
+                // 获取当前写入缓冲区
+                YoloResultBuffer& buffer = m_yoloBuffers[m_writeBufferIndex];
+                
+                // 复制检测结果
+                buffer.frame = currentFrame.clone();
+                buffer.results = results;
+                buffer.processingTime = processingTime;
+                buffer.newDataAvailable = true;
+                
+                // 切换缓冲区索引
+                m_writeBufferIndex = (m_writeBufferIndex + 1) % 2;
+                
+                // 唤醒显示线程
+                m_bufferReady.wakeOne();
             }
-            
-            // 绘制检测结果
-            Mat displayFrame = currentFrame.clone();
-            DrawYoloResults(displayFrame, results);
-            
-            // 更新显示
-            QPixmap pixmap = MatToQPixmap(displayFrame);
-            ui->widgetDisplay_2->setPixmap(pixmap.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
-            ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
         }
         
         // 短暂休眠，避免CPU占用过高
@@ -3285,14 +3300,23 @@ void MainWindow::StartYoloRealTimeDetection()
     
     // 设置运行标志
     m_yoloDetectionRunning = true;
+    m_yoloDisplayRunning = true;
     
     // 创建并启动检测线程
     m_yoloDetectionThread = QThread::create([this]() {
         YoloRealTimeDetectionThread();
     });
     
+    // 创建并启动显示线程
+    m_yoloDisplayThread = QThread::create([this]() {
+        YoloDisplayThread();
+    });
+    
     connect(m_yoloDetectionThread, &QThread::finished, m_yoloDetectionThread, &QThread::deleteLater);
+    connect(m_yoloDisplayThread, &QThread::finished, m_yoloDisplayThread, &QThread::deleteLater);
+    
     m_yoloDetectionThread->start();
+    m_yoloDisplayThread->start();
     
     AppendLog("YOLO实时检测已启动", INFO);
 }
@@ -3305,11 +3329,27 @@ void MainWindow::StopYoloRealTimeDetection()
         m_yoloDetectionRunning = false;
     }
     
-    // 等待线程结束
+    // 设置显示线程停止标志
+    {   
+        QMutexLocker locker(&m_yoloDisplayMutex);
+        m_yoloDisplayRunning = false;
+    }
+    
+    // 唤醒等待的显示线程
+    m_bufferReady.wakeOne();
+    
+    // 等待检测线程结束
     if (m_yoloDetectionThread) {
         m_yoloDetectionThread->wait();
         delete m_yoloDetectionThread;
         m_yoloDetectionThread = nullptr;
+    }
+    
+    // 等待显示线程结束
+    if (m_yoloDisplayThread) {
+        m_yoloDisplayThread->wait();
+        delete m_yoloDisplayThread;
+        m_yoloDisplayThread = nullptr;
     }
     
     AppendLog("YOLO实时检测已停止", INFO);
@@ -3339,10 +3379,74 @@ void MainWindow::UpdateYoloStats()
     m_yoloTotalProcessingTime = 0.0;
 }
 
+void MainWindow::YoloDisplayThread()
+{
+    while (true) {
+        // 检查是否需要停止显示
+        {   
+            QMutexLocker locker(&m_yoloDisplayMutex);
+            if (!m_yoloDisplayRunning) {
+                break;
+            }
+        }
+        
+        // 等待新的检测结果
+        YoloResultBuffer currentResult;
+        bool hasNewData = false;
+        
+        {   
+            QMutexLocker locker(&m_bufferMutex);
+            
+            // 等待新数据或超时
+            if (!m_yoloBuffers[m_readBufferIndex].newDataAvailable) {
+                // 超时等待，避免死锁
+                if (!m_bufferReady.wait(&m_bufferMutex, m_displayUpdateInterval)) {
+                    continue; // 超时，继续下一次循环
+                }
+            }
+            
+            // 检查是否需要停止显示
+            {   
+                QMutexLocker displayLocker(&m_yoloDisplayMutex);
+                if (!m_yoloDisplayRunning) {
+                    break;
+                }
+            }
+            
+            // 检查是否有新数据
+            if (m_yoloBuffers[m_readBufferIndex].newDataAvailable) {
+                // 复制检测结果
+                currentResult = m_yoloBuffers[m_readBufferIndex];
+                m_yoloBuffers[m_readBufferIndex].newDataAvailable = false;
+                
+                // 切换读取缓冲区索引
+                m_readBufferIndex = (m_readBufferIndex + 1) % 2;
+                hasNewData = true;
+            }
+        }
+        
+        if (hasNewData) {
+            // 绘制检测结果
+            Mat displayFrame = currentResult.frame.clone();
+            DrawYoloResults(displayFrame, currentResult.results);
+            
+            // 更新显示
+            QPixmap pixmap = MatToQPixmap(displayFrame);
+            QMetaObject::invokeMethod(this, [this, pixmap]() {
+                ui->widgetDisplay_2->setPixmap(pixmap.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
+            }, Qt::QueuedConnection);
+        }
+        
+        // 控制显示更新频率
+        QThread::msleep(m_displayUpdateInterval);
+    }
+}
+
 void MainWindow::DrawYoloResults(Mat& frame, const vector<DetectionResult>& results)
 {
-    // 为每个类别生成不同颜色    
-    vector<Scalar> colors = {
+    // 为每个类别生成不同颜色（静态，避免重复创建）    
+    static vector<Scalar> colors = {
         Scalar(255, 0, 0),    // 蓝色
         Scalar(0, 255, 0),    // 绿色
         Scalar(0, 0, 255),    // 红色
@@ -3365,9 +3469,9 @@ void MainWindow::DrawYoloResults(Mat& frame, const vector<DetectionResult>& resu
             color_idx = 0;  // 默认使用第一个颜色        
         }
         
-        // 绘制边界框，使用更粗的线宽以确保可见
+        // 绘制边界框，使用优化的线宽
         Scalar color = colors[color_idx];
-        rectangle(frame, result.boundingBox, color, 3);  // 线宽
+        rectangle(frame, result.boundingBox, color, 3);
         
         // 准备标签文本
         string label;
@@ -3377,19 +3481,19 @@ void MainWindow::DrawYoloResults(Mat& frame, const vector<DetectionResult>& resu
             label = to_string(result.classId) + " " + cv::format("%.2f", result.confidence);
         }
         
-        // 确保标签大小和位置正确，使用更大的字体      
+        // 确保标签大小和位置正确，使用优化的字体      
         int baseLine;
-        Size labelSize = getTextSize(label, FONT_HERSHEY_SIMPLEX, 1.0, 3, &baseLine);  // 字体大小1.0
+        Size labelSize = getTextSize(label, FONT_HERSHEY_SIMPLEX, 1.0, 3, &baseLine);
         
         // 确保标签不会超出图像边界
-        int top = result.boundingBox.y - labelSize.height - 5;
+        int top = result.boundingBox.y - labelSize.height - 3;
         if (top < 0) {
-            top = result.boundingBox.y + 5;
+            top = result.boundingBox.y + 3;
         }
         
         // 计算标签背景位置
-        Point bottomLeft(result.boundingBox.x, top + labelSize.height + baseLine + 5);
-        Point topRight(result.boundingBox.x + labelSize.width + 10, top - 5);
+        Point bottomLeft(result.boundingBox.x, top + labelSize.height + baseLine + 3);
+        Point topRight(result.boundingBox.x + labelSize.width + 6, top - 3);
         
         // 确保标签背景不会超出图像边界
         if (bottomLeft.x < 0) {
@@ -3405,12 +3509,12 @@ void MainWindow::DrawYoloResults(Mat& frame, const vector<DetectionResult>& resu
             topRight.y = 0;
         }
         
-        // 绘制标签背景，使用半透明填充
+        // 绘制标签背景，使用不透明填充（更高效）
         rectangle(frame, bottomLeft, topRight, color, FILLED);
         
-        // 绘制文本，使用更大的字体和更粗的线宽
-        putText(frame, label, Point(result.boundingBox.x + 5, top + labelSize.height + baseLine), 
-                FONT_HERSHEY_SIMPLEX, 1.0, Scalar(255, 255, 255), 3);  // 字体大小1.0，白色文本，粗细3
+        // 绘制文本，使用优化的字体
+        putText(frame, label, Point(result.boundingBox.x + 3, top + labelSize.height + baseLine), 
+                FONT_HERSHEY_SIMPLEX, 1, Scalar(255, 255, 255), 3);
     }
 }
 
