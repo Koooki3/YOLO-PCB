@@ -19,6 +19,7 @@
 #include <QMutex>
 #include <QThread>
 #include <QTime>
+#include "YOLOProcessorORT.h"
 
 using namespace std;
 using namespace cv;
@@ -184,6 +185,32 @@ private:
     QTimer* m_deviceEnumTimer;    // 定时器用于自动枚举设备
     int m_lastDeviceCount;        // 上次枚举的设备数量
     void autoEnumDevices();       // 自动枚举设备的槽函数
+    
+    // YOLO实时检测相关
+    YOLOProcessorORT* m_yoloProcessor;  // YOLO处理器实例
+    bool m_yoloDetectionRunning;        // YOLO检测运行标志
+    QMutex m_yoloDetectionMutex;        // YOLO检测互斥锁
+    QThread* m_yoloDetectionThread;     // YOLO检测线程
+    QTimer* m_yoloStatsTimer;           // YOLO统计信息定时器
+    
+    // YOLO检测结果缓存
+    vector<DetectionResult> m_lastYoloResults;  // 上次YOLO检测结果
+    Mat m_lastYoloFrame;                        // 上次YOLO检测的帧
+    QMutex m_yoloResultsMutex;                  // 结果互斥锁
+    
+    // YOLO统计信息
+    int m_yoloFrameCount;                       // 帧计数
+    QTime m_yoloStatsStartTime;                 // 统计开始时间
+    double m_yoloTotalProcessingTime;           // 总处理时间
+    
+    void YoloRealTimeDetectionThread();         // YOLO实时检测线程
+    void StartYoloRealTimeDetection();          // 开始YOLO实时检测
+    void StopYoloRealTimeDetection();           // 停止YOLO实时检测
+    void UpdateYoloStats();                     // 更新YOLO统计信息
+    void DrawYoloResults(Mat& frame, const vector<DetectionResult>& results); // 绘制YOLO检测结果
+    
+    // 新增的槽函数
+    void on_bnCapture_clicked();                // 拍照按钮点击事件
 };
 
 #endif // MAINWINDOW_H
