@@ -3170,10 +3170,15 @@ void MainWindow::YoloRealTimeDetectionThread()
     m_yoloStatsStartTime.start();
     m_yoloTotalProcessingTime = 0.0;
     
-    // 启动统计信息定时器    
-    m_yoloStatsTimer->start(60000); // 每60秒触发一次    
+    // 重置统计信息定时器，确保它在主线程中执行
+    QMetaObject::invokeMethod(this, [this]() {
+        m_yoloStatsTimer->start(60000); // 每1分钟触发一次，符合需求
+    }, Qt::QueuedConnection);    
     Mat currentFrame;
     vector<DetectionResult> results;
+    
+    int frameFailCount = 0; // 帧获取失败计数器
+    int lastLogTime = 0; // 上次记录日志的时间（毫秒）
     
     while (true) {
         // 检查是否需要停止检测        
@@ -3184,12 +3189,43 @@ void MainWindow::YoloRealTimeDetectionThread()
             }
         }
         
+        // 检查相机是否仍然在采集图像
+        if (!m_bGrabbing) {
+            // 只记录一次日志
+            QMetaObject::invokeMethod(this, [this]() {
+                AppendLog("相机已停止采集图像，自动退出YOLO实时检测", WARNNING);
+            }, Qt::QueuedConnection);
+            break;
+        }
+        
         // 获取最新帧
         if (!GrabLastFrameBGR(currentFrame)) 
         {
+            frameFailCount++;
+            
+            // 限制错误日志的输出频率，每1秒最多输出一次
+            int currentTime = QDateTime::currentMSecsSinceEpoch();
+            if (currentTime - lastLogTime > 1000) {
+                QMetaObject::invokeMethod(this, [this, frameFailCount]() {
+                    AppendLog(QString("无法获取相机图像，已失败 %1 次").arg(frameFailCount), WARNNING);
+                }, Qt::QueuedConnection);
+                lastLogTime = currentTime;
+            }
+            
+            // 如果连续100次获取帧失败，自动停止检测
+            if (frameFailCount >= 100) {
+                QMetaObject::invokeMethod(this, [this]() {
+                    AppendLog("连续多次无法获取相机图像，自动退出YOLO实时检测", ERROR);
+                }, Qt::QueuedConnection);
+                break;
+            }
+            
             QThread::msleep(10);
             continue;
         }
+        
+        // 重置失败计数器
+        frameFailCount = 0;
         
         // 记录开始时间        
         QElapsedTimer timer;
@@ -3241,6 +3277,12 @@ void MainWindow::StartYoloRealTimeDetection()
         return;
     }
     
+    // 检查相机是否正在采集图像
+    if (!m_bGrabbing) {
+        AppendLog("相机未开始采集图像，无法启动YOLO实时检测", WARNNING);
+        return;
+    }
+    
     // 设置运行标志
     m_yoloDetectionRunning = true;
     
@@ -3277,10 +3319,19 @@ void MainWindow::UpdateYoloStats()
 {
     // 计算统计信息
     double elapsedTime = m_yoloStatsStartTime.elapsed() / 1000.0; // 转换为秒
+    
+    // 防止除以零
+    if (elapsedTime <= 0 || m_yoloFrameCount <= 0) {
+        return;
+    }
+    
     double fps = m_yoloFrameCount / elapsedTime;
     double avgProcessingTime = m_yoloTotalProcessingTime / m_yoloFrameCount * 1000.0; // 转换为毫秒    
-    // 记录日志
-    AppendLog(QString("YOLO实时检测统计- 帧率: %.2f FPS, 平均处理延时: %.2f ms").arg(fps).arg(avgProcessingTime), INFO);
+    
+    // 使用QMetaObject::invokeMethod确保AppendLog在主线程中执行
+    QMetaObject::invokeMethod(this, [this, fps, avgProcessingTime]() {
+        AppendLog(QString("YOLO实时检测统计- 帧率: %.2f FPS, 平均处理延时: %.2f ms").arg(fps).arg(avgProcessingTime), INFO);
+    }, Qt::QueuedConnection);
     
     // 重置统计信息
     m_yoloFrameCount = 0;
