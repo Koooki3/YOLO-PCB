@@ -98,6 +98,17 @@ MainWindow::MainWindow(QWidget *parent) :
     // 初始化缺陷检测库
     m_defectDetection = new DefectDetection();
     
+    // 初始化YOLO处理器
+    m_yoloProcessor = new YOLOProcessorORT(this);
+    m_yoloDetectionRunning = false;
+    m_yoloDetectionThread = nullptr;
+    m_yoloFrameCount = 0;
+    m_yoloTotalProcessingTime = 0.0;
+    
+    // 初始化YOLO统计信息定时器，每1分钟触发一次
+    m_yoloStatsTimer = new QTimer(this);
+    connect(m_yoloStatsTimer, &QTimer::timeout, this, &MainWindow::UpdateYoloStats);
+    
     // 加载缺陷分类模板库
     if (m_defectDetection->LoadTemplateLibrary("../Img/Templates")) 
     {
@@ -157,12 +168,30 @@ MainWindow::~MainWindow()
     {
         m_sysMonitor->stopMonitoring();
     }
+    
+    // 释放YOLO处理器
+    if (m_yoloProcessor)
+    {
+        delete m_yoloProcessor;
+        m_yoloProcessor = nullptr;
+    }
+    
+    // 释放YOLO统计信息定时器
+    if (m_yoloStatsTimer)
+    {
+        delete m_yoloStatsTimer;
+        m_yoloStatsTimer = nullptr;
+    }
+    
     delete ui;
 }
 
 // 程序关闭事件处理
 void MainWindow::closeEvent(QCloseEvent *event)
 {
+    // 停止YOLO实时检测
+    StopYoloRealTimeDetection();
+    
     // 变量定义
     QString logContent;           // 日志内容
     QString logFileName;          // 日志文件名
@@ -2273,6 +2302,9 @@ void MainWindow::HandleSpaceKeyPress()
 // 处理Q键按下事件 - 退出实时检测模式
 void MainWindow::HandleQKeyPress()
 {
+    bool isInAnyDetectionMode = false;
+    
+    // 检查并停止传统实时检测
     {
         QMutexLocker locker(&m_realTimeDetectionMutex);
         if (m_realTimeDetectionRunning)
@@ -2286,11 +2318,34 @@ void MainWindow::HandleQKeyPress()
                 ui->widgetDisplay_2->clear();
                 AppendLog("已清空实时检测显示", INFO);
             }, Qt::QueuedConnection);
+            
+            isInAnyDetectionMode = true;
         }
-        else
+    }
+    
+    // 检查并停止YOLO实时检测
+    {
+        QMutexLocker locker(&m_yoloDetectionMutex);
+        if (m_yoloDetectionRunning)
         {
-            AppendLog("当前未在实时检测模式中", WARNNING);
+            // 停止YOLO实时检测
+            m_yoloDetectionRunning = false;
+            AppendLog("已按Q键退出YOLO实时检测模式", INFO);
+            
+            // 清空widgetDisplay_2内容
+            QMetaObject::invokeMethod(this, [this]() {
+                ui->widgetDisplay_2->clear();
+                AppendLog("已清空YOLO实时检测显示", INFO);
+            }, Qt::QueuedConnection);
+            
+            isInAnyDetectionMode = true;
         }
+    }
+    
+    // 如果不在任何检测模式中
+    if (!isInAnyDetectionMode)
+    {
+        AppendLog("当前未在实时检测模式中", WARNNING);
     }
 }
 
@@ -3066,4 +3121,250 @@ void MainWindow::autoEnumDevices()
         // 更新上次设备数量
         m_lastDeviceCount = stDevList.nDeviceNum;
     }
+}
+void MainWindow::YoloRealTimeDetectionThread()
+{
+    // 加载YOLO模型和标签    
+    QString modelPath = "../models/arcuchi2.onnx";
+    QString labelPath = "../Data/Labels/class_labels.txt";
+    
+    // 加载模型
+    if (!m_yoloProcessor->InitModel(modelPath.toStdString(), false)) 
+    {
+        AppendLog("YOLO模型加载失败", ERROR);
+        return;
+    }
+    
+    // 加载标签
+    QFile labelFile(labelPath);
+    if (!labelFile.open(QIODevice::ReadOnly | QIODevice::Text)) 
+    {
+        AppendLog("YOLO标签文件加载失败", ERROR);
+        return;
+    }
+    
+    QStringList labels;
+    while (!labelFile.atEnd()) 
+    {
+        QByteArray line = labelFile.readLine();
+        QString s = QString::fromUtf8(line).trimmed();
+        if (!s.isEmpty()) 
+        {
+            labels.append(s);
+        }
+    }
+    labelFile.close();
+    
+    vector<string> cls;
+    cls.reserve(labels.size());
+    for (const QString &qs : labels) 
+    {
+        cls.push_back(qs.toStdString());
+    }
+    m_yoloProcessor->SetClassLabels(cls);
+    
+    AppendLog("YOLO模型和标签加载成功", INFO);
+    
+    // 初始化统计信息    
+    m_yoloFrameCount = 0;
+    m_yoloStatsStartTime.start();
+    m_yoloTotalProcessingTime = 0.0;
+    
+    // 启动统计信息定时器    
+    m_yoloStatsTimer->start(60000); // 每60秒触发一次    
+    Mat currentFrame;
+    vector<DetectionResult> results;
+    
+    while (true) {
+        // 检查是否需要停止检测        
+        {   
+            QMutexLocker locker(&m_yoloDetectionMutex);
+            if (!m_yoloDetectionRunning) {
+                break;
+            }
+        }
+        
+        // 获取最新帧
+        if (!GrabLastFrameBGR(currentFrame)) 
+        {
+            QThread::msleep(10);
+            continue;
+        }
+        
+        // 记录开始时间        
+        QElapsedTimer timer;
+        timer.start();
+        
+        // 执行YOLO检测
+        if (m_yoloProcessor->DetectObjects(currentFrame, results)) 
+        {
+            // 记录处理时间
+            double processingTime = timer.elapsed() / 1000.0; // 转换为秒
+            
+            // 更新统计信息
+            m_yoloFrameCount++;
+            m_yoloTotalProcessingTime += processingTime;
+            
+            // 缓存检测结果
+            {   
+                QMutexLocker locker(&m_yoloResultsMutex);
+                m_lastYoloResults = results;
+                m_lastYoloFrame = currentFrame.clone();
+            }
+            
+            // 绘制检测结果
+            Mat displayFrame = currentFrame.clone();
+            DrawYoloResults(displayFrame, results);
+            
+            // 更新显示
+            QPixmap pixmap = MatToQPixmap(displayFrame);
+            ui->widgetDisplay_2->setPixmap(pixmap.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
+        }
+        
+        // 短暂休眠，避免CPU占用过高
+        QThread::msleep(10);
+    }
+    
+    // 停止统计信息定时器
+    m_yoloStatsTimer->stop();
+    
+    AppendLog("YOLO实时检测已停止", INFO);
+}
+
+void MainWindow::StartYoloRealTimeDetection()
+{
+    // 检查是否已经在运行
+    QMutexLocker locker(&m_yoloDetectionMutex);
+    if (m_yoloDetectionRunning) {
+        AppendLog("YOLO实时检测已经在运行", INFO);
+        return;
+    }
+    
+    // 设置运行标志
+    m_yoloDetectionRunning = true;
+    
+    // 创建并启动检测线程
+    m_yoloDetectionThread = QThread::create([this]() {
+        YoloRealTimeDetectionThread();
+    });
+    
+    connect(m_yoloDetectionThread, &QThread::finished, m_yoloDetectionThread, &QThread::deleteLater);
+    m_yoloDetectionThread->start();
+    
+    AppendLog("YOLO实时检测已启动", INFO);
+}
+
+void MainWindow::StopYoloRealTimeDetection()
+{
+    // 设置停止标志
+    {   
+        QMutexLocker locker(&m_yoloDetectionMutex);
+        m_yoloDetectionRunning = false;
+    }
+    
+    // 等待线程结束
+    if (m_yoloDetectionThread) {
+        m_yoloDetectionThread->wait();
+        delete m_yoloDetectionThread;
+        m_yoloDetectionThread = nullptr;
+    }
+    
+    AppendLog("YOLO实时检测已停止", INFO);
+}
+
+void MainWindow::UpdateYoloStats()
+{
+    // 计算统计信息
+    double elapsedTime = m_yoloStatsStartTime.elapsed() / 1000.0; // 转换为秒
+    double fps = m_yoloFrameCount / elapsedTime;
+    double avgProcessingTime = m_yoloTotalProcessingTime / m_yoloFrameCount * 1000.0; // 转换为毫秒    
+    // 记录日志
+    AppendLog(QString("YOLO实时检测统计- 帧率: %.2f FPS, 平均处理延时: %.2f ms").arg(fps).arg(avgProcessingTime), INFO);
+    
+    // 重置统计信息
+    m_yoloFrameCount = 0;
+    m_yoloStatsStartTime.restart();
+    m_yoloTotalProcessingTime = 0.0;
+}
+
+void MainWindow::DrawYoloResults(Mat& frame, const vector<DetectionResult>& results)
+{
+    // 为每个类别生成不同颜色    
+    vector<Scalar> colors = {
+        Scalar(255, 0, 0),    // 蓝色
+        Scalar(0, 255, 0),    // 绿色
+        Scalar(0, 0, 255),    // 红色
+        Scalar(255, 255, 0),  // 青色
+        Scalar(255, 0, 255),  // 品红
+        Scalar(0, 255, 255),  // 黄色
+        Scalar(128, 0, 0),    // 深蓝
+        Scalar(0, 128, 0),    // 深绿
+        Scalar(0, 0, 128),    // 深红
+        Scalar(128, 128, 0),  // 深青
+        Scalar(128, 0, 128),  // 深品
+        Scalar(0, 128, 128)   // 深黄
+    };
+    
+    // 遍历所有检测结果
+    for (const auto& result : results) {
+        // 确保类别ID在有效范围内
+        int color_idx = result.classId;
+        if (color_idx < 0 || color_idx >= static_cast<int>(colors.size())) {
+            color_idx = 0;  // 默认使用第一个颜色        
+        }
+        
+        // 绘制边界框，使用更粗的线宽以确保可见
+        Scalar color = colors[color_idx];
+        rectangle(frame, result.boundingBox, color, 3);  // 线宽
+        
+        // 准备标签文本
+        string label;
+        if (!result.className.empty()) {
+            label = result.className + " " + cv::format("%.2f", result.confidence);
+        } else {
+            label = to_string(result.classId) + " " + cv::format("%.2f", result.confidence);
+        }
+        
+        // 确保标签大小和位置正确，使用更大的字体      
+        int baseLine;
+        Size labelSize = getTextSize(label, FONT_HERSHEY_SIMPLEX, 1.0, 3, &baseLine);  // 字体大小1.0
+        
+        // 确保标签不会超出图像边界
+        int top = result.boundingBox.y - labelSize.height - 5;
+        if (top < 0) {
+            top = result.boundingBox.y + 5;
+        }
+        
+        // 计算标签背景位置
+        Point bottomLeft(result.boundingBox.x, top + labelSize.height + baseLine + 5);
+        Point topRight(result.boundingBox.x + labelSize.width + 10, top - 5);
+        
+        // 确保标签背景不会超出图像边界
+        if (bottomLeft.x < 0) {
+            bottomLeft.x = 0;
+        }
+        if (bottomLeft.y > frame.rows) {
+            bottomLeft.y = frame.rows;
+        }
+        if (topRight.x > frame.cols) {
+            topRight.x = frame.cols;
+        }
+        if (topRight.y < 0) {
+            topRight.y = 0;
+        }
+        
+        // 绘制标签背景，使用半透明填充
+        rectangle(frame, bottomLeft, topRight, color, FILLED);
+        
+        // 绘制文本，使用更大的字体和更粗的线宽
+        putText(frame, label, Point(result.boundingBox.x + 5, top + labelSize.height + baseLine), 
+                FONT_HERSHEY_SIMPLEX, 1.0, Scalar(255, 255, 255), 3);  // 字体大小1.0，白色文本，粗细3
+    }
+}
+
+void MainWindow::on_bnCapture_clicked()
+{       
+    StartYoloRealTimeDetection();
+    AppendLog("YOLO实时检测已启动", INFO);
 }

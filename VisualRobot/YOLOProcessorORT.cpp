@@ -30,7 +30,7 @@ YOLOProcessorORT::YOLOProcessorORT(QObject* parent)
     , letterbox_dw_(0.0)  // 宽度方向填充，初始化为0.0
     , letterbox_dh_(0.0)  // 高度方向填充，初始化为0.0
 {
-    sessionOptions_.SetIntraOpNumThreads(1);  // 设置线程数为1
+    sessionOptions_.SetIntraOpNumThreads(4);  // 设置线程数为1
     sessionOptions_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);  // 启用所有图优化
 }
 
