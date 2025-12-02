@@ -6,7 +6,8 @@
 
 - 🎥 **工业相机控制** - 支持 GigE 和 USB3.0 接口的工业相机，实时图像采集和参数调节
 - 🖼️ **数字图像处理** - 强大的图像预处理、增强、特征检测和匹配功能
-- 🤖 **深度学习集成** - 支持 ONNX、TensorFlow、Caffe、Darknet 等多种模型格式的二分类任务
+- 🤖 **深度学习集成** - 支持 ONNX 模型的图像分类和目标检测任务
+- 🚀 **YOLO 目标检测** - 基于 ONNX Runtime 的 YOLOv11 目标检测实现，支持多种模型格式
 - 🌐 **多语言界面** - 完整的中英文双语界面支持
 - 📊 **实时系统监控** - CPU、内存、温度监控，图像清晰度实时计算
 - 🛠️ **可配置参数** - 灵活的相机参数和算法参数配置
@@ -23,35 +24,19 @@
 
 ```
 VisualRobot/
-├── Data/                          # 数据文件目录
-│   ├── Labels/                    # 标签文件
-│   │   └── class_labels.txt       # 类别标签文件
-│   └── Models/                    # 模型文件
-│       ├── resnet34_cat_dog_classifier.onnx  # ONNX 格式的猫狗分类模型
-│       └── README_MODELS.md       # 模型说明文档
 ├── Doc/                           # 项目文档
-│   ├── 调试信息手册.md             # 系统调试和维护手册 (Markdown)
-│   ├── 调试信息手册.pdf            # 系统调试和维护手册 (PDF)
-│   ├── 深度学习二分类使用指南.md    # 深度学习使用指南
 │   ├── feature_alignment_integration_guide.md  # 特征对齐集成指南
-│   └── feature_detect_optimization_analysis.md # 特征检测优化分析
+│   ├── feature_detect_optimization_analysis.md # 特征检测优化分析
+│   ├── 调试信息手册.md             # 系统调试和维护手册 (Markdown)
+│   └── 调试信息手册.pdf            # 系统调试和维护手册 (PDF)
 ├── HalconCode/                    # Halcon 图像处理代码
 │   ├── Halcon.cpp                 # Halcon 功能实现
 │   └── Halcon.h                   # Halcon 功能头文件
 ├── Img/                           # 图像资源目录
-│   ├── Templates/                 # 模板图像目录
-│   │   ├── template01.jpg         # 模板图像1
-│   │   ├── template02.jpg         # 模板图像2
-│   │   ├── template03.jpg         # 模板图像3
-│   │   └── template04.jpg         # 模板图像4
-│   ├── alignedBGR.jpg             # 对齐后的BGR图像
-│   ├── capture.jpg                # 相机采集的原始图像
+│   ├── test_arcuchi/              # 圆弧测试图像
+│   ├── test_pcb/                  # PCB缺陷测试图像
 │   ├── cat.jpg                    # 猫示例图像
 │   ├── circle_detected.jpg        # 圆形检测的结果图像
-│   ├── cropped_polygon.jpg        # 多边形裁剪结果图像
-│   ├── detection_result.jpg       # 检测结果图像
-│   ├── dog.jpg                    # 狗示例图像
-│   ├── templateBGR.jpg            # 模板BGR图像
 │   ├── test1.jpg                  # 测试图像1
 │   ├── test2.jpg                  # 测试图像2
 │   ├── test3.jpg                  # 测试图像3
@@ -61,22 +46,6 @@ VisualRobot/
 ├── ImgData/                       # 图像数据目录
 │   ├── 1.jpg                      # 标定图像1
 │   ├── 1_processed.jpg            # 处理后的标定图像1
-│   ├── 2.jpg                      # 标定图像2
-│   ├── 2_processed.jpg            # 处理后的标定图像2
-│   ├── 3.jpg                      # 标定图像3
-│   ├── 3_processed.jpg            # 处理后的标定图像3
-│   ├── 4.jpg                      # 标定图像4
-│   ├── 4_processed.jpg            # 处理后的标定图像4
-│   ├── 5.jpg                      # 标定图像5
-│   ├── 5_processed.jpg            # 处理后的标定图像5
-│   ├── 6.jpg                      # 标定图像6
-│   ├── 6_processed.jpg            # 处理后的标定图像6
-│   ├── 7.jpg                      # 标定图像7
-│   ├── 7_processed.jpg            # 处理后的标定图像7
-│   ├── 8.jpg                      # 标定图像8
-│   ├── 8_processed.jpg            # 处理后的标定图像8
-│   ├── 9.jpg                      # 标定图像9
-│   ├── 9_processed.jpg            # 处理后的标定图像9
 │   ├── 10.jpg                     # 标定图像10
 │   ├── 10_processed.jpg           # 处理后的标定图像10
 │   ├── 11.jpg                     # 标定图像11
@@ -93,26 +62,40 @@ VisualRobot/
 │   ├── 16_processed.jpg           # 处理后的标定图像16
 │   ├── 17.jpg                     # 标定图像17
 │   └── 17_processed.jpg           # 处理后的标定图像17
+├── Labels/                        # 标签文件目录
+│   └── class_labels.txt           # 类别标签文件
+├── Models/                        # 模型文件目录
+│   ├── arcuchi.onnx               # 第一版模型
+│   ├── arcuchi2.onnx              # 第二版模型
+│   ├── best.onnx                  # 最佳模型
+│   ├── pca_explained_variance.csv # PCA解释方差文件
+│   └── yolopcb.onnx               # PCB缺陷检测模型
 ├── Test/                          # 测试代码目录
 │   ├── feature_alignment_test.cpp # 特征对齐测试
-│   ├── feature_detect_benchmark.cpp # 特征检测性能测试
-│   ├── neu_pipeline.cpp           # NEU 缺陷检测流水线
-│   ├── neu_visual.py              # NEU 可视化工具
-│   ├── README_NEU.md              # NEU 测试说明
-│   └── TestBench.cpp              # 测试基准
+│   └── feature_detect_benchmark.cpp # 特征检测性能测试
 ├── VisualRobot/                   # 核心源代码目录
-│   ├── DataProcessor.cpp          # 数据处理实现（图像增强、特征提取等）
-│   ├── DataProcessor.h            # 数据处理头文件
-│   ├── DefectDetection.cpp        # 缺陷检测实现（PCA+SVM）
-│   ├── DefectDetection.h          # 缺陷检测头文件
 │   ├── DIP.cpp                    # 数字图像处理算法实现
 │   ├── DIP.h                      # 数字图像处理头文件
 │   ├── DLExample.cpp              # 深度学习示例实现
 │   ├── DLExample.h                # 深度学习示例头文件
 │   ├── DLProcessor.cpp            # 深度学习处理实现
 │   ├── DLProcessor.h              # 深度学习处理头文件
+│   ├── DataProcessor.cpp          # 数据处理实现（图像增强、特征提取等）
+│   ├── DataProcessor.h            # 数据处理头文件
+│   ├── DefectDetection.cpp        # 缺陷检测实现（PCA+SVM）
+│   ├── DefectDetection.h          # 缺陷检测头文件
 │   ├── FeatureAlignment.cpp       # 特征对齐实现
 │   ├── FeatureAlignment.h         # 特征对齐头文件
+│   ├── MvCamera.cpp               # 工业相机控制实现
+│   ├── MvCamera.h                 # 工业相机控制头文件
+│   ├── SystemMonitor.cpp          # 系统监控实现
+│   ├── SystemMonitor.h            # 系统监控头文件
+│   ├── Undistort.cpp              # 图像去畸变处理实现
+│   ├── Undistort.h                # 图像去畸变处理头文件
+│   ├── YOLOExample.cpp            # YOLO目标检测示例实现
+│   ├── YOLOExample.h              # YOLO目标检测示例头文件
+│   ├── YOLOProcessorORT.cpp       # YOLO目标检测处理器实现（基于ONNX Runtime）
+│   ├── YOLOProcessorORT.h         # YOLO目标检测处理器头文件
 │   ├── featureDetect.cpp          # 特征检测实现
 │   ├── featureDetect.h            # 特征检测头文件
 │   ├── featureDetect_optimized.cpp # 优化特征检测实现（并行化）
@@ -122,30 +105,25 @@ VisualRobot/
 │   ├── mainwindow.h               # 主窗口头文件
 │   ├── mainwindow.ui              # 主窗口界面文件
 │   ├── mainwindow_systemstats.cpp # 系统统计界面实现
-│   ├── MvCamera.cpp               # 工业相机控制实现
-│   ├── MvCamera.h                 # 工业相机控制头文件
-│   ├── SystemMonitor.cpp          # 系统监控实现
-│   ├── SystemMonitor.h            # 系统监控头文件
-│   ├── Undistort.cpp              # 图像去畸变处理实现
-│   ├── Undistort.h                # 图像去畸变处理头文件
-│   ├── VisualRobot_zh_EN.qm       # 编译后的翻译文件
-│   ├── VisualRobot_zh_EN.ts       # 中英文翻译源文件
 │   ├── VisualRobot.pro            # Qt 项目配置文件
 │   ├── VisualRobot.pro.user       # Qt 项目用户配置
+│   ├── VisualRobot_zh_EN.qm       # 编译后的翻译文件
+│   ├── VisualRobot_zh_EN.ts       # 中英文翻译源文件
 │   ├── style.qss                  # 样式表文件
 │   └── styles.qrc                 # 样式资源文件
-├── YOLO.zip                       # YOLO模型压缩包
-├── calibration_parameters.yml     # 相机标定参数文件
-├── detectedImg.jpg                # 最新检测结果图像
-├── feature_matches.jpg            # 特征匹配结果图像
 ├── log/                           # 系统日志目录
 │   ├── log_20250930_153826.txt    # 系统运行日志文件1
 │   └── log_20251009_164950.txt    # 系统运行日志文件2
+├── reference/                     # 参考代码目录
+│   ├── ConvertToOnnx.py           # ONNX模型转换脚本
+│   ├── Info_OnnxModel.py          # ONNX模型信息查看脚本
+│   ├── TestOnnx.py                # ONNX模型测试脚本
+│   ├── YOLO.py                    # YOLO模型实现
+│   ├── run_yolo_ort.py            # YOLO ONNX Runtime运行脚本
+│   └── test-YOLO.py               # YOLO测试脚本
+├── calibration_parameters.yml     # 相机标定参数文件
 ├── matrix.bin                     # 系统配置矩阵文件
-├── models/                        # 模型目录
-│   └── pca_explained_variance.csv # PCA解释方差文件
-├── test.jpg                       # 测试图像
-├── 最新成果测试.png               # 最新成果测试图像
+├── raw.csv                        # 原始数据文件
 └── README.md                      # 项目说明文档
 ```
 
@@ -156,6 +134,8 @@ VisualRobot/
 - **相机控制** - `MvCamera.*` 工业相机控制，支持 GigE/USB3.0
 - **图像处理** - `DIP.*` 数字图像处理，包含图像增强和特征检测
 - **深度学习** - `DLProcessor.*`, `DLExample.*` 深度学习图像分类处理
+- **YOLO目标检测** - `YOLOProcessorORT.*` 基于ONNX Runtime的YOLO目标检测实现
+- **YOLO示例** - `YOLOExample.*` YOLO目标检测示例界面和功能
 - **特征检测** - `featureDetect.*`, `featureDetect_optimized.*` 图像特征检测和匹配（支持并行化）
 - **缺陷检测** - `DefectDetection.*` 基于PCA+SVM的缺陷检测系统
 - **特征对齐** - `FeatureAlignment.*` 图像特征对齐和配准
@@ -206,12 +186,17 @@ VisualRobot/
 - `main.cpp` - 程序入口点，负责初始化应用程序、配置日志系统和启动主界面
 - `matrix.bin` - 系统配置矩阵文件，存储相机和算法参数
 - `calibration_parameters.yml` - 相机标定参数文件
-- `resnet34_cat_dog_classifier.onnx` - 预训练的深度学习模型，用于猫狗图像分类
 - `Halcon.cpp/.h` - Halcon 图像处理功能集成
 - `Undistort.cpp/.h` - 相机畸变校正处理模块
 - `DefectDetection.cpp/.h` - 缺陷检测系统，支持PCA降维和SVM分类
-- `YOLO.zip` - 包含YOLO目标检测模型的压缩包
-- `models/pca_explained_variance.csv` - 存储PCA分析的解释方差数据
+- `YOLOProcessorORT.cpp/.h` - YOLO目标检测处理器实现，基于ONNX Runtime
+- `YOLOExample.cpp/.h` - YOLO目标检测示例界面和功能
+- `arcuchi.onnx` - 第一版模型
+- `arcuchi2.onnx` - 第二版模型
+- `best.onnx` - 最佳模型
+- `yolopcb.onnx` - PCB缺陷检测模型
+- `class_labels.txt` - 类别标签文件
+- `Models/pca_explained_variance.csv` - 存储PCA分析的解释方差数据
 
 ## 💡 核心模块
 
@@ -229,10 +214,26 @@ VisualRobot/
 
 ### 深度学习模块 (DLProcessor)
 - ONNX 模型加载和推理
-- 多格式模型支持（TensorFlow、Caffe、Darknet）
 - 图像分类处理
 - 批量处理支持
 - 结果后处理和分析
+
+### YOLO目标检测模块 (YOLOProcessorORT)
+- 基于ONNX Runtime的YOLOv11目标检测实现
+- 支持多种ONNX模型格式
+- 图像预处理（letterbox缩放、BGR转RGB、归一化、HWC转CHW）
+- 模型推理和输出结果转换
+- 后处理生成检测结果（置信度过滤、NMS非极大值抑制）
+- 检测结果可视化和保存
+- 支持动态调整置信度阈值
+
+### YOLO示例模块 (YOLOExample)
+- YOLO目标检测示例界面
+- 模型加载和配置
+- 图像选择和检测
+- 检测结果显示和保存
+- 置信度阈值调整
+- 检测结果JSON输出
 
 ### 特征检测模块 (featureDetect)
 - 关键点检测（ORB、SIFT等）
@@ -317,7 +318,9 @@ LIBS += -lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_imgcodecs -lope
 
 5. **ONNX Runtime (深度学习推理)**
 ```cpp
-# 需要安装 ONNX Runtime 库用于模型推理
+# 用于YOLO目标检测和深度学习模型推理
+INCLUDEPATH += /usr/include/onnxruntime
+LIBS += -L/usr/lib/x86_64-linux-gnu/ -lonnxruntime
 ```
 
 ## 📦 安装与配置
@@ -365,15 +368,6 @@ make
 
 ## 🧪 测试功能
 
-### NEU 缺陷检测流水线
-```bash
-# 训练模式
-./neu_pipeline -m train -r ../Data/NEU -p 32
-
-# 评估模式
-./neu_pipeline -m eval -r ../Data/NEU -o neu_results.csv
-```
-
 ### 特征检测性能测试
 ```bash
 # 运行特征检测基准测试
@@ -386,22 +380,73 @@ make
 ./feature_alignment_test
 ```
 
+### YOLO目标检测测试
+
+1. **使用参考脚本测试YOLO模型**
+```bash
+# 使用Python脚本测试YOLO模型
+python reference/test-YOLO.py
+
+# 运行YOLO ONNX Runtime测试
+python reference/run_yolo_ort.py
+
+# 查看ONNX模型信息
+python reference/Info_OnnxModel.py
+```
+
+2. **使用YOLO示例界面测试**
+- 运行VisualRobot应用程序
+- 打开YOLO目标检测示例界面
+- 加载ONNX模型文件（如yolopcb.onnx或arcuchi.onnx）
+- 加载类别标签文件（class_labels.txt）
+- 选择测试图像
+- 点击"开始检测"按钮
+- 查看检测结果和保存的图像
+
+3. **使用YOLO处理器API测试**
+```cpp
+// 创建YOLO处理器实例
+YOLOProcessorORT yoloProcessor;
+
+// 初始化模型
+bool success = yoloProcessor.InitModel("Models/yolopcb.onnx", false);
+
+// 加载类别标签
+std::vector<std::string> labels = {"class1", "class2", "class3"};
+yoloProcessor.SetClassLabels(labels);
+
+// 设置置信度阈值
+yoloProcessor.SetThresholds(50.0f, 0.45f);
+
+// 读取图像
+cv::Mat image = cv::imread("Img/test_pcb/01_mouse_bite_09.jpg");
+
+// 检测目标
+std::vector<DetectionResult> results;
+yoloProcessor.DetectObjects(image, results);
+
+// 绘制检测结果
+cv::Mat resultImage = image.clone();
+yoloProcessor.DrawDetectionResults(resultImage, results);
+```
+
 ## ⚠️ 注意事项
 
 ### 首次运行前确认
 - 所有依赖库已正确安装（MVS、Halcon、OpenCV、Eigen3、ONNX Runtime）
-- 相机驱动已安装
-- 相机连接正常
+- 相机驱动已安装（如果使用工业相机）
+- 相机连接正常（如果使用工业相机）
 - ONNX Runtime 库已配置
 - 确保有足够的磁盘空间存储图像和处理结果
 
 ### 运行时注意
-- 检查相机连接状态
+- 检查相机连接状态（如果使用工业相机）
 - 确保权限设置正确
 - 监控系统资源占用（特别是CPU和内存）
 - 确认模型文件路径正确
 - 多边形绘制功能需要先加载图像到widgetDisplay_2
 - 图像裁剪功能需要至少3个点形成多边形
+- YOLO目标检测需要正确的ONNX模型和对应的类别标签文件
 
 ### 交互式功能使用说明
 - **多边形绘制**：在widgetDisplay_2上点击添加顶点，按Enter键完成绘制
@@ -409,13 +454,21 @@ make
 - **尺寸测量**：支持标准模式和裁剪区域模式两种测量方式
 - **清晰度分析**：实时显示在状态栏，无需额外操作
 - **实时缺陷检测**：需要先设置模板图像，然后启动实时检测模式
+- **YOLO目标检测**：
+  - 加载ONNX模型文件（如yolopcb.onnx或arcuchi.onnx）
+  - 加载对应的类别标签文件（class_labels.txt）
+  - 调整置信度阈值以获得最佳检测效果
+  - 检测结果会自动保存为图像和JSON文件
 
 ### 调试参考
 - 查看 `Doc/调试信息手册.md` 或 `Doc/调试信息手册.pdf`
 - 使用系统监控工具跟踪性能
-- 参考 `Doc/深度学习二分类使用指南.md`
 - 查看主界面日志区域获取详细操作信息
 - 使用测试代码验证各模块功能
+- 使用参考脚本测试YOLO模型：
+  - `reference/test-YOLO.py` - 测试YOLO模型
+  - `reference/run_yolo_ort.py` - 运行YOLO ONNX Runtime测试
+  - `reference/Info_OnnxModel.py` - 查看ONNX模型信息
 
 ## 📝 开发规范
 
@@ -437,28 +490,6 @@ make
 - 确保向后兼容性
 - 文档与代码同步更新
 
-## 🔄 更新日志
-
-### v1.0.0 (2025-10-22)
-- 完整的工业视觉系统框架
-- 支持多种相机接口和图像处理算法
-- 深度学习模型集成
-- 实时系统监控
-- 交互式图像处理功能
-- 完整的文档和测试套件
-
-## 📄 许可证
-
-待添加许可证信息
-
-## 👥 维护者
-
-待添加维护者信息
-
-## 🤝 贡献
-
-欢迎提交问题和改进建议！
-
 ### 贡献流程
 1. Fork 项目仓库
 2. 创建功能分支
@@ -473,6 +504,6 @@ make
 
 ---
 
-**最后更新日期：2025年10月30日**
+**最后更新日期：2025年12月02日**
 
-**项目仓库：https://gitee.com/kooki3/visual-robot.git**
+**项目仓库：https://gitee.com/visual-team-arcuchi/VisualRobot.git**
