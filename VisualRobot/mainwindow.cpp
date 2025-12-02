@@ -108,7 +108,7 @@ MainWindow::MainWindow(QWidget *parent) :
     // 初始化YOLO显示线程相关
     m_yoloDisplayRunning = false;
     m_yoloDisplayThread = nullptr;
-    m_displayUpdateInterval = 100; // 显示更新间隔100ms，约10FPS
+    m_displayUpdateInterval = 200; // 显示更新间隔200ms，5FPS
     
     // 初始化双缓冲
     m_writeBufferIndex = 0;

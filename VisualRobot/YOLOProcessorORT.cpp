@@ -30,8 +30,24 @@ YOLOProcessorORT::YOLOProcessorORT(QObject* parent)
     , letterbox_dw_(0.0)  // 宽度方向填充，初始化为0.0
     , letterbox_dh_(0.0)  // 高度方向填充，初始化为0.0
 {
-    sessionOptions_.SetIntraOpNumThreads(4);  // 设置线程数为1
-    sessionOptions_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);  // 启用所有图优化
+    // ====== 核心会话配置 (针对RK3588 ARM64 CPU) ======
+    // 1. 线程配置：RK3588有4个Cortex-A76大核和4个Cortex-A55小核。
+    //    将推理任务限制在大核上，避免线程频繁迁移，设置4线程。
+    sessionOptions_.SetIntraOpNumThreads(4); // 单个算子内部并行[citation:3][citation:8]
+    sessionOptions_.SetInterOpNumThreads(1); // 默认顺序执行，简化调试[citation:3][citation:4]
+
+    // 2. 内存优化：嵌入式设备内存敏感，关闭Arena分配器可能减少内存碎片[citation:3]。
+    sessionOptions_.SetCPUArenaAllocator(true); // 极限速度采用true
+    
+    // 3. 优化级别：使用基础优化平衡启动速度和运行性能[citation:1][citation:4]。
+    //    GraphOptimizationLevel::ORT_ENABLE_BASIC 是比 ALL 更稳妥的选择
+    sessionOptions_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_EXTENDED); // 推理稳定采用Extended
+    
+    // 4. 执行模式：顺序执行，避免并行开销，适合流式推理[citation:3]。
+    sessionOptions_.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
+    
+    // 5. 内存模式优化：由于YOLO输入尺寸固定(640x640)，可以开启以提升性能[citation:3]。
+    sessionOptions_.EnableMemoryPattern();
 }
 
 /**
