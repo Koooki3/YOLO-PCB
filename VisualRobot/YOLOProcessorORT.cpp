@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <numeric>
 #include <tuple>
+#include <omp.h>
 
 using namespace std;
 
@@ -72,8 +73,13 @@ bool YOLOProcessorORT::InitModel(const string& modelPath, bool useCUDA)
 {
     try 
     {
-        // 根据需要可以扩展sessionOptions_以启用CUDA加速
-        // 注意：使用CUDA需要用户提供正确的CUDA环境和库
+        // 启用ONNX Runtime的OpenCL执行提供者
+        Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_OpenCL(sessionOptions_));
+        
+        // 配置OpenCL参数
+        sessionOptions_.AddConfigEntry("opencl_device_id", "0");  // 使用第一个OpenCL设备
+        sessionOptions_.AddConfigEntry("opencl_mem_limit", "4096");  // 4GB内存限制
+        
         session_ = std::make_unique<Ort::Session>(env_, modelPath.c_str(), sessionOptions_);
         return true;
     } 
@@ -280,19 +286,22 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
         int left = int(round(dw / 2.0));
         int right = dw - left;
 
-        Mat resized;
+        // 使用UMat实现OpenCL加速
+        cv::UMat frame_umat = frame.getUMat(cv::ACCESS_READ);
+        cv::UMat resized_umat;
+        
         if (orig_w != new_unpad_w || orig_h != new_unpad_h)
         {
-            cv::resize(frame, resized, Size(new_unpad_w, new_unpad_h));
+            cv::resize(frame_umat, resized_umat, Size(new_unpad_w, new_unpad_h));
         }
         else
         {
-            resized = frame.clone();
+            resized_umat = frame_umat.clone();
         }
 
         // pad with 114 (common YOLO) to reach target size
-        Mat padded;
-        copyMakeBorder(resized, padded, top, bottom, left, right, BORDER_CONSTANT, Scalar(114,114,114));
+        cv::UMat padded_umat;
+        copyMakeBorder(resized_umat, padded_umat, top, bottom, left, right, BORDER_CONSTANT, Scalar(114,114,114));
 
         // store letterbox params for postprocess
         // store dw/dh as float half-padding (before integer rounding) to match Python letterbox
@@ -301,9 +310,14 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
         letterbox_dh_ = dh / 2.0;
         qDebug() << "letterbox r, dw, dh:" << letterbox_r_ << letterbox_dw_ << letterbox_dh_;
 
-        Mat rgb;
-        cv::cvtColor(padded, rgb, cv::COLOR_BGR2RGB);
-        rgb.convertTo(rgb, CV_32F, (float)scaleFactor_);
+        // 使用UMat进行颜色转换和归一化
+        cv::UMat rgb_umat;
+        cv::cvtColor(padded_umat, rgb_umat, cv::COLOR_BGR2RGB);
+        rgb_umat.convertTo(rgb_umat, CV_32F, (float)scaleFactor_);
+        
+        // 将UMat转换为Mat以便访问数据（数据格式转换需要CPU访问）
+        cv::Mat rgb;
+        rgb_umat.copyTo(rgb);
 
         // HWC -> CHW
         vector<int64_t> inputShape = {1, 3, target_h, target_w};
@@ -531,7 +545,8 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
     std::vector<int> cand_class_ids;       // 候选框类别ID列表
     std::vector<std::tuple<int, float, float, int>> top_candidates; // 候选框信息元组：(索引, 最大sigmoid分数, 原始分数, 类别ID)
 
-    // 遍历所有候选框
+    // 遍历所有候选框 - 使用OpenMP并行化
+    #pragma omp parallel for
     for (int c = 0; c < cols; ++c) 
     {
         // 提取中心点坐标和宽高
@@ -555,8 +570,7 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
 
         // 按要求将类别分数乘以100用于筛选
         float scaled_conf = max_raw * 100.0f;
-        top_candidates.emplace_back(c, 0.0f, max_raw, best_cls); // 保存以便后续分析（sigmoid 未计算）
-
+        
         // 应用置信度阈值过滤
         if (scaled_conf < confThreshold_) 
         {
@@ -591,10 +605,40 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
             continue;
         }
 
-        // 添加到候选列表
-        cand_boxes.emplace_back(x1, y1, bw, bh);
-        cand_scores.push_back(scaled_conf);
-        cand_class_ids.push_back(best_cls);
+        // 添加到候选列表 - 使用关键区域确保线程安全
+        #pragma omp critical
+        {
+            cand_boxes.emplace_back(x1, y1, bw, bh);
+            cand_scores.push_back(scaled_conf);
+            cand_class_ids.push_back(best_cls);
+        }
+    }
+    
+    // 保存候选框信息用于后续分析（顺序不影响结果）
+    #pragma omp parallel for
+    for (int c = 0; c < cols; ++c) 
+    {
+        float cx = get_val(0, c);
+        float cy = get_val(1, c);
+        float w = get_val(2, c);
+        float h = get_val(3, c);
+        
+        float max_raw = -std::numeric_limits<float>::infinity();
+        int best_cls = 0;
+        for (int k = 0; k < NUM_CLASSES; ++k) 
+        {
+            float raw = get_val(4 + k, c);
+            if (raw > max_raw) 
+            {
+                max_raw = raw;
+                best_cls = k;
+            }
+        }
+        
+        #pragma omp critical
+        {
+            top_candidates.emplace_back(c, 0.0f, max_raw, best_cls);
+        }
     }
 
     // 应用NMS（非极大值抑制）
