@@ -467,28 +467,10 @@ vector<Mat> DataProcessor::ApplyAugmentation(const Mat& input, int numAugmentati
             current = AdjustContrast(current, RandomDouble(0.5, 1.5));
         }
             
-        // 添加噪声 (50%概率) 
-        if (RandomDouble(0, 1) > 0.5)
-        {
-            current = AddNoise(current);
-        }
-            
-        // 随机旋转 (50%概率) 
-        if (RandomDouble(0, 1) > 0.5)
-        {
-            current = RandomRotate(current);
-        }
-            
         // 随机翻转 (50%概率) 
         if (RandomDouble(0, 1) > 0.5)
         {
             current = RandomFlip(current);
-        }
-            
-        // 随机裁剪 (50%概率) 
-        if (RandomDouble(0, 1) > 0.5)
-        {
-            current = RandomCrop(current);
         }
             
         // 添加到结果集合
