@@ -70,6 +70,8 @@ LIBS += -L/usr/local/lib/ -lopencv_calib3d -lopencv_core -lopencv_dnn -lopencv_f
 
 LIBS += -L/opt/MVS/lib/aarch64/ -lMvCameraControl -lMvCameraControlWrapper -lMVGigEVisionSDK -lMvUsb3vTL
 
+LIBS += -L/usr/lib/aarch64-linux-gnu -lmali -lOpenCL
+
 # 编译优化选项
 unix {
     # 启用所有警告
