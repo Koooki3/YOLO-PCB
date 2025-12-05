@@ -49,6 +49,13 @@ YOLOProcessorORT::YOLOProcessorORT(QObject* parent)
 
     // 可选：启用profiling（仅用于调试）
     // sessionOptions_.EnableProfiling("profile.json");
+    
+    // 初始化延时统计结构体
+    timingStats_.preprocessTime = 0.0;
+    timingStats_.inferenceTime = 0.0;
+    timingStats_.postprocessTime = 0.0;
+    timingStats_.totalTime = 0.0;
+    timingStats_.fps = 0;
 }
 
 /**
@@ -267,6 +274,12 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
 
     try 
     {
+        // 总处理时间开始计时
+        auto totalStartTime = chrono::high_resolution_clock::now();
+        
+        // 1. 图像预处理阶段计时开始
+        auto preprocessStartTime = chrono::high_resolution_clock::now();
+        
         // Preprocess: letterbox (keep aspect ratio), BGR->RGB, float32, /255, NCHW
         int orig_w = frame.cols;
         int orig_h = frame.rows;
@@ -306,7 +319,8 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
         letterbox_r_ = r;
         letterbox_dw_ = dw / 2.0; // half padding as float
         letterbox_dh_ = dh / 2.0;
-        qDebug() << "letterbox r, dw, dh:" << letterbox_r_ << letterbox_dw_ << letterbox_dh_;
+        
+        
 
         // 使用UMat进行颜色转换和归一化
         cv::UMat rgb_umat;
@@ -333,6 +347,13 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
                 }
             }
         }
+        
+        // 图像预处理阶段计时结束
+        auto preprocessEndTime = chrono::high_resolution_clock::now();
+        double preprocessTime = chrono::duration<double, milli>(preprocessEndTime - preprocessStartTime).count();
+        
+        // 2. 模型推理阶段计时开始
+        auto inferenceStartTime = chrono::high_resolution_clock::now();
 
         Ort::MemoryInfo mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
         Ort::Value inputTensor = Ort::Value::CreateTensor<float>(mem_info, inputTensorValues.data(), inputTensorSize, inputShape.data(), inputShape.size());
@@ -357,43 +378,20 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
         // run (assume single input tensor)
         size_t numOutputNodes = outputNames.size();
         auto outputTensors = session_->Run(Ort::RunOptions{nullptr}, inputNames.data(), &inputTensor, 1, outputNames.data(), numOutputNodes);
+        
+        // 模型推理阶段计时结束
+        auto inferenceEndTime = chrono::high_resolution_clock::now();
+        double inferenceTime = chrono::duration<double, milli>(inferenceEndTime - inferenceStartTime).count();
+        
+        // 3. 后处理阶段计时开始
+        auto postprocessStartTime = chrono::high_resolution_clock::now();
 
         // debug: print output shapes (useful when user reports mismatch)
-        qDebug() << "ORT returned" << (int)outputTensors.size() << "output(s)";
-        for (size_t oi=0; oi<outputTensors.size(); ++oi) 
-        {
-            auto info = outputTensors[oi].GetTensorTypeAndShapeInfo();
-            auto shape = info.GetShape();
-            QString s = "shape:";
-            for (auto d : shape) 
-            {
-                s += QString::number(d) + ",";
-            }
-            qDebug() << "  output" << oi << s;
-        }
-
         // convert FIRST output to mat (mimic TestOnnx.py behavior)
         std::vector<Ort::Value> singleOuts;
         // Ort::Value is move-only; avoid copy by moving the element into the new vector
         singleOuts.emplace_back(std::move(outputTensors[0]));
         auto mats = OrtOutputToMats(singleOuts);
-
-        // debug: print first few values of first mat
-        if (!mats.empty()) 
-        {
-            Mat &m0 = mats[0];
-            qDebug() << "first mat rows,cols:" << m0.rows << m0.cols;
-            int rshow = std::min(3, m0.rows);
-            for (int ri=0; ri<rshow; ++ri) 
-            {
-                QString rowvals;
-                for (int ci=0; ci<std::min(6, m0.cols); ++ci) 
-                {
-                    rowvals += QString::number(m0.at<float>(ri,ci),'g',3)+",";
-                }
-                qDebug() << "  row" << ri << rowvals;
-            }
-        }
 
         // Use only the first output's mat (this matches TestOnnx.py / run_yolo_ort.py)
         Mat dets;
@@ -402,68 +400,58 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
             dets = mats[0];
         }
 
-        // Debug: print column-wise stats and confidence distribution
-        if (!dets.empty()) 
-        {
-            int R = dets.rows;
-            int C = dets.cols;
-            qDebug() << "dets rows,cols:" << R << C;
-            // per-column min/max
-            for (int c = 0; c < C; ++c) 
-            {
-                double minv, maxv;
-                cv::minMaxLoc(dets.col(c), &minv, &maxv);
-                qDebug() << "  col" << c << "min" << minv << "max" << maxv;
-            }
-
-            // compute per-row max class score and product with obj
-            vector<float> confidences;
-            confidences.reserve(R);
-            int cnt_gt_01 = 0, cnt_gt_05 = 0, cnt_gt_001 = 0;
-            for (int r = 0; r < R; ++r) 
-            {
-                const float* row = dets.ptr<float>(r);
-                // assume first 4 are xywh, index 4 is obj, remaining are class scores
-                float obj = (C > 4) ? row[4] : 1.0f;
-                float maxCls = 0.0f;
-                for (int cc = 5; cc < C; ++cc) 
-                {
-                    if (row[cc] > maxCls) maxCls = row[cc];
-                }
-                float conf = obj * maxCls;
-                confidences.push_back(conf);
-                if (maxCls > 0.1f) 
-                {
-                    cnt_gt_01++;
-                }
-                if (maxCls > 0.5f) 
-                {
-                    cnt_gt_05++;
-                }
-                if (maxCls > 0.001f) 
-                {
-                    cnt_gt_001++;
-                }
-            }
-            // top 5 confidences
-            vector<float> sorted = confidences;
-            sort(sorted.begin(), sorted.end(), greater<float>());
-            int showN = min((int)sorted.size(), 10);
-            QString topstr = "top confidences:";
-            for (int i = 0; i < showN; ++i) 
-            {
-                topstr += QString::number(sorted[i],'g',6)+",";
-            }
-            qDebug() << topstr;
-            qDebug() << "counts: >0.001=" << cnt_gt_001 << " >0.1=" << cnt_gt_01 << " >0.5=" << cnt_gt_05;
-        }
-
         // now call PostProcess with the correct parameters
         // 临时添加默认的图像路径和期望类别，实际使用时应该从外部传入
         string imagePath = "test_image.jpg";
         string expectedClass = "unknown";
         vector<DetectionResult> dr = PostProcess(singleOuts, frame.size(), imagePath, expectedClass);
         results = dr;
+        
+        // 后处理阶段计时结束
+        auto postprocessEndTime = chrono::high_resolution_clock::now();
+        double postprocessTime = chrono::duration<double, milli>(postprocessEndTime - postprocessStartTime).count();
+        
+        // 总处理时间结束计时
+        auto totalEndTime = chrono::high_resolution_clock::now();
+        double totalTime = chrono::duration<double, milli>(totalEndTime - totalStartTime).count();
+        
+        // 计算FPS
+        int fps = totalTime > 0 ? static_cast<int>(1000.0 / totalTime) : 0;
+        
+        // 更新延时统计
+        timingStats_.preprocessTime = preprocessTime;
+        timingStats_.inferenceTime = inferenceTime;
+        timingStats_.postprocessTime = postprocessTime;
+        timingStats_.totalTime = totalTime;
+        timingStats_.fps = fps;
+        
+        // 准备调试信息（仅当启用调试时才会使用）
+        if (enableDebug_)
+        {
+            YOLODebugInfo debugInfo;
+            debugInfo.letterbox_r = letterbox_r_;
+            debugInfo.letterbox_dw = letterbox_dw_;
+            debugInfo.letterbox_dh = letterbox_dh_;
+            debugInfo.outputTensorCount = outputTensors.size();
+            
+            // 保存输出形状
+            for (const auto& out : outputTensors)
+            {
+                auto info = out.GetTensorTypeAndShapeInfo();
+                debugInfo.outputShapes.push_back(info.GetShape());
+            }
+            
+            debugInfo.mats = mats;
+            debugInfo.dets = dets;
+            debugInfo.preprocessTime = preprocessTime;
+            debugInfo.inferenceTime = inferenceTime;
+            debugInfo.postprocessTime = postprocessTime;
+            debugInfo.totalTime = totalTime;
+            debugInfo.fps = fps;
+            
+            // 调用独立的调试输出函数，避免影响计时
+            DebugOutput(debugInfo);
+        }
 
         return true;
     } 
@@ -886,4 +874,133 @@ void YOLOProcessorORT::DrawDetectionResults(cv::Mat& frame, const std::vector<De
         // 绘制文本，使用更大的字体和更粗的线宽
         cv::putText(frame, label, cv::Point(result.boundingBox.x + 5, top + labelSize.height + baseLine), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 255, 255), 2);  // 使用白色文本以便更好地可见
     }
+}
+
+/**
+ * @brief 获取最新的延时统计
+ * @return 延时统计结构体
+ */
+YOLOProcessorORT::YOLOTimingStats YOLOProcessorORT::GetTimingStats() const
+{
+    return timingStats_;
+}
+
+/**
+ * @brief 启用/禁用详细调试输出
+ * @param enable 是否启用
+ */
+void YOLOProcessorORT::SetDebugOutput(bool enable)
+{
+    enableDebug_ = enable;
+}
+
+/**
+ * @brief 输出调试信息
+ * @param debugInfo 调试信息结构体，包含需要输出的各种调试数据
+ * 
+ * 集中处理所有调试输出，避免调试输出影响核心处理逻辑的性能
+ */
+void YOLOProcessorORT::DebugOutput(const YOLODebugInfo& debugInfo)
+{
+    if (!enableDebug_)
+    {
+        return; // 调试输出已禁用，直接返回
+    }
+
+    // 输出letterbox信息
+    qDebug() << "letterbox r, dw, dh:" << debugInfo.letterbox_r << debugInfo.letterbox_dw << debugInfo.letterbox_dh;
+
+    // 输出模型输出信息
+    qDebug() << "ORT returned" << debugInfo.outputTensorCount << "output(s)";
+    for (size_t oi = 0; oi < debugInfo.outputTensorCount; ++oi) 
+    {
+        QString s = "shape:";
+        for (auto d : debugInfo.outputShapes[oi]) 
+        {
+            s += QString::number(d) + ",";
+        }
+        qDebug() << "  output" << oi << s;
+    }
+
+    // 输出第一个矩阵的基本信息
+    if (!debugInfo.mats.empty()) 
+    {
+        const Mat &m0 = debugInfo.mats[0];
+        qDebug() << "first mat rows,cols:" << m0.rows << m0.cols;
+        int rshow = std::min(3, m0.rows);
+        for (int ri = 0; ri < rshow; ++ri) 
+        {
+            QString rowvals;
+            for (int ci = 0; ci < std::min(6, m0.cols); ++ci) 
+            {
+                rowvals += QString::number(m0.at<float>(ri, ci), 'g', 3) + ",";
+            }
+            qDebug() << "  row" << ri << rowvals;
+        }
+    }
+
+    // 输出检测结果的详细信息
+    if (!debugInfo.dets.empty()) 
+    {
+        int R = debugInfo.dets.rows;
+        int C = debugInfo.dets.cols;
+        qDebug() << "dets rows,cols:" << R << C;
+        
+        // 输出每列的min/max
+        for (int c = 0; c < C; ++c) 
+        {
+            double minv, maxv;
+            cv::minMaxLoc(debugInfo.dets.col(c), &minv, &maxv);
+            qDebug() << "  col" << c << "min" << minv << "max" << maxv;
+        }
+
+        // 计算每行的最大类别分数和置信度分布
+        vector<float> confidences;
+        confidences.reserve(R);
+        int cnt_gt_01 = 0, cnt_gt_05 = 0, cnt_gt_001 = 0;
+        for (int r = 0; r < R; ++r) 
+        {
+            const float* row = debugInfo.dets.ptr<float>(r);
+            float obj = (C > 4) ? row[4] : 1.0f;
+            float maxCls = 0.0f;
+            for (int cc = 5; cc < C; ++cc) 
+            {
+                if (row[cc] > maxCls) maxCls = row[cc];
+            }
+            float conf = obj * maxCls;
+            confidences.push_back(conf);
+            if (maxCls > 0.1f) 
+            {
+                cnt_gt_01++;
+            }
+            if (maxCls > 0.5f) 
+            {
+                cnt_gt_05++;
+            }
+            if (maxCls > 0.001f) 
+            {
+                cnt_gt_001++;
+            }
+        }
+        
+        // 输出top置信度
+        vector<float> sorted = confidences;
+        sort(sorted.begin(), sorted.end(), greater<float>());
+        int showN = min((int)sorted.size(), 10);
+        QString topstr = "top confidences:";
+        for (int i = 0; i < showN; ++i) 
+        {
+            topstr += QString::number(sorted[i], 'g', 6) + ",";
+        }
+        qDebug() << topstr;
+        qDebug() << "counts: >0.001=" << cnt_gt_001 << " >0.1=" << cnt_gt_01 << " >0.5=" << cnt_gt_05;
+    }
+
+    // 输出处理时间统计
+    qDebug() << "YOLO Processing Timing:";
+    qDebug() << "  Preprocess: " << debugInfo.preprocessTime << " ms";
+    qDebug() << "  Inference: " << debugInfo.inferenceTime << " ms";
+    qDebug() << "  Postprocess: " << debugInfo.postprocessTime << " ms";
+    qDebug() << "  Total: " << debugInfo.totalTime << " ms";
+    qDebug() << "  FPS: " << debugInfo.fps;
 }

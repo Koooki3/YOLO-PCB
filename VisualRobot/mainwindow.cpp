@@ -3174,12 +3174,19 @@ void MainWindow::YoloRealTimeDetectionThread()
     }
     m_yoloProcessor->SetClassLabels(cls);
     
+    bool enableDebug = true; // 默认为开启
+    m_yoloProcessor->SetDebugOutput(enableDebug);
+
     AppendLog("YOLO模型和标签加载成功", INFO);
     
     // 初始化统计信息    
     m_yoloFrameCount = 0;
     m_yoloStatsStartTime.start();
     m_yoloTotalProcessingTime = 0.0;
+
+    double totalPreprocessTime = 0.0;
+    double totalInferenceTime = 0.0;
+    double totalPostprocessTime = 0.0;
     
     // 重置统计信息定时器，确保它在主线程中执行
     QMetaObject::invokeMethod(this, [this]() {
@@ -3247,10 +3254,17 @@ void MainWindow::YoloRealTimeDetectionThread()
         {
             // 记录处理时间
             double processingTime = timer.elapsed() / 1000.0; // 转换为秒
+
+            // 获取详细的延时统计
+            auto timingStats = m_yoloProcessor->GetTimingStats();
             
             // 更新统计信息
             m_yoloFrameCount++;
             m_yoloTotalProcessingTime += processingTime;
+
+            totalPreprocessTime += timingStats.preprocessTime / 1000.0; // 转换为秒
+            totalInferenceTime += timingStats.inferenceTime / 1000.0;
+            totalPostprocessTime += timingStats.postprocessTime / 1000.0;
             
             // 将检测结果写入双缓冲
             {   
@@ -3370,7 +3384,18 @@ void MainWindow::UpdateYoloStats()
     
     // 使用QMetaObject::invokeMethod确保AppendLog在主线程中执行
     QMetaObject::invokeMethod(this, [this, fps, avgProcessingTime]() {
-        AppendLog(QString("YOLO实时检测统计- 帧率: %1 FPS, 平均处理延时: %2 ms").arg(fps).arg(avgProcessingTime), INFO);
+        // 获取最新的单帧统计信息
+        auto timingStats = m_yoloProcessor->GetTimingStats();
+        
+        // 输出更详细的统计信息
+        AppendLog(QString("YOLO实时检测统计- 帧率: %1 FPS, 总平均处理延时: %2 ms")
+                  .arg(fps).arg(avgProcessingTime), INFO);
+        
+        // 新增：输出各阶段详细延时
+        AppendLog(QString("  预处理: %1 ms, 推理: %2 ms, 后处理: %3 ms")
+                  .arg(timingStats.preprocessTime, 0, 'f', 2)
+                  .arg(timingStats.inferenceTime, 0, 'f', 2)
+                  .arg(timingStats.postprocessTime, 0, 'f', 2), INFO);
     }, Qt::QueuedConnection);
     
     // 重置统计信息

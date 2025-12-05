@@ -8,9 +8,43 @@
 #include <memory>
 #include <onnxruntime_cxx_api.h>
 #include "DLProcessor.h" // for DetectionResult
+#include <chrono>
 
 using namespace cv;
 using namespace std;
+
+/**
+ * @brief YOLO模型处理延时统计结构体
+ * 
+ * 记录YOLO模型处理流程中各个阶段的耗时情况
+ */
+struct YOLOTimingStats {
+    double preprocessTime;    // 图像预处理时间（毫秒）
+    double inferenceTime;     // 模型推理时间（毫秒）
+    double postprocessTime;   // 后处理时间（毫秒）
+    double totalTime;         // 总处理时间（毫秒）
+    int fps;                  // 帧率（FPS）
+};
+
+/**
+ * @brief YOLO调试信息结构体
+ * 
+ * 用于存储和传递YOLO检测过程中的调试信息
+ */
+struct YOLODebugInfo {
+    double letterbox_r;               // letterbox缩放比例
+    double letterbox_dw;              // letterbox宽度方向填充
+    double letterbox_dh;              // letterbox高度方向填充
+    size_t outputTensorCount;         // 模型输出张量数量
+    vector<vector<int64_t>> outputShapes; // 模型输出形状
+    vector<Mat> mats;                 // 转换后的输出矩阵
+    Mat dets;                         // 检测结果矩阵
+    double preprocessTime;            // 预处理时间
+    double inferenceTime;             // 推理时间
+    double postprocessTime;           // 后处理时间
+    double totalTime;                 // 总时间
+    int fps;                          // 帧率
+};
 
 /**
  * @brief YOLO处理器类，基于ONNX Runtime实现
@@ -86,6 +120,18 @@ public:
      * @param results 检测结果列表
      */
     void DrawDetectionResults(Mat& frame, const vector<DetectionResult>& results);
+    
+    /**
+     * @brief 获取最新的延时统计
+     * @return 延时统计结构体
+     */
+    YOLOTimingStats GetTimingStats() const;
+    
+    /**
+     * @brief 启用/禁用详细调试输出
+     * @param enable 是否启用
+     */
+    void SetDebugOutput(bool enable);
 
 signals:
     /**
@@ -116,6 +162,10 @@ private:
     double letterbox_r_;   // 缩放比例
     double letterbox_dw_;  // 宽度方向的填充
     double letterbox_dh_;  // 高度方向的填充
+    
+    // 延时统计
+    YOLOTimingStats timingStats_; // 最新的延时统计
+    bool enableDebug_;  // 是否启用详细调试输出
 
     /**
      * @brief 将ONNX Runtime输出转换为OpenCV Mat格式
@@ -134,6 +184,14 @@ private:
      */
     std::vector<DetectionResult> PostProcess(const std::vector<Ort::Value>& outputs, const cv::Size& frameSize, 
                                              const std::string& imagePath = "", const std::string& expectedClass = "");
+    
+    /**
+     * @brief 输出调试信息
+     * @param debugInfo 调试信息结构体，包含需要输出的各种调试数据
+     * 
+     * 集中处理所有调试输出，避免调试输出影响核心处理逻辑的性能
+     */
+    void DebugOutput(const YOLODebugInfo& debugInfo);
 };
 
 #endif // YOLOPROCESSORORT_H
