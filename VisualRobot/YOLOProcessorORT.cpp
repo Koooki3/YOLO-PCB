@@ -386,6 +386,23 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
         // 3. 后处理阶段计时开始
         auto postprocessStartTime = chrono::high_resolution_clock::now();
 
+        // 准备调试信息（仅当启用调试时才会使用）
+        YOLODebugInfo debugInfo;
+        if (enableDebug_)
+        {
+            debugInfo.letterbox_r = letterbox_r_;
+            debugInfo.letterbox_dw = letterbox_dw_;
+            debugInfo.letterbox_dh = letterbox_dh_;
+            debugInfo.outputTensorCount = outputTensors.size();
+            
+            // 保存输出形状（在移动张量之前）
+            for (const auto& out : outputTensors)
+            {
+                auto info = out.GetTensorTypeAndShapeInfo();
+                debugInfo.outputShapes.push_back(info.GetShape());
+            }
+        }
+
         // debug: print output shapes (useful when user reports mismatch)
         // convert FIRST output to mat (mimic TestOnnx.py behavior)
         std::vector<Ort::Value> singleOuts;
@@ -425,22 +442,9 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
         timingStats_.totalTime = totalTime;
         timingStats_.fps = fps;
         
-        // 准备调试信息（仅当启用调试时才会使用）
+        // 完成调试信息收集并调用调试输出函数
         if (enableDebug_)
         {
-            YOLODebugInfo debugInfo;
-            debugInfo.letterbox_r = letterbox_r_;
-            debugInfo.letterbox_dw = letterbox_dw_;
-            debugInfo.letterbox_dh = letterbox_dh_;
-            debugInfo.outputTensorCount = outputTensors.size();
-            
-            // 保存输出形状
-            for (const auto& out : outputTensors)
-            {
-                auto info = out.GetTensorTypeAndShapeInfo();
-                debugInfo.outputShapes.push_back(info.GetShape());
-            }
-            
             debugInfo.mats = mats;
             debugInfo.dets = dets;
             debugInfo.preprocessTime = preprocessTime;
@@ -880,7 +884,7 @@ void YOLOProcessorORT::DrawDetectionResults(cv::Mat& frame, const std::vector<De
  * @brief 获取最新的延时统计
  * @return 延时统计结构体
  */
-YOLOProcessorORT::YOLOTimingStats YOLOProcessorORT::GetTimingStats() const
+YOLOTimingStats YOLOProcessorORT::GetTimingStats() const
 {
     return timingStats_;
 }
