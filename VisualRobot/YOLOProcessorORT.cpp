@@ -72,11 +72,9 @@ YOLOProcessorORT::~YOLOProcessorORT()
 bool YOLOProcessorORT::InitModel(const string& modelPath, bool useCUDA)
 {
     try 
-    {
-        // 启用ONNX Runtime的OpenCL执行提供者
-        Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_OpenCL(sessionOptions_));
-        
+    {   
         // 配置OpenCL参数
+        sessionOptions_.AddConfigEntry("session.enable_opencl","1");
         sessionOptions_.AddConfigEntry("opencl_device_id", "0");  // 使用第一个OpenCL设备
         sessionOptions_.AddConfigEntry("opencl_mem_limit", "4096");  // 4GB内存限制
         
