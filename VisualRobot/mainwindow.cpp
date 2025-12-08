@@ -76,6 +76,10 @@ MainWindow::MainWindow(QWidget *parent) :
     m_bGrabbing = false;
     m_hWnd = (void*)ui->widgetDisplay->winId();
     
+    // 初始化DVPCamera相关变量
+    m_dvpHandle = 0;
+    m_isDVPCameraConnected = false;
+    
     // 初始化设备热拔插自动枚举相关变量
     m_deviceEnumTimer = new QTimer(this);
     m_lastDeviceCount = 0;
@@ -3151,35 +3155,46 @@ void MainWindow::on_detect_clicked()
 void MainWindow::autoEnumDevices()
 {
     // 只有在没有打开相机的情况下才进行自动枚举
-    if (m_pcMyCamera && m_pcMyCamera->IsDeviceConnected())
+    if ((m_pcMyCamera && m_pcMyCamera->IsDeviceConnected()) || m_isDVPCameraConnected)
     {
         return;
     }
 
-    // 临时存储设备信息
+    // 计算当前总设备数量
+    int currentTotalDeviceCount = 0;
+    
+    // 1. 枚举MvCamera设备
     MV_CC_DEVICE_INFO_LIST stDevList;
     memset(&stDevList, 0, sizeof(MV_CC_DEVICE_INFO_LIST));
     
-    // 枚举设备
     int nRet = CMvCamera::EnumDevices(MV_GIGE_DEVICE | MV_USB_DEVICE | MV_GENTL_CAMERALINK_DEVICE | MV_GENTL_CXP_DEVICE | MV_GENTL_XOF_DEVICE, &stDevList);
     
-    if (MV_OK != nRet)
+    if (MV_OK == nRet)
     {
-        // 枚举失败，不做处理，避免频繁日志
-        return;
+        currentTotalDeviceCount += stDevList.nDeviceNum;
     }
     
-    // 检查设备数量是否变化
-    if (stDevList.nDeviceNum != m_lastDeviceCount)
+    // 2. 枚举DVPCamera设备
+    dvpStatus dvpStatusResult;
+    dvpUint32 dvpDeviceCount = 0;
+    
+    dvpStatusResult = dvpRefresh(&dvpDeviceCount);
+    if (dvpStatusResult == DVP_STATUS_OK)
+    {
+        currentTotalDeviceCount += dvpDeviceCount;
+    }
+    
+    // 3. 检查总设备数量是否变化
+    if (currentTotalDeviceCount != m_lastDeviceCount)
     {
         // 设备数量变化，更新设备列表
-        AppendLog(QString("设备数量变化: %1 -> %2，自动更新设备列表").arg(m_lastDeviceCount).arg(stDevList.nDeviceNum), INFO);
+        AppendLog(QString("设备数量变化: %1 -> %2，自动更新设备列表").arg(m_lastDeviceCount).arg(currentTotalDeviceCount), INFO);
         
         // 调用现有的枚举设备按钮的槽函数
         on_bnEnum_clicked();
         
         // 更新上次设备数量
-        m_lastDeviceCount = stDevList.nDeviceNum;
+        m_lastDeviceCount = currentTotalDeviceCount;
     }
 }
 void MainWindow::YoloRealTimeDetectionThread()
