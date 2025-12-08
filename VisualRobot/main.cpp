@@ -10,17 +10,6 @@ int main(int argc, char *argv[])
 {
     qputenv("QT_QPA_PLATFORM", "xcb");
     QApplication a(argc, argv);
-    
-    // 启用OpenCV的OpenCL支持
-    cv::ocl::setUseOpenCL(true);
-    if (cv::ocl::useOpenCL())
-    {
-        qDebug() << "OpenCL support enabled successfully";
-    }
-    else
-    {
-        qDebug() << "OpenCL support not available";
-    }
     QTranslator translator;
     QLocale locale = QLocale::system();
 
