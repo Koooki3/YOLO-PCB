@@ -91,12 +91,9 @@ private:
     void ConnectSignals();
 
     YOLOProcessorORT* yoloProcessor_;   // YOLO处理器指针
-    QLineEdit* modelPathEdit_;          // 模型路径编辑框
-    QLineEdit* labelPathEdit_;          // 标签路径编辑框
     QLineEdit* confidenceEdit_;         // 置信度阈值编辑框
     QLabel* statusLabel_;               // 状态标签
     QLabel* imageLabel_;                // 图像显示标签
-    QPushButton* detectBtn_;            // 检测按钮
     QString currentImagePath_;          // 当前图像路径
     QStringList currentClassLabels_;     // 当前类别标签列表
 };
