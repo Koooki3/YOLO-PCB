@@ -33,7 +33,6 @@ SOURCES += \
     Undistort.cpp \
     DefectDetection.cpp \
     FeatureAlignment.cpp \
-    ImageAcquisition.cpp
 
 HEADERS += \
     DIP.h \
@@ -48,8 +47,6 @@ HEADERS += \
     Undistort.h \
     DefectDetection.h \
     FeatureAlignment.h \
-    ImageAcquisition.h \
-    DVPCamera.h
 
 FORMS += \
     mainwindow.ui
@@ -74,12 +71,6 @@ LIBS += -L/usr/local/lib/ -lopencv_calib3d -lopencv_core -lopencv_dnn -lopencv_f
 LIBS += -L/opt/MVS/lib/aarch64/ -lMvCameraControl -lMvCameraControlWrapper -lMVGigEVisionSDK -lMvUsb3vTL
 
 LIBS += -L/usr/lib/aarch64-linux-gnu -lmali -lOpenCL
-
-INCLUDEPATH += /home/orangepi/Desktop/DVP2-ARM64/
-
-DEPENDPATH += /home/orangepi/Desktop/DVP2-ARM64/
-
-LIBS += -L/home/orangepi/Desktop/DVP2-ARM64/ -ldvp
 
 # 编译优化选项
 unix {
@@ -109,10 +100,6 @@ unix {
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
-
-# 添加版本信息
-VERSION = 1.2.0
-DEFINES += APP_VERSION=\\"$$VERSION\\"
 
 # Bundle the UI stylesheet into the application resources so it is available at runtime
 RESOURCES += styles.qrc
