@@ -378,10 +378,29 @@ void MainWindow::ImageCallBackInner(unsigned char * pData, MV_FRAME_OUT_INFO_EX*
     stDisplayInfo.nHeight = pFrameInfo->nHeight;
     stDisplayInfo.enPixelType = pFrameInfo->enPixelType;
     
-    // 只有在MvCamera设备连接时才调用DisplayOneFrame
+    // MvCamera设备连接时调用DisplayOneFrame
     if (m_pcMyCamera)
     {
         m_pcMyCamera->DisplayOneFrame(&stDisplayInfo);
+    }
+    // DVP相机连接时直接绘制图像到widgetDisplay
+    else if (m_isDVPCameraConnected)
+    {
+        // 创建QImage对象，格式为BGR888
+        QImage image(pData, pFrameInfo->nWidth, pFrameInfo->nHeight, QImage::Format_BGR888);
+        
+        // 将QImage转换为QPixmap
+        QPixmap pixmap = QPixmap::fromImage(image);
+        
+        // 获取widgetDisplay的大小
+        QSize displaySize = ui->widgetDisplay->size();
+        
+        // 缩放图像以适应显示区域，保持宽高比
+        QPixmap scaledPixmap = pixmap.scaled(displaySize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        
+        // 在widgetDisplay上绘制图像
+        QPainter painter(ui->widgetDisplay);
+        painter.drawPixmap(0, 0, scaledPixmap);
     }
 }
 

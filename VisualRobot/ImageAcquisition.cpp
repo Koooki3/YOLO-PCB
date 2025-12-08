@@ -31,7 +31,7 @@ QImageAcquisition::QImageAcquisition(dvpHandle &handle, QObject *parent):
 
     // 初始化成员变量
     m_handle = handle;
-//    m_bAcquireImg = false;
+    m_bAcquireImg = true;  // 初始化为true，表示采集线程运行
     pBuffer = NULL;
 
     m_timer = new QTimer(this);
@@ -75,54 +75,34 @@ void QImageAcquisition::slotGrabFrames()
         //这里将采集图像、图像转换放置在工作线程中实现，解决主界面在高帧率显示时卡顿问题
         if(m_pFrame.format==FORMAT_BGR24)
         {
-            // 创建图像数据副本
-            // 因为pBuffer指向的内存会被相机驱动回收，所以必须创建副本
-            uchar* frameBuffer = new uchar[m_pFrame.uBytes];
-            memcpy(frameBuffer, pBuffer, m_pFrame.uBytes);
-            
             m_threadMutex.lock();
-
-            // 保存帧信息和图像数据
-            // 注意：这里保存的是副本，不是原始数据
-            m_pFrameCopy = m_pFrame;
             
-            // 创建显示图像
+            // 复制帧信息到安全副本，供UI线程访问
+            m_pFrameCopy = m_pFrame;
+
 #if (QT_VERSION >= QT_VERSION_CHECK(5,14,0))
             // Qt5.14版本新增QImage::Format_BGR888类型
-            m_ShowImage = QPixmap::fromImage(QImage(frameBuffer, m_pFrame.iWidth, m_pFrame.iHeight, m_pFrame.iWidth*3, QImage::Format_BGR888, [](void* ptr){ delete[] static_cast<uchar*>(ptr); }, frameBuffer));
+            m_ShowImage = QPixmap::fromImage(QImage((uchar*)pBuffer,m_pFrame.iWidth, m_pFrame.iHeight,m_pFrame.iWidth*3, QImage::Format_BGR888,0,0)); // 5.13
 #else
             //其他版本先把BGR数据转成RGB数据，再用RGB数据转QImage
-            BGR2RGB(frameBuffer, m_pFrame.iWidth, m_pFrame.iHeight);
-            m_ShowImage = QPixmap::fromImage(QImage(frameBuffer, m_pFrame.iWidth, m_pFrame.iHeight, m_pFrame.iWidth*3, QImage::Format_RGB888, [](void* ptr){ delete[] static_cast<uchar*>(ptr); }, frameBuffer));
+            BGR2RGB((uchar*)pBuffer,m_pFrame.iWidth, m_pFrame.iHeight);
+            m_ShowImage = QPixmap::fromImage(QImage((uchar*)pBuffer,m_pFrame.iWidth, m_pFrame.iHeight,m_pFrame.iWidth*3, QImage::Format_RGB888,0,0)); //5.9
 #endif
             m_threadMutex.unlock();
-            
-            // 发送信号，通知主界面更新图像
             emit signalDisplay();
         }
     }
     else
     {
-        // 使用msleep代替usleep，减少CPU占用
-        QThread::msleep(5);
+        m_pThread->usleep(50);
     }
 }
 
 void QImageAcquisition::StopThread()
 {
-    // 停止定时器
-    if (m_timer && m_timer->isActive())
-    {
-        m_timer->stop();
-        delete m_timer;
-        m_timer = nullptr;
-    }
-    
-    // 等待线程结束
     if(m_pThread->isRunning())
     {
         m_pThread->exit();
-        m_pThread->wait(1000); // 等待1秒
     }
 }
 
