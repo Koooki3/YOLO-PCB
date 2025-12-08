@@ -375,7 +375,12 @@ void MainWindow::ImageCallBackInner(unsigned char * pData, MV_FRAME_OUT_INFO_EX*
     stDisplayInfo.nWidth = pFrameInfo->nWidth;
     stDisplayInfo.nHeight = pFrameInfo->nHeight;
     stDisplayInfo.enPixelType = pFrameInfo->enPixelType;
-    m_pcMyCamera->DisplayOneFrame(&stDisplayInfo);
+    
+    // 只有在MvCamera设备连接时才调用DisplayOneFrame
+    if (m_pcMyCamera)
+    {
+        m_pcMyCamera->DisplayOneFrame(&stDisplayInfo);
+    }
 }
 
 void MainWindow::on_bnEnum_clicked()
@@ -547,6 +552,13 @@ void MainWindow::on_bnEnum_clicked()
     ui->ComboDevices->setCurrentIndex(0);
 }
 
+// 辅助函数：判断选中的设备是否为DVPCamera设备
+bool MainWindow::IsDVPCameraSelected()
+{
+    QString deviceName = ui->ComboDevices->currentText();
+    return deviceName.contains("DVP:", Qt::CaseInsensitive);
+}
+
 void MainWindow::on_bnOpen_clicked()
 {
     // 变量定义
@@ -555,64 +567,148 @@ void MainWindow::on_bnOpen_clicked()
     unsigned int nPacketSize;  // 数据包大小
 
     nIndex = ui->ComboDevices->currentIndex();
-    if ((nIndex < 0) | (nIndex >= MV_MAX_DEVICE_NUM))
+    if ((nIndex < 0))
     {
         ShowErrorMsg("Please select device", 0);
         AppendLog("请选择设备", WARNNING);
         return;
     }
 
-    // ch:由设备信息创建设备实例 | en:Device instance created by device information
-    if (NULL == m_stDevList.pDeviceInfo[nIndex])
+    // 判断设备类型
+    if (IsDVPCameraSelected())
     {
-        ShowErrorMsg("Device does not exist", 0);
-        AppendLog("设备不存在", ERROR);
-        return;
-    }
-
-    if (m_pcMyCamera == NULL)
-    {
-        m_pcMyCamera = new (nothrow) CMvCamera;
-        if (NULL == m_pcMyCamera)
+        // 打开DVPCamera设备
+        QString deviceName = ui->ComboDevices->currentText();
+        
+        // 提取设备的FriendlyName
+        // 设备名称格式：[索引]DVP: 型号 (厂商) (SN: 序列号)
+        // 我们需要从设备列表中重新获取FriendlyName
+        dvpStatus dvpStatusResult;
+        dvpUint32 dvpDeviceCount = 0;
+        dvpCameraInfo dvpCameraInfos[16];
+        
+        // 刷新设备列表
+        dvpStatusResult = dvpRefresh(&dvpDeviceCount);
+        if (dvpStatusResult != DVP_STATUS_OK)
         {
-            ShowErrorMsg("new CMvCamera Instance failed", MV_E_RESOURCE);
-            AppendLog("新建相机实例失败", ERROR);
+            ShowErrorMsg("Refresh DVP devices fail", 0);
+            AppendLog("刷新DVP设备失败", ERROR);
             return;
         }
-    }
-
-    nRet = m_pcMyCamera->Open(m_stDevList.pDeviceInfo[nIndex]);
-    if (MV_OK != nRet)
-    {
-        delete m_pcMyCamera;
-        m_pcMyCamera = NULL;
-        ShowErrorMsg("Open Fail", nRet);
-        AppendLog("相机打开失败", ERROR);
-        return;
-    }
-
-    AppendLog("设备打开成功", INFO);
-
-    // ch:探测网络最佳包大小(只对GigE相机有效) | en:Detection network optimal package size(It only works for the GigE camera)
-    if (m_stDevList.pDeviceInfo[nIndex]->nTLayerType == MV_GIGE_DEVICE)
-    {
-        nRet = m_pcMyCamera->GetOptimalPacketSize(&nPacketSize);
-        if (nRet == MV_OK)
+        
+        // 查找对应的设备
+        bool found = false;
+        QString friendlyName;
+        
+        for (unsigned int i = 0; i < dvpDeviceCount; i++)
         {
-            nRet = m_pcMyCamera->SetIntValue("GevSCPSPacketSize",nPacketSize);
-            if(nRet != MV_OK)
+            dvpStatusResult = dvpEnum(i, &dvpCameraInfos[i]);
+            if (dvpStatusResult == DVP_STATUS_OK)
             {
-                ShowErrorMsg("Warning: Set Packet Size fail!", nRet);
+                // 构建设备名称字符串，与枚举时的格式一致
+                char strUserName[256] = {0};
+                snprintf(strUserName, 256, "[%d]DVP:   %s (%s) (SN: %s)", i, 
+                         dvpCameraInfos[i].Model, 
+                         dvpCameraInfos[i].Vendor, 
+                         dvpCameraInfos[i].SerialNumber);
+                
+                if (deviceName == QString::fromLocal8Bit(strUserName))
+                {
+                    friendlyName = QString(dvpCameraInfos[i].FriendlyName);
+                    found = true;
+                    break;
+                }
             }
         }
-        else
+        
+        if (!found)
         {
-            ShowErrorMsg("Warning: Get Packet Size fail!", nRet);
+            ShowErrorMsg("DVP device not found", 0);
+            AppendLog("DVP设备未找到", ERROR);
+            return;
         }
+        
+        // 打开DVPCamera设备
+        dvpStatusResult = dvpOpenByName(friendlyName.toLatin1().data(), OPEN_NORMAL, &m_dvpHandle);
+        if (dvpStatusResult != DVP_STATUS_OK)
+        {
+            ShowErrorMsg("Open DVP device fail", 0);
+            AppendLog("打开DVP设备失败", ERROR);
+            return;
+        }
+        
+        // 设置DVPCamera连接状态
+        m_isDVPCameraConnected = true;
+        AppendLog(QString("打开DVP设备成功: %1").arg(friendlyName), INFO);
+        
+        // 更新UI状态
+        ui->bnOpen->setEnabled(false);
+        ui->bnClose->setEnabled(true);
+        ui->bnStart->setEnabled(true);
+        ui->bnStop->setEnabled(false);
+        
+        return;
     }
+    else
+    {
+        // 打开MvCamera设备
+        if (nIndex >= MV_MAX_DEVICE_NUM || NULL == m_stDevList.pDeviceInfo[nIndex])
+        {
+            ShowErrorMsg("Device does not exist", 0);
+            AppendLog("设备不存在", ERROR);
+            return;
+        }
 
-    m_pcMyCamera->SetEnumValue("AcquisitionMode", MV_ACQ_MODE_CONTINUOUS);
-    m_pcMyCamera->SetEnumValue("TriggerMode", MV_TRIGGER_MODE_OFF);
+        if (m_pcMyCamera == NULL)
+        {
+            m_pcMyCamera = new (nothrow) CMvCamera;
+            if (NULL == m_pcMyCamera)
+            {
+                ShowErrorMsg("new CMvCamera Instance failed", MV_E_RESOURCE);
+                AppendLog("新建相机实例失败", ERROR);
+                return;
+            }
+        }
+
+        nRet = m_pcMyCamera->Open(m_stDevList.pDeviceInfo[nIndex]);
+        if (MV_OK != nRet)
+        {
+            delete m_pcMyCamera;
+            m_pcMyCamera = NULL;
+            ShowErrorMsg("Open Fail", nRet);
+            AppendLog("相机打开失败", ERROR);
+            return;
+        }
+
+        AppendLog("设备打开成功", INFO);
+
+        // ch:探测网络最佳包大小(只对GigE相机有效) | en:Detection network optimal package size(It only works for the GigE camera)
+        if (m_stDevList.pDeviceInfo[nIndex]->nTLayerType == MV_GIGE_DEVICE)
+        {
+            nRet = m_pcMyCamera->GetOptimalPacketSize(&nPacketSize);
+            if (nRet == MV_OK)
+            {
+                nRet = m_pcMyCamera->SetIntValue("GevSCPSPacketSize",nPacketSize);
+                if(nRet != MV_OK)
+                {
+                    ShowErrorMsg("Warning: Set Packet Size fail!", nRet);
+                }
+            }
+            else
+            {
+                ShowErrorMsg("Warning: Get Packet Size fail!", nRet);
+            }
+        }
+
+        m_pcMyCamera->SetEnumValue("AcquisitionMode", MV_ACQ_MODE_CONTINUOUS);
+        m_pcMyCamera->SetEnumValue("TriggerMode", MV_TRIGGER_MODE_OFF);
+        
+        // 更新UI状态
+        ui->bnOpen->setEnabled(false);
+        ui->bnClose->setEnabled(true);
+        ui->bnStart->setEnabled(true);
+        ui->bnStop->setEnabled(false);
+    }
 
     on_bnGetParam_clicked(); // ch:获取参数 | en:Get Parameter
 
@@ -635,12 +731,33 @@ void MainWindow::on_bnOpen_clicked()
 
 void MainWindow::on_bnClose_clicked()
 {
-    if (m_pcMyCamera)
+    if (m_isDVPCameraConnected)
     {
+        // 关闭DVPCamera设备
+        dvpStatus dvpStatusResult;
+        
+        // 停止采集（如果正在采集）
+        dvpStatusResult = dvpStop(m_dvpHandle);
+        
+        // 关闭相机
+        dvpStatusResult = dvpClose(m_dvpHandle);
+        
+        // 重置连接状态
+        m_dvpHandle = 0;
+        m_isDVPCameraConnected = false;
+        
+        AppendLog("DVP设备关闭成功", INFO);
+    }
+    else if (m_pcMyCamera)
+    {
+        // 关闭MvCamera设备
         m_pcMyCamera->Close();
         delete m_pcMyCamera;
         m_pcMyCamera = NULL;
+        
+        AppendLog("MvCamera设备关闭成功", INFO);
     }
+    
     m_bGrabbing = false;
 
     ui->bnOpen->setEnabled(true);
@@ -657,8 +774,6 @@ void MainWindow::on_bnClose_clicked()
     ui->tbFrameRate->setEnabled(false);
     ui->bnSetParam->setEnabled(false);
     ui->bnGetParam->setEnabled(false);
-
-    AppendLog("设备关闭成功", INFO);
 }
 
 void MainWindow::on_bnContinuesMode_clicked()
@@ -699,23 +814,106 @@ void MainWindow::on_bnStart_clicked()
     // 变量定义
     int nRet;  // 返回值
 
-    m_pcMyCamera->RegisterImageCallBack(ImageCallBack, this);
-
-    nRet = m_pcMyCamera->StartGrabbing();
-    if (MV_OK != nRet)
+    if (m_isDVPCameraConnected)
     {
-        ShowErrorMsg("Start grabbing fail", nRet);
-        AppendLog("开始抓图失败", ERROR);
-        return;
+        // 开始DVPCamera设备采集
+        dvpStatus dvpStatusResult;
+        
+        // 设置目标格式为BGR24，与MvCamera保持一致
+        dvpStatusResult = dvpSetTargetFormat(m_dvpHandle, S_BGR24);
+        if (dvpStatusResult != DVP_STATUS_OK)
+        {
+            ShowErrorMsg("Set DVP target format fail", 0);
+            AppendLog("设置DVP目标格式失败", ERROR);
+            return;
+        }
+        
+        // 开始采集
+        dvpStatusResult = dvpStart(m_dvpHandle);
+        if (dvpStatusResult != DVP_STATUS_OK)
+        {
+            ShowErrorMsg("Start DVP grabbing fail", 0);
+            AppendLog("开始DVP抓图失败", ERROR);
+            return;
+        }
+        
+        AppendLog("开始DVP抓图成功", INFO);
+        m_bGrabbing = true;
+        
+        // 启动定时器，定期获取图像
+        // 这里需要创建一个定时器来定期调用dvpGetFrame获取图像
+        // 由于现有代码使用回调函数处理图像，我需要创建一个定时器来模拟类似的行为
+        QTimer *dvpCaptureTimer = new QTimer(this);
+        connect(dvpCaptureTimer, &QTimer::timeout, [=]() {
+            if (!m_bGrabbing || !m_isDVPCameraConnected)
+            {
+                dvpCaptureTimer->stop();
+                delete dvpCaptureTimer;
+                return;
+            }
+            
+            // 获取图像帧
+            dvpFrame frame;
+            void* pBuffer = nullptr;
+            dvpStatus dvpStatusResult = dvpGetFrame(m_dvpHandle, &frame, &pBuffer, 3000);
+            
+            if (dvpStatusResult == DVP_STATUS_OK)
+            {
+                // 将DVP图像转换为与MvCamera相同的格式
+                // MvCamera使用的是MV_FRAME_OUT_INFO_EX和unsigned char数组
+                
+                // 锁定帧数据
+                m_frameMtx.lock();
+                
+                // 调整缓存大小
+                m_lastFrame.resize(frame.uBytes);
+                
+                // 复制图像数据
+                memcpy(m_lastFrame.data(), pBuffer, frame.uBytes);
+                
+                // 设置帧信息
+                m_lastInfo.enPixelType = PixelType_Gvsp_BGR8_Packed;
+                m_lastInfo.nWidth = frame.iWidth;
+                m_lastInfo.nHeight = frame.iHeight;
+                m_lastInfo.nFrameNum = frame.uFrameID;
+                m_lastInfo.nFrameLen = frame.uBytes;
+                m_lastInfo.nTimestamp = frame.uTimestamp;
+                m_lastInfo.nTriggerType = 0;
+                m_lastInfo.nDevTimeStamp = frame.uTimestamp;
+                
+                m_hasFrame = true;
+                
+                m_frameMtx.unlock();
+                
+                // 调用现有的图像处理函数
+                ImageCallBack(m_lastFrame.data(), &m_lastInfo, this);
+            }
+        });
+        
+        // 启动定时器，每30ms获取一次图像（约33fps）
+        dvpCaptureTimer->start(30);
     }
-    AppendLog("开始抓图成功", INFO);
-    m_bGrabbing = true;
+    else if (m_pcMyCamera)
+    {
+        // 开始MvCamera设备采集
+        m_pcMyCamera->RegisterImageCallBack(ImageCallBack, this);
+
+        nRet = m_pcMyCamera->StartGrabbing();
+        if (MV_OK != nRet)
+        {
+            ShowErrorMsg("Start grabbing fail", nRet);
+            AppendLog("开始MvCamera抓图失败", ERROR);
+            return;
+        }
+        AppendLog("开始MvCamera抓图成功", INFO);
+        m_bGrabbing = true;
+    }
 
     ui->bnStart->setEnabled(false);
     ui->bnStop->setEnabled(true);
     ui->pushButton->setEnabled(true);
     ui->GetLength->setEnabled(false);
-    if (true == ui->bnTriggerMode->isChecked() && ui->cbSoftTrigger->isChecked())
+    if (true == ui->bnTriggerMode->isChecked() && ui->cbSoftTrigger->isChecked() && !m_isDVPCameraConnected)
     {
         ui->bnTriggerExec->setEnabled(true);
     }
@@ -726,14 +924,35 @@ void MainWindow::on_bnStop_clicked()
     // 变量定义
     int nRet;  // 返回值
 
-    nRet = m_pcMyCamera->StopGrabbing();
-    if (MV_OK != nRet)
+    if (m_isDVPCameraConnected)
     {
-        ShowErrorMsg("Stop grabbing fail", nRet);
-        AppendLog("停止抓图失败", ERROR);
-        return;
+        // 停止DVPCamera设备采集
+        dvpStatus dvpStatusResult;
+        
+        // 停止采集
+        dvpStatusResult = dvpStop(m_dvpHandle);
+        if (dvpStatusResult != DVP_STATUS_OK)
+        {
+            ShowErrorMsg("Stop DVP grabbing fail", 0);
+            AppendLog("停止DVP抓图失败", ERROR);
+            return;
+        }
+        
+        AppendLog("停止DVP抓图成功", INFO);
     }
-    AppendLog("停止抓图成功", INFO);
+    else if (m_pcMyCamera)
+    {
+        // 停止MvCamera设备采集
+        nRet = m_pcMyCamera->StopGrabbing();
+        if (MV_OK != nRet)
+        {
+            ShowErrorMsg("Stop grabbing fail", nRet);
+            AppendLog("停止MvCamera抓图失败", ERROR);
+            return;
+        }
+        AppendLog("停止MvCamera抓图成功", INFO);
+    }
+    
     m_bGrabbing = false;
 
     ui->bnStart->setEnabled(true);
