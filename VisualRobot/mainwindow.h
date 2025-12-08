@@ -233,6 +233,8 @@ private:
     void DrawYoloResults(Mat& frame, const vector<DetectionResult>& results); // 绘制YOLO检测结果
     void UpdateYoloDisplay();                   // 更新YOLO显示
     
+    // DVP相机适配
+    bool IsDVPCameraSelected();
 };
 
 #endif // MAINWINDOW_H
