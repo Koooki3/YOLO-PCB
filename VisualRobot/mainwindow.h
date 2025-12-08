@@ -21,6 +21,7 @@
 #include <QTime>
 #include "YOLOProcessorORT.h"
 #include <QWaitCondition>
+#include "DVPCamera.h"
 
 using namespace std;
 using namespace cv;
