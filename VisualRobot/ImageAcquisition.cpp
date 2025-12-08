@@ -1,4 +1,4 @@
-﻿#include "ImageAcquisition.h"
+#include "ImageAcquisition.h"
 #include "DVPCamera.h"
 
 //RGB转BGR和BGR转RGB是一样的方法
@@ -91,7 +91,8 @@ void QImageAcquisition::slotGrabFrames()
     }
     else
     {
-        m_pThread->usleep(50);
+        // 使用msleep代替usleep，减少CPU占用
+        m_pThread->msleep(5);
     }
 }
 
