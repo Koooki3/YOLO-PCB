@@ -166,10 +166,6 @@ private:
     // 延时统计
     YOLOTimingStats timingStats_; // 最新的延时统计
     bool enableDebug_;  // 是否启用详细调试输出
-    
-    // 调试输出频率控制
-    std::chrono::high_resolution_clock::time_point lastDebugOutputTime_; // 上次输出调试信息的时间
-    const double DEBUG_OUTPUT_INTERVAL_SECONDS = 30.0; // 调试输出间隔（秒）
 
     /**
      * @brief 将ONNX Runtime输出转换为OpenCV Mat格式
