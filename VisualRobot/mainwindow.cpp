@@ -386,17 +386,16 @@ void MainWindow::on_bnEnum_clicked()
     QTextCodec::setCodecForLocale(QTextCodec::codecForName("GBK"));
     ui->ComboDevices->setStyle(QStyleFactory::create("Windows"));
     
-    // ch:枚举子网内所有设备 | en:Enumerate all devices within subnet
+    // 记录总设备数量
+    int totalDeviceCount = 0;
+    
+    // ch:枚举子网内所有MvCamera设备 | en:Enumerate all MvCamera devices within subnet
     memset(&m_stDevList, 0, sizeof(MV_CC_DEVICE_INFO_LIST));
     nRet = CMvCamera::EnumDevices(MV_GIGE_DEVICE | MV_USB_DEVICE | MV_GENTL_CAMERALINK_DEVICE | MV_GENTL_CXP_DEVICE | MV_GENTL_XOF_DEVICE, &m_stDevList);
     
-    if (MV_OK != nRet)
+    if (MV_OK == nRet)
     {
-        AppendLog("枚举设备错误", ERROR);
-        return;
-    }
-    
-    AppendLog(QString("枚举到 %1 个设备").arg(m_stDevList.nDeviceNum), INFO);
+        AppendLog(QString("枚举到 %1 个MvCamera设备").arg(m_stDevList.nDeviceNum), INFO);
     
     // ch:将值加入到信息列表框中并显示出来 | en:Add value to the information list box and display
     for (i = 0; i < m_stDevList.nDeviceNum; i++)
@@ -416,12 +415,12 @@ void MainWindow::on_bnEnum_clicked()
 
             if (strcmp("", (char*)pDeviceInfo->SpecialInfo.stGigEInfo.chUserDefinedName) != 0)
             {
-                snprintf(strUserName, 256, "[%d]GigE:   %s (%s) (%d.%d.%d.%d)", i, pDeviceInfo->SpecialInfo.stGigEInfo.chUserDefinedName,
+                snprintf(strUserName, 256, "[%d]GigE:   %s (%s) (%d.%d.%d.%d)", totalDeviceCount + i, pDeviceInfo->SpecialInfo.stGigEInfo.chUserDefinedName,
                          pDeviceInfo->SpecialInfo.stGigEInfo.chSerialNumber, nIp1, nIp2, nIp3, nIp4);
             }
             else
             {
-                snprintf(strUserName, 256, "[%d]GigE:   %s (%s) (%d.%d.%d.%d)", i, pDeviceInfo->SpecialInfo.stGigEInfo.chModelName,
+                snprintf(strUserName, 256, "[%d]GigE:   %s (%s) (%d.%d.%d.%d)", totalDeviceCount + i, pDeviceInfo->SpecialInfo.stGigEInfo.chModelName,
                          pDeviceInfo->SpecialInfo.stGigEInfo.chSerialNumber, nIp1, nIp2, nIp3, nIp4);
             }
         }
@@ -429,12 +428,12 @@ void MainWindow::on_bnEnum_clicked()
         {
             if (strcmp("", (char*)pDeviceInfo->SpecialInfo.stUsb3VInfo.chUserDefinedName) != 0)
             {
-                snprintf(strUserName, 256, "[%d]UsbV3:  %s (%s)", i, pDeviceInfo->SpecialInfo.stUsb3VInfo.chUserDefinedName,
+                snprintf(strUserName, 256, "[%d]UsbV3:  %s (%s)", totalDeviceCount + i, pDeviceInfo->SpecialInfo.stUsb3VInfo.chUserDefinedName,
                          pDeviceInfo->SpecialInfo.stUsb3VInfo.chSerialNumber);
             }
             else
             {
-                snprintf(strUserName, 256, "[%d]UsbV3:  %s (%s)", i, pDeviceInfo->SpecialInfo.stUsb3VInfo.chModelName,
+                snprintf(strUserName, 256, "[%d]UsbV3:  %s (%s)", totalDeviceCount + i, pDeviceInfo->SpecialInfo.stUsb3VInfo.chModelName,
                          pDeviceInfo->SpecialInfo.stUsb3VInfo.chSerialNumber);
             }
         }
@@ -442,12 +441,12 @@ void MainWindow::on_bnEnum_clicked()
         {
             if (strcmp("", (char*)pDeviceInfo->SpecialInfo.stCMLInfo.chUserDefinedName) != 0)
             {
-                snprintf(strUserName, 256, "[%d]CML:  %s (%s)", i, pDeviceInfo->SpecialInfo.stCMLInfo.chUserDefinedName,
+                snprintf(strUserName, 256, "[%d]CML:  %s (%s)", totalDeviceCount + i, pDeviceInfo->SpecialInfo.stCMLInfo.chUserDefinedName,
                          pDeviceInfo->SpecialInfo.stCMLInfo.chSerialNumber);
             }
             else
             {
-                snprintf(strUserName, 256, "[%d]CML:  %s (%s)", i, pDeviceInfo->SpecialInfo.stCMLInfo.chModelName,
+                snprintf(strUserName, 256, "[%d]CML:  %s (%s)", totalDeviceCount + i, pDeviceInfo->SpecialInfo.stCMLInfo.chModelName,
                          pDeviceInfo->SpecialInfo.stCMLInfo.chSerialNumber);
             }
         }
@@ -455,12 +454,12 @@ void MainWindow::on_bnEnum_clicked()
         {
             if (strcmp("", (char*)pDeviceInfo->SpecialInfo.stCXPInfo.chUserDefinedName) != 0)
             {
-                snprintf(strUserName, 256, "[%d]CXP:  %s (%s)", i, pDeviceInfo->SpecialInfo.stCXPInfo.chUserDefinedName,
+                snprintf(strUserName, 256, "[%d]CXP:  %s (%s)", totalDeviceCount + i, pDeviceInfo->SpecialInfo.stCXPInfo.chUserDefinedName,
                          pDeviceInfo->SpecialInfo.stCXPInfo.chSerialNumber);
             }
             else
             {
-                snprintf(strUserName, 256, "[%d]CXP:  %s (%s)", i, pDeviceInfo->SpecialInfo.stCXPInfo.chModelName,
+                snprintf(strUserName, 256, "[%d]CXP:  %s (%s)", totalDeviceCount + i, pDeviceInfo->SpecialInfo.stCXPInfo.chModelName,
                          pDeviceInfo->SpecialInfo.stCXPInfo.chSerialNumber);
             }
         }
@@ -468,12 +467,12 @@ void MainWindow::on_bnEnum_clicked()
         {
             if (strcmp("", (char*)pDeviceInfo->SpecialInfo.stXoFInfo.chUserDefinedName) != 0)
             {
-                snprintf(strUserName, 256, "[%d]XOF:  %s (%s)", i, pDeviceInfo->SpecialInfo.stXoFInfo.chUserDefinedName,
+                snprintf(strUserName, 256, "[%d]XOF:  %s (%s)", totalDeviceCount + i, pDeviceInfo->SpecialInfo.stXoFInfo.chUserDefinedName,
                          pDeviceInfo->SpecialInfo.stXoFInfo.chSerialNumber);
             }
             else
             {
-                snprintf(strUserName, 256, "[%d]XOF:  %s (%s)", i, pDeviceInfo->SpecialInfo.stXoFInfo.chModelName,
+                snprintf(strUserName, 256, "[%d]XOF:  %s (%s)", totalDeviceCount + i, pDeviceInfo->SpecialInfo.stXoFInfo.chModelName,
                          pDeviceInfo->SpecialInfo.stXoFInfo.chSerialNumber);
             }
         }
@@ -484,8 +483,58 @@ void MainWindow::on_bnEnum_clicked()
         }
         ui->ComboDevices->addItem(QString::fromLocal8Bit(strUserName));
     }
+    
+    totalDeviceCount += m_stDevList.nDeviceNum;
+    }
+    else
+    {
+        AppendLog("枚举MvCamera设备错误", ERROR);
+    }
+    
+    // ch:枚举DVPCamera设备 | en:Enumerate DVPCamera devices
+    dvpStatus dvpStatusResult;
+    dvpUint32 dvpDeviceCount = 0;
+    dvpCameraInfo dvpCameraInfos[16];
+    
+    // 刷新设备列表
+    dvpStatusResult = dvpRefresh(&dvpDeviceCount);
+    if (dvpStatusResult == DVP_STATUS_OK)
+    {
+        AppendLog(QString("枚举到 %1 个DVPCamera设备").arg(dvpDeviceCount), INFO);
+        
+        // 限制最大枚举数量
+        if (dvpDeviceCount > 16)
+        {
+            dvpDeviceCount = 16;
+        }
+        
+        // 枚举每个DVPCamera设备
+        for (i = 0; i < dvpDeviceCount; i++)
+        {
+            dvpStatusResult = dvpEnum(i, &dvpCameraInfos[i]);
+            if (dvpStatusResult == DVP_STATUS_OK)
+            {
+                // 构建DVPCamera设备名称字符串
+                snprintf(strUserName, 256, "[%d]DVP:   %s (%s) (SN: %s)", totalDeviceCount + i, 
+                         dvpCameraInfos[i].Model, 
+                         dvpCameraInfos[i].Vendor, 
+                         dvpCameraInfos[i].SerialNumber);
+                
+                // 添加到下拉列表
+                ui->ComboDevices->addItem(QString::fromLocal8Bit(strUserName));
+            }
+        }
+        
+        totalDeviceCount += dvpDeviceCount;
+    }
+    else
+    {
+        AppendLog("枚举DVPCamera设备错误", ERROR);
+    }
+    
+    AppendLog(QString("共枚举到 %1 个设备").arg(totalDeviceCount), INFO);
 
-    if (0 == m_stDevList.nDeviceNum)
+    if (0 == totalDeviceCount)
     {
         ShowErrorMsg("No device", 0);
         AppendLog("没有设备", WARNNING);

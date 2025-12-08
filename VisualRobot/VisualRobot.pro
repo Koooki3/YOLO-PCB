@@ -33,7 +33,6 @@ SOURCES += \
     Undistort.cpp \
     DefectDetection.cpp \
     FeatureAlignment.cpp \
-    BasicFunction.cpp \
     ImageAcquisition.cpp
 
 HEADERS += \
@@ -49,7 +48,6 @@ HEADERS += \
     Undistort.h \
     DefectDetection.h \
     FeatureAlignment.h \
-    BasicFunction.h \
     ImageAcquisition.h \
     DVPCamera.h
 
