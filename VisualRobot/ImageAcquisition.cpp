@@ -77,13 +77,20 @@ void QImageAcquisition::slotGrabFrames()
         {
             m_threadMutex.lock();
 
+            // 保存原始图像数据，用于后续处理
+            // 注意：不要修改原始数据，因为它会被相机驱动回收
+            // 我们只在signalDisplay信号处理中读取和复制数据
+
 #if (QT_VERSION >= QT_VERSION_CHECK(5,14,0))
             // Qt5.14版本新增QImage::Format_BGR888类型
             m_ShowImage = QPixmap::fromImage(QImage((uchar*)pBuffer,m_pFrame.iWidth, m_pFrame.iHeight,m_pFrame.iWidth*3, QImage::Format_BGR888,0,0)); // 5.13
 #else
             //其他版本先把BGR数据转成RGB数据，再用RGB数据转QImage
-            BGR2RGB((uchar*)pBuffer,m_pFrame.iWidth, m_pFrame.iHeight);
-            m_ShowImage = QPixmap::fromImage(QImage((uchar*)pBuffer,m_pFrame.iWidth, m_pFrame.iHeight,m_pFrame.iWidth*3, QImage::Format_RGB888,0,0)); //5.9
+            // 注意：这里我们创建一个副本，避免修改原始数据
+            uchar* tempBuffer = new uchar[m_pFrame.iWidth * m_pFrame.iHeight * 3];
+            memcpy(tempBuffer, pBuffer, m_pFrame.iWidth * m_pFrame.iHeight * 3);
+            BGR2RGB(tempBuffer, m_pFrame.iWidth, m_pFrame.iHeight);
+            m_ShowImage = QPixmap::fromImage(QImage(tempBuffer, m_pFrame.iWidth, m_pFrame.iHeight, m_pFrame.iWidth*3, QImage::Format_RGB888, [](void* ptr){ delete[] static_cast<uchar*>(ptr); }, tempBuffer));
 #endif
             m_threadMutex.unlock();
             emit signalDisplay();
@@ -92,15 +99,25 @@ void QImageAcquisition::slotGrabFrames()
     else
     {
         // 使用msleep代替usleep，减少CPU占用
-        m_pThread->msleep(5);
+        QThread::msleep(5);
     }
 }
 
 void QImageAcquisition::StopThread()
 {
+    // 停止定时器
+    if (m_timer && m_timer->isActive())
+    {
+        m_timer->stop();
+        delete m_timer;
+        m_timer = nullptr;
+    }
+    
+    // 等待线程结束
     if(m_pThread->isRunning())
     {
         m_pThread->exit();
+        m_pThread->wait(1000); // 等待1秒
     }
 }
 
