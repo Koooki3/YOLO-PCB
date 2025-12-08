@@ -878,15 +878,15 @@ void MainWindow::on_bnStart_clicked()
             // 获取DVP图像
             if (m_pDvpAcquisition->m_threadMutex.tryLock())
             {
-                if (!m_pDvpAcquisition->m_ShowImage.isNull() && m_pDvpAcquisition->pBuffer)
+                if (!m_pDvpAcquisition->m_ShowImage.isNull())
                 {
-                    // 将DVP图像转换为与MvCamera相同的格式
+                    // 直接使用已经处理好的图像
                     // 锁定帧数据
                     m_frameMtx.lock();
                     
-                    // 获取DVP图像的原始数据
-                    dvpFrame frame = m_pDvpAcquisition->m_pFrame;
-                    void* pBuffer = m_pDvpAcquisition->pBuffer;
+                    // 获取DVP图像的帧信息副本
+                    // 注意：使用m_pFrameCopy而不是m_pFrame，因为m_pFrame指向的是临时数据
+                    dvpFrame frame = m_pDvpAcquisition->m_pFrameCopy;
                     
                     // 确保图像格式是BGR24
                     if (frame.format != FORMAT_BGR24)
@@ -900,7 +900,25 @@ void MainWindow::on_bnStart_clicked()
                     m_lastFrame.resize(frame.uBytes);
                     
                     // 复制图像数据
-                    memcpy(m_lastFrame.data(), pBuffer, frame.uBytes);
+                    // 注意：这里使用的是已经处理好的图像数据，而不是原始数据
+                    // 因为原始数据可能已经被相机驱动回收
+                    QImage img = m_pDvpAcquisition->m_ShowImage.toImage();
+                    if (img.format() == QImage::Format_RGB888)
+                    {
+                        // RGB888 -> BGR888
+                        for (int y = 0; y < img.height(); y++)
+                        {
+                            uchar* line = img.scanLine(y);
+                            for (int x = 0; x < img.width(); x++)
+                            {
+                                uchar r = line[x * 3];
+                                uchar b = line[x * 3 + 2];
+                                line[x * 3] = b;
+                                line[x * 3 + 2] = r;
+                            }
+                        }
+                    }
+                    memcpy(m_lastFrame.data(), img.bits(), frame.uBytes);
                     
                     // 设置帧信息
                     m_lastInfo.enPixelType = PixelType_Gvsp_BGR8_Packed;
@@ -917,10 +935,8 @@ void MainWindow::on_bnStart_clicked()
                     m_frameMtx.unlock();
                     
                     // 调用现有的图像处理函数
-                    // 使用QTimer::singleShot确保在主线程中执行，避免阻塞
-                    QTimer::singleShot(0, this, [=]() {
-                        ImageCallBack(m_lastFrame.data(), &m_lastInfo, this);
-                    });
+                    // 直接调用，因为信号已经在主线程中处理
+                    ImageCallBack(m_lastFrame.data(), &m_lastInfo, this);
                 }
                 
                 m_pDvpAcquisition->m_threadMutex.unlock();
@@ -962,6 +978,14 @@ void MainWindow::on_bnStop_clicked()
 
     if (m_isDVPCameraConnected)
     {
+        // 停止采集
+        dvpStatus dvpStatusResult = dvpStop(m_dvpHandle);
+        if (dvpStatusResult != DVP_STATUS_OK)
+        {
+            ShowErrorMsg("Stop DVP grabbing fail", 0);
+            AppendLog("停止DVP抓图失败", ERROR);
+        }
+        
         // 清理DVP图像采集对象
         if (m_pDvpAcquisition)
         {
@@ -974,14 +998,6 @@ void MainWindow::on_bnStop_clicked()
             // 删除对象
             delete m_pDvpAcquisition;
             m_pDvpAcquisition = nullptr;
-        }
-        
-        // 停止采集
-        dvpStatus dvpStatusResult = dvpStop(m_dvpHandle);
-        if (dvpStatusResult != DVP_STATUS_OK)
-        {
-            ShowErrorMsg("Stop DVP grabbing fail", 0);
-            AppendLog("停止DVP抓图失败", ERROR);
         }
         
         AppendLog("停止DVP抓图成功", INFO);

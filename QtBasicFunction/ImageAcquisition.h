@@ -33,7 +33,6 @@ public:
     bool         ThreadSoftTriggerFlag;      // 软触发标志
 
     dvpFrame     m_pFrame;                   // 采集到的图像的结构体指针
-    dvpFrame     m_pFrameCopy;               // 采集到的图像的结构体副本，用于信号处理
     void *       pBuffer;                    // 采集到的图像的内存首地址
 
 
