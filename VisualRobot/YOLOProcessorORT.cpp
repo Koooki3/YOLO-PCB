@@ -56,6 +56,9 @@ YOLOProcessorORT::YOLOProcessorORT(QObject* parent)
     timingStats_.postprocessTime = 0.0;
     timingStats_.totalTime = 0.0;
     timingStats_.fps = 0;
+    
+    // 初始化调试输出计时器
+    lastDebugOutputTime_ = std::chrono::high_resolution_clock::now();
 }
 
 /**
@@ -903,6 +906,7 @@ void YOLOProcessorORT::SetDebugOutput(bool enable)
  * @param debugInfo 调试信息结构体，包含需要输出的各种调试数据
  * 
  * 集中处理所有调试输出，避免调试输出影响核心处理逻辑的性能
+ * 调试信息每30秒只打印一次，避免输出过于频繁
  */
 void YOLOProcessorORT::DebugOutput(const YOLODebugInfo& debugInfo)
 {
@@ -910,6 +914,18 @@ void YOLOProcessorORT::DebugOutput(const YOLODebugInfo& debugInfo)
     {
         return; // 调试输出已禁用，直接返回
     }
+
+    // 检查是否达到调试输出间隔
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    double elapsedSeconds = std::chrono::duration<double>(currentTime - lastDebugOutputTime_).count();
+    
+    if (elapsedSeconds < DEBUG_OUTPUT_INTERVAL_SECONDS)
+    {
+        return; // 未达到输出间隔，直接返回
+    }
+    
+    // 更新上次输出时间
+    lastDebugOutputTime_ = currentTime;
 
     // 输出letterbox信息
     qDebug() << "letterbox r, dw, dh:" << debugInfo.letterbox_r << debugInfo.letterbox_dw << debugInfo.letterbox_dh;
