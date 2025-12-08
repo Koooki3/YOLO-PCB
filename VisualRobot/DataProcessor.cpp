@@ -99,12 +99,13 @@ FeatureType DataProcessor::GetFeatureType() const
 Mat DataProcessor::NormalizeImage(const Mat& input, double targetMean, double targetStd)
 {
     // 定义局部变量
-    Mat normalized;         // 标准化后的图像
+    UMat normalized;         // 标准化后的图像
     Scalar mean;            // 均值
     Scalar stddev;          // 标准差
 
-    // 转换为浮点型
-    input.convertTo(normalized, CV_32F);
+    // 转换为浮点型并使用UMat
+    input.copyTo(normalized);
+    normalized.convertTo(normalized, CV_32F);
     
     // 计算当前均值和标准差
     meanStdDev(normalized, mean, stddev);
@@ -115,7 +116,10 @@ Mat DataProcessor::NormalizeImage(const Mat& input, double targetMean, double ta
     // 调整到目标均值和标准差: x * targetStd + targetMean
     normalized = normalized * targetStd + targetMean;
     
-    return normalized;
+    // 转换回Mat返回
+    Mat result;
+    normalized.copyTo(result);
+    return result;
 }
 
 /**
@@ -131,15 +135,21 @@ Mat DataProcessor::StandardizeImage(const Mat& input)
     // 定义局部变量
     double maxVal = 0;      // 图像最大像素值
     double minVal = 0;      // 图像最小像素值
-    Mat standardized;       // 标准化后的图像
+    UMat standardized;       // 标准化后的图像
 
+    // 转换为UMat
+    input.copyTo(standardized);
+    
     // 计算图像的最小和最大像素值
-    minMaxLoc(input, &minVal, &maxVal);
+    minMaxLoc(standardized, &minVal, &maxVal);
     
     // 标准化处理: 将像素值映射到0-255范围
-    input.convertTo(standardized, CV_8U, 255.0 / (maxVal - minVal), 0);
+    standardized.convertTo(standardized, CV_8U, 255.0 / (maxVal - minVal), 0);
     
-    return standardized;
+    // 转换回Mat返回
+    Mat result;
+    standardized.copyTo(result);
+    return result;
 }
 
 /**
@@ -373,9 +383,13 @@ Mat DataProcessor::RandomRotate(const Mat& input, double maxAngle)
 Mat DataProcessor::RandomFlip(const Mat& input)
 {
     // 定义局部变量
-    Mat flipped;        // 翻转后的图像
+    UMat flipped;        // 翻转后的图像
+    UMat input_umat;     // 输入图像UMat
     int flipCode;       // 翻转方向代码
 
+    // 转换为UMat
+    input.copyTo(input_umat);
+    
     // 随机选择翻转方向
     if (RandomInt(0, 1) == 0)
     {
@@ -387,9 +401,12 @@ Mat DataProcessor::RandomFlip(const Mat& input)
     }
     
     // 执行图像翻转
-    flip(input, flipped, flipCode);
+    flip(input_umat, flipped, flipCode);
     
-    return flipped;
+    // 转换回Mat返回
+    Mat result;
+    flipped.copyTo(result);
+    return result;
 }
 
 /**
