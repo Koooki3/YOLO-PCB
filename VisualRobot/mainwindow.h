@@ -22,6 +22,7 @@
 #include "YOLOProcessorORT.h"
 #include <QWaitCondition>
 #include "DVPCamera.h"
+#include "ImageAcquisition.h"
 
 using namespace std;
 using namespace cv;
@@ -80,6 +81,7 @@ private:
     
     dvpHandle               m_dvpHandle;           // DVP相机句柄 | en:DVP Camera Handle
     bool                    m_isDVPCameraConnected; // DVP相机连接状态 | en:DVP Camera Connection Status
+    QImageAcquisition*      m_pDvpAcquisition;     // DVP图像采集对象 | en:DVP Image Acquisition Object
 
     vector<unsigned char>   m_lastFrame;           // 缓存的原始帧数据
     MV_FRAME_OUT_INFO_EX    m_lastInfo{};          // 帧信息

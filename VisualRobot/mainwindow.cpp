@@ -40,6 +40,7 @@
 #include "Undistort.h"
 #include "DefectDetection.h"
 #include "YOLOExample.h"
+#include "ImageAcquisition.h"
 
 #define ERROR 2
 #define WARNNING 1
@@ -79,6 +80,7 @@ MainWindow::MainWindow(QWidget *parent) :
     // 初始化DVPCamera相关变量
     m_dvpHandle = 0;
     m_isDVPCameraConnected = false;
+    m_pDvpAcquisition = nullptr;
     
     // 初始化设备热拔插自动枚举相关变量
     m_deviceEnumTimer = new QTimer(this);
@@ -731,13 +733,21 @@ void MainWindow::on_bnOpen_clicked()
 
 void MainWindow::on_bnClose_clicked()
 {
+    m_bGrabbing = false;
+
     if (m_isDVPCameraConnected)
     {
-        // 关闭DVPCamera设备
-        dvpStatus dvpStatusResult;
-        
         // 停止采集（如果正在采集）
+        dvpStatus dvpStatusResult;
         dvpStatusResult = dvpStop(m_dvpHandle);
+        
+        // 清理DVP图像采集对象
+        if (m_pDvpAcquisition)
+        {
+            m_pDvpAcquisition->StopThread();
+            delete m_pDvpAcquisition;
+            m_pDvpAcquisition = nullptr;
+        }
         
         // 关闭相机
         dvpStatusResult = dvpClose(m_dvpHandle);
@@ -753,12 +763,10 @@ void MainWindow::on_bnClose_clicked()
         // 关闭MvCamera设备
         m_pcMyCamera->Close();
         delete m_pcMyCamera;
-        m_pcMyCamera = NULL;
+        m_pcMyCamera = nullptr;
         
         AppendLog("MvCamera设备关闭成功", INFO);
     }
-    
-    m_bGrabbing = false;
 
     ui->bnOpen->setEnabled(true);
     ui->bnClose->setEnabled(false);
@@ -820,6 +828,9 @@ void MainWindow::on_bnStart_clicked()
         dvpStatus dvpStatusResult;
         
         // 设置目标格式为BGR24，与MvCamera保持一致
+        // 注意：dvpSetTargetFormat使用的是dvpStreamFormat枚举(S_BGR24=10)
+        // 而dvpGetFrame返回的是dvpImageFormat枚举(FORMAT_BGR24=10)
+        // 两者值相同，所以可以匹配
         dvpStatusResult = dvpSetTargetFormat(m_dvpHandle, S_BGR24);
         if (dvpStatusResult != DVP_STATUS_OK)
         {
@@ -840,58 +851,58 @@ void MainWindow::on_bnStart_clicked()
         AppendLog("开始DVP抓图成功", INFO);
         m_bGrabbing = true;
         
-        // 启动定时器，定期获取图像
-        // 这里需要创建一个定时器来定期调用dvpGetFrame获取图像
-        // 由于现有代码使用回调函数处理图像，我需要创建一个定时器来模拟类似的行为
-        QTimer *dvpCaptureTimer = new QTimer(this);
-        connect(dvpCaptureTimer, &QTimer::timeout, [=]() {
-            if (!m_bGrabbing || !m_isDVPCameraConnected)
+        // 创建DVP图像采集对象，使用独立线程处理图像采集和转换
+        // 这样可以避免主线程卡死
+        m_pDvpAcquisition = new QImageAcquisition(m_dvpHandle);
+        
+        // 建立DVP图像采集对象的信号和槽函数的联系
+        // 当DVP图像采集对象采集到图像时，会发送signalDisplay信号
+        connect(m_pDvpAcquisition, &QImageAcquisition::signalDisplay, [=]() {
+            if (!m_bGrabbing || !m_isDVPCameraConnected || !m_pDvpAcquisition)
             {
-                dvpCaptureTimer->stop();
-                delete dvpCaptureTimer;
                 return;
             }
             
-            // 获取图像帧
-            dvpFrame frame;
-            void* pBuffer = nullptr;
-            dvpStatus dvpStatusResult = dvpGetFrame(m_dvpHandle, &frame, &pBuffer, 3000);
-            
-            if (dvpStatusResult == DVP_STATUS_OK)
+            // 获取DVP图像
+            if (m_pDvpAcquisition->m_threadMutex.tryLock())
             {
-                // 将DVP图像转换为与MvCamera相同的格式
-                // MvCamera使用的是MV_FRAME_OUT_INFO_EX和unsigned char数组
+                if (!m_pDvpAcquisition->m_ShowImage.isNull() && m_pDvpAcquisition->pBuffer)
+                {
+                    // 将DVP图像转换为与MvCamera相同的格式
+                    // 锁定帧数据
+                    m_frameMtx.lock();
+                    
+                    // 获取DVP图像的原始数据
+                    dvpFrame frame = m_pDvpAcquisition->m_pFrame;
+                    void* pBuffer = m_pDvpAcquisition->pBuffer;
+                    
+                    // 调整缓存大小
+                    m_lastFrame.resize(frame.uBytes);
+                    
+                    // 复制图像数据
+                    memcpy(m_lastFrame.data(), pBuffer, frame.uBytes);
+                    
+                    // 设置帧信息
+                    m_lastInfo.enPixelType = PixelType_Gvsp_BGR8_Packed;
+                    m_lastInfo.nWidth = frame.iWidth;
+                    m_lastInfo.nHeight = frame.iHeight;
+                    m_lastInfo.nFrameNum = frame.uFrameID;
+                    m_lastInfo.nFrameLen = frame.uBytes;
+                    m_lastInfo.nHostTimeStamp = frame.uTimestamp;
+                    m_lastInfo.nTriggerIndex = 0;
+                    m_lastInfo.nDevTimeStampLow = frame.uTimestamp;
+                    
+                    m_hasFrame = true;
+                    
+                    m_frameMtx.unlock();
+                    
+                    // 调用现有的图像处理函数
+                    ImageCallBack(m_lastFrame.data(), &m_lastInfo, this);
+                }
                 
-                // 锁定帧数据
-                m_frameMtx.lock();
-                
-                // 调整缓存大小
-                m_lastFrame.resize(frame.uBytes);
-                
-                // 复制图像数据
-                memcpy(m_lastFrame.data(), pBuffer, frame.uBytes);
-                
-                // 设置帧信息
-                m_lastInfo.enPixelType = PixelType_Gvsp_BGR8_Packed;
-                m_lastInfo.nWidth = frame.iWidth;
-                m_lastInfo.nHeight = frame.iHeight;
-                m_lastInfo.nFrameNum = frame.uFrameID;
-                m_lastInfo.nFrameLen = frame.uBytes;
-                m_lastInfo.nTimestamp = frame.uTimestamp;
-                m_lastInfo.nTriggerType = 0;
-                m_lastInfo.nDevTimeStamp = frame.uTimestamp;
-                
-                m_hasFrame = true;
-                
-                m_frameMtx.unlock();
-                
-                // 调用现有的图像处理函数
-                ImageCallBack(m_lastFrame.data(), &m_lastInfo, this);
+                m_pDvpAcquisition->m_threadMutex.unlock();
             }
         });
-        
-        // 启动定时器，每30ms获取一次图像（约33fps）
-        dvpCaptureTimer->start(30);
     }
     else if (m_pcMyCamera)
     {
@@ -924,6 +935,8 @@ void MainWindow::on_bnStop_clicked()
     // 变量定义
     int nRet;  // 返回值
 
+    m_bGrabbing = false;
+
     if (m_isDVPCameraConnected)
     {
         // 停止DVPCamera设备采集
@@ -935,10 +948,17 @@ void MainWindow::on_bnStop_clicked()
         {
             ShowErrorMsg("Stop DVP grabbing fail", 0);
             AppendLog("停止DVP抓图失败", ERROR);
-            return;
         }
         
         AppendLog("停止DVP抓图成功", INFO);
+        
+        // 清理DVP图像采集对象
+        if (m_pDvpAcquisition)
+        {
+            m_pDvpAcquisition->StopThread();
+            delete m_pDvpAcquisition;
+            m_pDvpAcquisition = nullptr;
+        }
     }
     else if (m_pcMyCamera)
     {
@@ -952,8 +972,6 @@ void MainWindow::on_bnStop_clicked()
         }
         AppendLog("停止MvCamera抓图成功", INFO);
     }
-    
-    m_bGrabbing = false;
 
     ui->bnStart->setEnabled(true);
     ui->bnStop->setEnabled(false);
