@@ -77,6 +77,9 @@ private:
     MV_CC_DEVICE_INFO_LIST  m_stDevList;           // ch:设备信息链表 | en:The list of device info
     CMvCamera*              m_pcMyCamera;          // ch:相机类设备实例 | en:The instance of CMvCamera
     bool                    m_bGrabbing;           // ch:是否开始抓图 | en:The flag of Grabbing
+    
+    dvpHandle               m_dvpHandle;           // DVP相机句柄 | en:DVP Camera Handle
+    bool                    m_isDVPCameraConnected; // DVP相机连接状态 | en:DVP Camera Connection Status
 
     vector<unsigned char>   m_lastFrame;           // 缓存的原始帧数据
     MV_FRAME_OUT_INFO_EX    m_lastInfo{};          // 帧信息
