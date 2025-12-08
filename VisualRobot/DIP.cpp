@@ -283,15 +283,15 @@ bool CreateDirectory(const string& path)
 int GetCoordsOpenCV(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, double size = 100.0)
 {
     // 变量定义
-    UMat image;                              // 输入图像
+    Mat image;                              // 输入图像
     int height, width;                      // 图像高度和宽度
     double r, dis_col, dis_row, rmin, rmax; // 圆形检测参数
     vector<Rect> searchAreas;               // 搜索区域列表
     vector<Point2f> worldCoords;            // 世界坐标列表
     double world_dis_col, world_dis_row;    // 世界坐标间距
-    UMat grayImage, binaryImage;             // 灰度图和二值图
+    Mat grayImage, binaryImage;             // 灰度图和二值图
     vector<Vec3f> detectedCircles;          // 检测到的圆形
-    UMat result;                             // 结果图像
+    Mat result;                             // 结果图像
     vector<Point2f> detectedCenters;        // 检测到的圆心
     vector<float> detectedRadii;            // 检测到的半径
     vector<Point2f> detectedWorldCoords;    // 检测到的世界坐标
@@ -300,13 +300,12 @@ int GetCoordsOpenCV(QVector<QPointF>& WorldCoord, QVector<QPointF>& PixelCoord, 
     double cx, cy;                          // 质心坐标
     
     // 读取图像
-    Mat image_mat = imread("/home/orangepi/Desktop/VisualRobot_Local/Img/capture.jpg");
-    if(image_mat.empty()) 
+    image = imread("/home/orangepi/Desktop/VisualRobot_Local/Img/capture.jpg");
+    if(image.empty()) 
     {
         qDebug() << "Error: Cannot read image file";
         return 1;
     }
-    image_mat.copyTo(image); // 转换为UMat
 
     // 获取图像尺寸
     height = image.rows;
@@ -507,8 +506,7 @@ Matrix3d ReadTransformationMatrix(const string& filename)
 int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<double>& Col)
 {
     // 变量定义
-    Mat image;                                               // 原始图像 (用于读取和保存)
-    UMat grayImage, binaryImage, smoothedImage, edges;       // 图像处理变量（使用UMat加速）
+    Mat image, grayImage, binaryImage, smoothedImage, edges; // 图像处理变量
     vector<vector<Point>> contours;                          // 轮廓列表
     vector<Vec4i> hierarchy;                                 // 轮廓层级
     vector<vector<Point>> longContours;                      // 长轮廓列表
@@ -521,8 +519,7 @@ int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<dou
     vector<Point2f> corners;                                 // 角点用于亚像素优化
     Size winSize, zeroZone;                                  // 亚像素优化参数
     TermCriteria criteria;                                   // 终止条件
-    UMat resultUMat;                                         // 结果图像（使用UMat加速）
-    Mat result;                                              // 结果图像（用于保存）
+    Mat result;                                              // 结果图像
     
     // 清空输入向量
     Row.clear();
@@ -536,25 +533,20 @@ int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<dou
         return 1;
     }
 
-    // 将输入Mat转换为UMat以利用OpenCL加速
-    image.copyTo(resultUMat);
-
     // 转换为灰度图
-    cvtColor(image, grayImage, COLOR_BGR2GRAY); // 自动使用OpenCL加速
+    cvtColor(image, grayImage, COLOR_BGR2GRAY);
 
     // 二值化处理
-    threshold(grayImage, binaryImage, 128, 255, THRESH_BINARY); // 自动使用OpenCL加速
+    threshold(grayImage, binaryImage, 128, 255, THRESH_BINARY);
 
     // 高斯滤波平滑处理，减少噪声
-    GaussianBlur(binaryImage, smoothedImage, Size(3, 3), 0); // 自动使用OpenCL加速
+    GaussianBlur(binaryImage, smoothedImage, Size(3, 3), 0);
 
     // Canny边缘检测
-    Canny(smoothedImage, edges, 20, 40); // 自动使用OpenCL加速
+    Canny(smoothedImage, edges, 20, 40);
 
-    // 查找轮廓 - 需要将UMat转换为Mat，因为findContours不支持UMat
-    Mat edgesMat;
-    edges.copyTo(edgesMat);
-    findContours(edgesMat, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+    // 查找轮廓
+    findContours(edges, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
 
     // 过滤短轮廓，只保留周长大于50的轮廓
     for(const auto& contour : contours) 
@@ -631,8 +623,8 @@ int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<dou
             zeroZone = Size(-1, -1);               // 死区大小，(-1,-1)表示没有死区
             criteria = TermCriteria(TermCriteria::EPS + TermCriteria::MAX_ITER, 40, 0.001); // 终止条件
             
-            // 执行亚像素角点优化 - 支持UMat
-            cornerSubPix(grayImage, corners, winSize, zeroZone, criteria); // 自动使用OpenCL加速
+            // 执行亚像素角点优化
+            cornerSubPix(grayImage, corners, winSize, zeroZone, criteria);
             
             // 更新优化后的角点坐标
             for (int i = 0; i < 4; i++) 
@@ -642,31 +634,26 @@ int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<dou
             }
         }
 
-        // 可视化结果 - 使用UMat加速
-        image.copyTo(resultUMat);
+        // 可视化结果
+        result = image.clone();
 
-        // 绘制矩形轮廓 - 需要将UMat转换为Mat，因为drawContours不支持UMat
-        Mat resultMat;
-        resultUMat.copyTo(resultMat);
         // 绘制矩形轮廓
         for(int i = 0; i < 4; i++) 
         {
-            line(resultMat, rectContour[i], rectContour[(i+1)%4], Scalar(0, 255, 0), 1);
+            line(result, rectContour[i], rectContour[(i+1)%4], Scalar(0, 255, 0), 1);
         }
 
         // 绘制角点 - 首先在精确的角点位置绘制红色的8像素为半径的角点圆
         for(int i = 0; i < 4; i++) 
         {
-            circle(resultMat, Point(Col[i], Row[i]), 8, Scalar(0, 0, 255), -1); // 填充红色圆，半径为8像素
+            circle(result, Point(Col[i], Row[i]), 8, Scalar(0, 0, 255), -1); // 填充红色圆，半径为8像素
         }
 
         // 然后绘制绿色的1像素为半径的角点圆
         for(int i = 0; i < 4; i++) 
         {
-            circle(resultMat, Point(Col[i], Row[i]), 1, Scalar(0, 255, 0), -1); // 填充绿色圆，半径为1像素
+            circle(result, Point(Col[i], Row[i]), 1, Scalar(0, 255, 0), -1); // 填充绿色圆，半径为1像素
         }
-        resultMat.copyTo(resultUMat);
-        resultUMat.copyTo(result);
 
         // 保存结果图像
         imwrite("../detectedImg.jpg", result);
@@ -697,7 +684,7 @@ Result CalculateLength(const Mat& input, const Params& params, double bias)
 {
     // 变量定义
     Result result;                            // 结果结构体
-    UMat source, binary, colorImage;          // 图像处理变量（使用UMat加速）
+    Mat source, binary, colorImage;           // 图像处理变量
     int k;                                    // 滤波核大小
     static Mat kernel;                        // 形态学核
     vector<vector<Point>> contours;           // 轮廓列表
@@ -718,13 +705,14 @@ Result CalculateLength(const Mat& input, const Params& params, double bias)
         return result;
     }
 
-    // 将输入Mat转换为UMat以利用OpenCL加速
-    input.copyTo(source);
-
     // 检查通道数，如果需要则转换为灰度图
-    if (source.channels() > 1) 
+    if (input.channels() > 1) 
     {
-        cvtColor(source, source, COLOR_BGR2GRAY); // 直接在UMat上操作，自动使用OpenCL加速
+        cvtColor(input, source, COLOR_BGR2GRAY);
+    } 
+    else 
+    {
+        source = input;
     }
 
     // 多阶段滤波：双边滤波 + 高斯模糊
@@ -734,9 +722,9 @@ Result CalculateLength(const Mat& input, const Params& params, double bias)
         k = (params.blurK % 2 == 0) ? params.blurK - 1 : params.blurK;
         if (k >= 3) 
         {
-            UMat dst;
-            bilateralFilter(source, dst, 5, 30, 2);  // 双边滤波，自动使用OpenCL加速
-            GaussianBlur(dst, source, Size(k, k), 2.0, 2.0); // 高斯模糊，自动使用OpenCL加速
+            Mat dst;
+            bilateralFilter(source, dst, 5, 30, 2);  // 双边滤波，保留边缘同时去除噪声
+            GaussianBlur(dst, source, Size(k, k), 2.0, 2.0); // 高斯模糊，进一步平滑图像
         }
     }
 
@@ -748,12 +736,10 @@ Result CalculateLength(const Mat& input, const Params& params, double bias)
     binary = 255 - binary;  // 反转二值图，使目标变为白色
 
     // 形态学操作：膨胀，连接断裂的边缘
-    morphologyEx(binary, binary, MORPH_DILATE, kernel); // 自动使用OpenCL加速
+    morphologyEx(binary, binary, MORPH_DILATE, kernel);
 
-    // 查找轮廓 - 需要将UMat转换为Mat，因为findContours不支持UMat
-    Mat binaryMat;
-    binary.copyTo(binaryMat);
-    findContours(binaryMat, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+    // 查找轮廓
+    findContours(binary, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
 
     // 按面积过滤轮廓
     for (const auto& contour : contours) 
@@ -778,7 +764,7 @@ Result CalculateLength(const Mat& input, const Params& params, double bias)
     thickness = round(source.cols * 0.002);
 
     // 转换为BGR用于彩色绘图
-    cvtColor(source, colorImage, COLOR_GRAY2BGR); // 自动使用OpenCL加速 // 自动使用OpenCL加速
+    cvtColor(source, colorImage, COLOR_GRAY2BGR);
 
     if (max_it != preservedContours.end()) 
     {
@@ -798,7 +784,7 @@ Result CalculateLength(const Mat& input, const Params& params, double bias)
 
         for (int i = 0; i < 4; i++) 
         {
-            line(colorImage, vertices[i], vertices[(i+1)%4], Scalar(0, 255, 0),  thickBorder); // 自动使用OpenCL加速
+            line(colorImage, vertices[i], vertices[(i+1)%4], Scalar(0, 255, 0),  thickBorder);
         }
 
         // 输出测量结果
@@ -816,8 +802,8 @@ Result CalculateLength(const Mat& input, const Params& params, double bias)
         cerr << "未找到有效轮廓" << endl;
     }
 
-    // 设置结果图像 - 将UMat转换回Mat
-    colorImage.copyTo(result.image);
+    // 设置结果图像
+    result.image = colorImage;
     return result;
 }
 
@@ -844,7 +830,7 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
 {
     // 变量定义
     Result result;                            // 结果结构体
-    UMat source, binary, colorImage;          // 图像处理变量（使用UMat加速）
+    Mat source, binary, colorImage;           // 图像处理变量
     int k;                                    // 滤波核大小
     static Mat kernel;                        // 形态学核
     vector<vector<Point>> contours;           // 轮廓列表
@@ -864,13 +850,14 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
         return result;
     }
 
-    // 将输入Mat转换为UMat以利用OpenCL加速
-    input.copyTo(source);
-
     // 检查通道数，如果需要则转换为灰度图
-    if (source.channels() > 1)
+    if (input.channels() > 1)
     {
-        cvtColor(source, source, COLOR_BGR2GRAY); // 直接在UMat上操作，自动使用OpenCL加速
+        cvtColor(input, source, COLOR_BGR2GRAY);
+    }
+    else
+    {
+        source = input;
     }
 
     // 多阶段滤波
@@ -879,9 +866,9 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
         k = (params.blurK % 2 == 0) ? params.blurK - 1 : params.blurK;
         if (k >= 3)
         {
-            UMat dst;
-            bilateralFilter(source, dst, 5, 30, 2);  // 双边滤波，自动使用OpenCL加速
-            GaussianBlur(dst, source, Size(k, k), 2.0, 2.0); // 高斯模糊，自动使用OpenCL加速
+            Mat dst;
+            bilateralFilter(source, dst, 5, 30, 2);  // 双边滤波
+            GaussianBlur(dst, source, Size(k, k), 2.0, 2.0); // 高斯模糊
         }
     }
 
@@ -893,12 +880,10 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
     binary = 255 - binary;
 
     // 形态学操作
-    morphologyEx(binary, binary, MORPH_DILATE, kernel);  // 仅膨胀操作，自动使用OpenCL加速
+    morphologyEx(binary, binary, MORPH_DILATE, kernel);  // 仅膨胀操作
 
-    // 查找轮廓 - 需要将UMat转换为Mat，因为findContours不支持UMat
-    Mat binaryMat;
-    binary.copyTo(binaryMat);
-    findContours(binaryMat, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+    // 查找轮廓 - 仅搜索最外层轮廓
+    findContours(binary, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
 
     // 转换为BGR用于彩色绘图
     cvtColor(source, colorImage, COLOR_GRAY2BGR);
@@ -911,7 +896,7 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
     CreateDirectory("../Img");
 
     // 创建Canny边缘检测结果图像（与原图相同尺寸）
-    UMat cannyResult = UMat::zeros(input.size(), CV_8UC1);
+    Mat cannyResult = Mat::zeros(input.size(), CV_8UC1);
 
     // 存储轮廓信息和对应的ROI区域
     struct ContourInfo {
@@ -957,9 +942,18 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
             }
 
             // 在ROI区域内进行Canny边缘检测
-            UMat roiImage = binary(boundingBox);
-            UMat edges;
-            Canny(roiImage, edges, 100, 200, 3); // 自动使用OpenCL加速
+            Mat roiImage;
+            if (binary.channels() > 1)
+            {
+                cvtColor(binary(boundingBox), roiImage, COLOR_BGR2GRAY);
+            }
+            else
+            {
+                roiImage = binary(boundingBox).clone();
+            }
+
+            Mat edges;
+            Canny(roiImage, edges, 100, 200, 3);
 
             // 将边缘检测结果复制到Canny结果图像的对应位置
             edges.copyTo(cannyResult(boundingBox));
@@ -982,7 +976,7 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
     if (!cannyResult.empty())
     {
         // 创建轮廓掩码，用于排除与轮廓近似的边缘
-        UMat contourMask = UMat::zeros(input.size(), CV_8UC1);
+        Mat contourMask = Mat::zeros(input.size(), CV_8UC1);
 
         // 绘制所有轮廓到掩码上（白色）
         for (i = 0; i < contours.size(); i++)
@@ -990,29 +984,23 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
             const auto& contour = contours[i];
             if (contourArea(contour) >= params.areaMin)
             {
-                // 需要将UMat转换为Mat，因为drawContours不支持UMat
-                Mat contourMaskMat;
-                contourMask.copyTo(contourMaskMat);
                 // 绘制轮廓到掩码，线宽稍微加粗以覆盖近似边缘
-                drawContours(contourMaskMat, contours, i, Scalar(255), 3);
-                contourMaskMat.copyTo(contourMask);
+                drawContours(contourMask, contours, i, Scalar(255), 3);
             }
         }
 
         // 对轮廓掩码进行膨胀操作，确保覆盖所有近似边缘
-        UMat dilatedContourMask;
-        dilate(contourMask, dilatedContourMask, kernel, Point(-1, -1), 2); // 自动使用OpenCL加速
+        Mat dilatedContourMask;
+        dilate(contourMask, dilatedContourMask, kernel, Point(-1, -1), 2);
 
         // 从Canny结果中排除与轮廓近似的边缘
-        UMat filteredEdges;
-        bitwise_and(cannyResult, ~dilatedContourMask, filteredEdges); // 自动使用OpenCL加速
+        Mat filteredEdges;
+        bitwise_and(cannyResult, ~dilatedContourMask, filteredEdges);
 
-        // 查找剩余边缘的轮廓 - 需要将UMat转换为Mat
-        Mat filteredEdgesMat;
-        filteredEdges.copyTo(filteredEdgesMat);
+        // 查找剩余边缘的轮廓
         vector<vector<Point>> edgeContours;
         vector<Vec4i> edgeHierarchy;
-        findContours(filteredEdgesMat, edgeContours, edgeHierarchy, RETR_LIST, CHAIN_APPROX_SIMPLE);
+        findContours(filteredEdges, edgeContours, edgeHierarchy, RETR_LIST, CHAIN_APPROX_SIMPLE);
 
         // 对每个边缘轮廓进行平滑拟合并绘制到原图
         for (const auto& edgeContour : edgeContours)
@@ -1038,7 +1026,7 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
             for (size_t j = 0; j < approxCurve.size(); j++)
             {
                 size_t next = (j + 1) % approxCurve.size();
-                line(colorImage, approxCurve[j], approxCurve[next], Scalar(0, 0, 255), 2); // 自动使用OpenCL加速
+                line(colorImage, approxCurve[j], approxCurve[next], Scalar(0, 0, 255), 2);
             }
         }
 
@@ -1048,10 +1036,8 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
         for (const auto& info : contourInfos)
         {
             // 检查该轮廓ROI范围内是否存在非轮廓近似的边缘
-            UMat roiFilteredEdges = filteredEdges(info.boundingBox);
-            Mat roiFilteredEdgesMat;
-            roiFilteredEdges.copyTo(roiFilteredEdgesMat);
-            int nonZeroCount = countNonZero(roiFilteredEdgesMat);
+            Mat roiFilteredEdges = filteredEdges(info.boundingBox);
+            int nonZeroCount = countNonZero(roiFilteredEdges);
 
             // 决定颜色：如果存在非轮廓边缘，使用红色；否则使用绿色
             Scalar contourColor;
@@ -1069,7 +1055,7 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
             info.rect.points(vertices);
             for (int k = 0; k < 4; k++)
             {
-                line(colorImage, vertices[k], vertices[(k+1)%4], contourColor, thickBorder); // 自动使用OpenCL加速
+                line(colorImage, vertices[k], vertices[(k+1)%4], contourColor, thickBorder);
             }
 
             // 在矩形左上角绘制序号
@@ -1113,7 +1099,7 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
             info.rect.points(vertices);
             for (int k = 0; k < 4; k++)
             {
-                line(colorImage, vertices[k], vertices[(k+1)%4], Scalar(0, 255, 0), thickBorder); // 自动使用OpenCL加速
+                line(colorImage, vertices[k], vertices[(k+1)%4], Scalar(0, 255, 0), thickBorder);
             }
 
             // 在矩形左上角绘制序号
@@ -1154,7 +1140,6 @@ Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double
         cerr << "未找到有效轮廓" << endl;
     }
 
-    // 设置结果图像 - 将UMat转换回Mat
-    colorImage.copyTo(result.image);
+    result.image = colorImage;
     return result;
 }

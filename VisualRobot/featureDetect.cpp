@@ -1,7 +1,6 @@
 #include "featureDetect.h"
 #include "DataProcessor.h"
 #include "DLProcessor.h"
-#include <omp.h>
 
 /**
  * @brief 构造函数
@@ -51,8 +50,6 @@ std::vector<cv::DMatch> featureDetector::FilterMatches(
     validKeypoints1.resize(keypoints1.size(), false);
     validKeypoints2.resize(keypoints2.size(), false);
 
-    // 并行处理图像1的特征点响应值筛选
-    #pragma omp parallel for
     for (size_t i = 0; i < keypoints1.size(); i++)
     {
         if (keypoints1[i].response > params.responseThresh)
@@ -61,8 +58,6 @@ std::vector<cv::DMatch> featureDetector::FilterMatches(
         }
     }
     
-    // 并行处理图像2的特征点响应值筛选
-    #pragma omp parallel for
     for (size_t i = 0; i < keypoints2.size(); i++)
     {
         if (keypoints2[i].response > params.responseThresh)
@@ -72,21 +67,14 @@ std::vector<cv::DMatch> featureDetector::FilterMatches(
     }
 
     // 2. 应用比率测试进行初步筛选
-    // 并行处理比率测试，使用关键区域保护共享数据
-    #pragma omp parallel for
-    for (size_t i = 0; i < knnMatches.size(); i++)
+    for (const auto& match : knnMatches)
     {
-        const auto& match = knnMatches[i];
         // 比率测试：最佳匹配与次佳匹配的距离比率小于阈值，且特征点响应值有效
         if (match[0].distance < params.ratioThresh * match[1].distance && validKeypoints1[match[0].queryIdx] && validKeypoints2[match[0].trainIdx])
         {
-            // 使用关键区域保护共享数据
-            #pragma omp critical
-            {
-                goodMatches.push_back(match[0]);
-                points1.push_back(keypoints1[match[0].queryIdx].pt);
-                points2.push_back(keypoints2[match[0].trainIdx].pt);
-            }
+            goodMatches.push_back(match[0]);
+            points1.push_back(keypoints1[match[0].queryIdx].pt);
+            points2.push_back(keypoints2[match[0].trainIdx].pt);
         }
     }
 
