@@ -32,8 +32,8 @@ public:
     bool         m_bAcquireImg;              // 采集线程是否结束的标志：true 运行；false 退出
     bool         ThreadSoftTriggerFlag;      // 软触发标志
 
-    dvpFrame     m_pFrame;                   // 采集到的图像的结构体指针
-    dvpFrame     m_pFrameCopy;               // 采集到的图像的结构体副本，用于信号处理
+    dvpFrame     m_pFrame;                   // 采集到的图像的结构体
+    dvpFrame     m_pFrameCopy;               // 采集到的图像的结构体副本，用于线程间安全访问
     void *       pBuffer;                    // 采集到的图像的内存首地址
 
 
