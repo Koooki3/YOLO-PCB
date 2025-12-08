@@ -32,7 +32,9 @@ SOURCES += \
     YOLOProcessorORT.cpp \
     Undistort.cpp \
     DefectDetection.cpp \
-    FeatureAlignment.cpp
+    FeatureAlignment.cpp \
+    BasicFunction.cpp \
+    ImageAcquisition.cpp
 
 HEADERS += \
     DIP.h \
@@ -46,7 +48,10 @@ HEADERS += \
     DLExample.h \
     Undistort.h \
     DefectDetection.h \
-    FeatureAlignment.h
+    FeatureAlignment.h \
+    BasicFunction.h \
+    ImageAcquisition.h \
+    DVPCamera.h
 
 FORMS += \
     mainwindow.ui
@@ -71,6 +76,12 @@ LIBS += -L/usr/local/lib/ -lopencv_calib3d -lopencv_core -lopencv_dnn -lopencv_f
 LIBS += -L/opt/MVS/lib/aarch64/ -lMvCameraControl -lMvCameraControlWrapper -lMVGigEVisionSDK -lMvUsb3vTL
 
 LIBS += -L/usr/lib/aarch64-linux-gnu -lmali -lOpenCL
+
+INCLUDEPATH += /home/orangepi/Desktop/DVP2-ARM64/
+
+DEPENDPATH += /home/orangepi/Desktop/DVP2-ARM64/
+
+LIBS += -L/home/orangepi/Desktop/DVP2-ARM64/ -ldvp
 
 # 编译优化选项
 unix {
