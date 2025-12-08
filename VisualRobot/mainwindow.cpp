@@ -639,6 +639,18 @@ void MainWindow::on_bnOpen_clicked()
             return;
         }
         
+        // 设置目标格式为BGR24，与MvCamera保持一致
+        dvpStatusResult = dvpSetTargetFormat(m_dvpHandle, S_BGR24);
+        if (dvpStatusResult != DVP_STATUS_OK)
+        {
+            ShowErrorMsg("Set DVP target format fail", 0);
+            AppendLog("设置DVP目标格式失败", ERROR);
+            // 关闭相机
+            dvpClose(m_dvpHandle);
+            m_dvpHandle = 0;
+            return;
+        }
+        
         // 设置DVPCamera连接状态
         m_isDVPCameraConnected = true;
         AppendLog(QString("打开DVP设备成功: %1").arg(friendlyName), INFO);
@@ -876,6 +888,14 @@ void MainWindow::on_bnStart_clicked()
                     dvpFrame frame = m_pDvpAcquisition->m_pFrame;
                     void* pBuffer = m_pDvpAcquisition->pBuffer;
                     
+                    // 确保图像格式是BGR24
+                    if (frame.format != FORMAT_BGR24)
+                    {
+                        m_pDvpAcquisition->m_threadMutex.unlock();
+                        m_frameMtx.unlock();
+                        return;
+                    }
+                    
                     // 调整缓存大小
                     m_lastFrame.resize(frame.uBytes);
                     
@@ -897,7 +917,10 @@ void MainWindow::on_bnStart_clicked()
                     m_frameMtx.unlock();
                     
                     // 调用现有的图像处理函数
-                    ImageCallBack(m_lastFrame.data(), &m_lastInfo, this);
+                    // 使用QTimer::singleShot确保在主线程中执行，避免阻塞
+                    QTimer::singleShot(0, this, [=]() {
+                        ImageCallBack(m_lastFrame.data(), &m_lastInfo, this);
+                    });
                 }
                 
                 m_pDvpAcquisition->m_threadMutex.unlock();
@@ -939,11 +962,22 @@ void MainWindow::on_bnStop_clicked()
 
     if (m_isDVPCameraConnected)
     {
-        // 停止DVPCamera设备采集
-        dvpStatus dvpStatusResult;
+        // 清理DVP图像采集对象
+        if (m_pDvpAcquisition)
+        {
+            // 断开信号连接
+            disconnect(m_pDvpAcquisition, &QImageAcquisition::signalDisplay, nullptr, nullptr);
+            
+            // 停止线程和定时器
+            m_pDvpAcquisition->StopThread();
+            
+            // 删除对象
+            delete m_pDvpAcquisition;
+            m_pDvpAcquisition = nullptr;
+        }
         
         // 停止采集
-        dvpStatusResult = dvpStop(m_dvpHandle);
+        dvpStatus dvpStatusResult = dvpStop(m_dvpHandle);
         if (dvpStatusResult != DVP_STATUS_OK)
         {
             ShowErrorMsg("Stop DVP grabbing fail", 0);
@@ -951,14 +985,6 @@ void MainWindow::on_bnStop_clicked()
         }
         
         AppendLog("停止DVP抓图成功", INFO);
-        
-        // 清理DVP图像采集对象
-        if (m_pDvpAcquisition)
-        {
-            m_pDvpAcquisition->StopThread();
-            delete m_pDvpAcquisition;
-            m_pDvpAcquisition = nullptr;
-        }
     }
     else if (m_pcMyCamera)
     {
