@@ -1,4 +1,8 @@
 #include "configmanager.h"
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QJsonValue>
+#include <QJsonDocument>
 
 // 初始化单例实例
 ConfigManager* ConfigManager::instance_ = nullptr;

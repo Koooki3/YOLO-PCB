@@ -3145,7 +3145,7 @@ void MainWindow::YoloRealTimeDetectionThread()
 {
     // 加载YOLO模型和标签    
     QString modelPath = "../models/arcuchi2.onnx";
-    QString labelPath = "../Data/Labels/class_labels.txt";
+    QString labelPath = "../labels/class_labels.txt";
     
     // 加载模型
     if (!m_yoloProcessor->InitModel(modelPath.toStdString(), false)) 

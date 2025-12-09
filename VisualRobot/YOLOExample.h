@@ -38,21 +38,6 @@ public:
 
 private slots:
     /**
-     * @brief 浏览模型文件
-     */
-    void BrowseModel();
-    
-    /**
-     * @brief 加载模型
-     */
-    void LoadModel();
-    
-    /**
-     * @brief 加载标签文件
-     */
-    void LoadLabels();
-    
-    /**
      * @brief 选择图像
      */
     void SelectImage();

@@ -34,7 +34,7 @@
       },
       "paths": {
         "models": "../models",
-        "labels": "../Data/Labels",
+        "labels": "../labels",
         "images": "../Img"
       },
       "optimization": {

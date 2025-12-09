@@ -11,6 +11,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QDoubleValidator>
+#include "configmanager.h"
 
 using namespace cv;
 
@@ -23,10 +24,8 @@ using namespace cv;
 YOLOExample::YOLOExample(QWidget *parent)
     : QWidget(parent)
     , yoloProcessor_(new YOLOProcessorORT(this))  // 创建YOLO处理器实例
-    , modelPathEdit_(nullptr)
     , statusLabel_(nullptr)
     , imageLabel_(nullptr)
-    , detectBtn_(nullptr)
 {
     SetupUI();      // 设置UI界面
     ConnectSignals(); // 连接信号和槽
@@ -80,6 +79,7 @@ YOLOExample::YOLOExample(QWidget *parent)
     {
         statusLabel_->setText("状态: 模型已加载，但标签加载失败");
     }
+}
 
 /**
  * @brief YOLOExample析构函数
@@ -144,97 +144,6 @@ void YOLOExample::ConnectSignals()
     connect(yoloProcessor_, &YOLOProcessorORT::processingComplete, this, &YOLOExample::OnProcessingComplete);
     // 连接错误发生信号到UI错误显示槽
     connect(yoloProcessor_, &YOLOProcessorORT::errorOccurred, this, &YOLOExample::OnDLError);
-}
-
-/**
- * @brief 加载标签文件
- * 
- * 打开文件对话框选择标签文件，读取标签内容，并传递给YOLO处理器
- */
-void YOLOExample::LoadLabels()
-{
-    // 打开文件对话框选择标签文件
-    QString file = QFileDialog::getOpenFileName(this, "选择标签文件", ".", "Text Files (*.txt);;All Files (*)");
-    if (file.isEmpty()) 
-    {
-        return;
-    }
-    
-    // 打开标签文件
-    QFile f(file);
-    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) 
-    {
-        statusLabel_->setText("状态: 无法打开标签文件");
-        return;
-    }
-    
-    // 读取标签内容
-    QStringList labels;
-    while (!f.atEnd()) 
-    {
-        QByteArray line = f.readLine();
-        QString s = QString::fromUtf8(line).trimmed();
-        if (!s.isEmpty()) 
-        {
-            labels.append(s);
-        }
-    }
-    f.close();
-    
-    // 保存标签并传递给处理器
-    currentClassLabels_ = labels;
-    vector<string> cls;
-    cls.reserve(labels.size());
-    for (const QString &qs : labels) 
-    {
-        cls.push_back(qs.toStdString());
-    }
-    yoloProcessor_->SetClassLabels(cls);
-    
-    // 更新UI
-    labelPathEdit_->setText(file);
-    statusLabel_->setText(QString("状态: 已加载 %1 类").arg(labels.size()));
-}
-
-/**
- * @brief 浏览模型文件
- * 
- * 打开文件对话框选择ONNX模型文件
- */
-void YOLOExample::BrowseModel()
-{
-    // 打开文件对话框选择ONNX模型文件
-    QString file = QFileDialog::getOpenFileName(this, "选择 ONNX 模型", ".", "ONNX Files (*.onnx);;All Files (*)");
-    if (!file.isEmpty()) 
-    {
-        modelPathEdit_->setText(file);
-    }
-}
-
-/**
- * @brief 加载模型
- * 
- * 从编辑框获取模型路径，加载ONNX模型到YOLO处理器
- */
-void YOLOExample::LoadModel()
-{
-    QString path = modelPathEdit_->text();
-    if (path.isEmpty()) 
-    {
-        statusLabel_->setText("状态: 请先选择模型文件");
-        return;
-    }
-    
-    // 加载模型
-    bool ok = yoloProcessor_->InitModel(path.toStdString(), false);
-    if (ok) 
-    {
-        statusLabel_->setText("状态: 模型已加载");
-    } 
-    else 
-    {
-        statusLabel_->setText("状态: 模型加载失败");
-    }
 }
 
 /**
