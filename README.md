@@ -286,19 +286,19 @@ VisualRobot/
 ## 🔧 环境要求
 
 ### 开发环境
-- Qt 5.x 或更高版本
+- Qt 5.15.x
 - C++ 编译器 (支持 C++11 标准)
 - CMake 3.x 或更高版本
 
 ### 依赖库
 
-1. **MVS (Machine Vision Software) SDK**
+1. **MVS (Machine Vision Software) SDK** (最新版本)
 ```cpp
 INCLUDEPATH += /opt/MVS/include
 LIBS += -L/opt/MVS/bin/ -L/opt/MVS/lib/64/
 ```
 
-2. **HALCON 图像处理库**
+2. **HALCON 图像处理库** (可选)
 ```cpp
 INCLUDEPATH += /home/orangepi/MVTec/HALCON-25.05-Progress/include
 LIBS += -L/home/orangepi/MVTec/HALCON-25.05-Progress/lib/aarch64-linux/
@@ -309,7 +309,7 @@ LIBS += -L/home/orangepi/MVTec/HALCON-25.05-Progress/lib/aarch64-linux/
 INCLUDEPATH += /usr/include/eigen3/Eigen
 ```
 
-4. **OpenCV 计算机视觉库**
+4. **OpenCV 计算机视觉库** (4.12.0)
 ```cpp
 # 用于图像处理、特征检测和清晰度计算
 INCLUDEPATH += /usr/include/opencv4
@@ -319,52 +319,94 @@ LIBS += -lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_imgcodecs -lope
 5. **ONNX Runtime (深度学习推理)**
 ```cpp
 # 用于YOLO目标检测和深度学习模型推理
-INCLUDEPATH += /usr/include/onnxruntime
-LIBS += -L/usr/lib/x86_64-linux-gnu/ -lonnxruntime
+INCLUDEPATH += $$PWD/../onnxruntime-linux-aarch64-1.23.2/include
+LIBS += -L$$PWD/../onnxruntime-linux-aarch64-1.23.2/lib/ -lonnxruntime -lonnxruntime_providers_shared
+```
+
+6. **OpenCL**
+```cpp
+# 用于GPU加速
+LIBS += -lOpenCL
 ```
 
 ## 📦 安装与配置
 
-### 1. 安装依赖
+### 1. 板上环境配置
+
+确保以下环境已正确配置，并更新共享库路径：
+
 ```bash
-# 安装 Qt 开发环境
-# Windows: 使用 Qt 在线安装器
-# Linux: 
-sudo apt-get install qt5-default
-sudo apt-get install qtcreator
-
-# 安装必要的开发工具
-sudo apt-get install build-essential
-sudo apt-get install cmake
-
-# 安装 ONNX Runtime (根据平台选择)
-# 参考: https://onnxruntime.ai/
+# 配置共享库路径（根据实际安装位置调整）
+sudo ldconfig /opt/MVS/lib/64
+sudo ldconfig /usr/lib/x86_64-linux-gnu/
+sudo ldconfig /usr/local/lib/
+sudo ldconfig $$PWD/../onnxruntime-linux-aarch64-1.23.2/lib/  # ONNX Runtime 库路径
 ```
 
-### 2. 配置项目
-```bash
-# 克隆项目
-git clone https://gitee.com/kooki3/visual-robot.git
-cd visual-robot
+### 2. 修改部署配置文件
+
+#### hardware_config.json
+修改硬件配置文件中的相机和硬件参数，默认基于Orange Pi 5系列。
+
+#### VisualRobot.pro
+修改项目配置文件中的库路径，默认配置适用于Orange Pi 5系列：
+
+```cpp
+# Orange Pi 5 系列默认配置
+INCLUDEPATH += /opt/MVS/include
+INCLUDEPATH += /usr/include/opencv4
+INCLUDEPATH += $$PWD/../onnxruntime-linux-aarch64-1.23.2/include
+
+LIBS += -L/opt/MVS/lib/64/ -lMvCameraControl -lMvUsb3vTL
+LIBS += -L/usr/lib/aarch64-linux-gnu/ -lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_imgcodecs -lopencv_features2d -lopencv_calib3d -lopencv_ml -lopencv_dnn
+LIBS += -L$$PWD/../onnxruntime-linux-aarch64-1.23.2/lib/ -lonnxruntime -lonnxruntime_providers_shared
 ```
+
+#### 其他硬件平台配置参考
+
+对于不同硬件平台，需要调整对应的库路径和架构设置：
+
+- **x86_64 平台**：
+  ```cpp
+  LIBS += -L/opt/MVS/lib/64/ -lMvCameraControl -lMvGigEVTL
+  INCLUDEPATH += /usr/include/onnxruntime
+  LIBS += -L/usr/lib/x86_64-linux-gnu/ -lonnxruntime
+  ```
+
+- **其他 ARM 平台**：
+  ```cpp
+  INCLUDEPATH += /path/to/cross/compiled/opencv/include
+  LIBS += -L/path/to/cross/compiled/opencv/lib/ -lopencv_core -lopencv_imgproc -lopencv_highgui
+  ```
+
+### 3. 项目文件准备
+
+在桌面新建 `VisualRobot_Local` 文件夹，并将 git 得到的 `VisualRobot` 主文件夹中含 `VisualRobot` 子文件夹等在内多个文件、文件夹完整复制粘贴到 `VisualRobot_Local` 文件夹中。
 
 ## 🚀 编译与运行
 
-### 使用 Qt Creator
+### 命令行编译与安装
+
+在 `VisualRobot_Local` 目录中打开终端，执行以下命令：
+
+```bash
+# 设置脚本执行权限并编译
+chmod +x install.sh && cd VisualRobot && qmake && make clean && make
+```
+
+### 运行程序
+
+编译完成后，在 `VisualRobot` 目录中执行以下命令运行软件：
+
+```bash
+./VisualRobot
+```
+
+### 使用 Qt Creator (可选)
 1. 使用 Qt Creator 打开 `VisualRobot/VisualRobot.pro`
 2. 配置编译选项和依赖库路径
 3. 编译项目
 4. 运行程序
-
-### 命令行编译
-```bash
-# 生成构建文件
-qmake VisualRobot/VisualRobot.pro
-# 编译
-make
-# 运行
-./VisualRobot
-```
 
 ## 🧪 测试功能
 
@@ -504,6 +546,6 @@ yoloProcessor.DrawDetectionResults(resultImage, results);
 
 ---
 
-**最后更新日期：2025年12月02日**
+**最后更新日期：2025年12月09日**
 
 **项目仓库：https://gitee.com/visual-team-arcuchi/VisualRobot.git**
