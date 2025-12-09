@@ -161,7 +161,7 @@ QString ConfigManager::getModelPath() const
 QString ConfigManager::getLabelPath() const
 {
     QJsonObject paths = currentConfig_.value("paths").toObject();
-    return paths.value("labels").toString("../Data/Labels");
+    return paths.value("labels").toString("../labels");
 }
 
 QString ConfigManager::getImagePath() const
