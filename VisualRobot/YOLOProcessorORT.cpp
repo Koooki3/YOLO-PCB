@@ -12,6 +12,8 @@
 
 using namespace std;
 
+#include "configmanager.h"
+
 /**
  * @brief YOLOProcessorORT构造函数
  * @param parent 父对象指针
@@ -31,21 +33,62 @@ YOLOProcessorORT::YOLOProcessorORT(QObject* parent)
     , letterbox_dw_(0.0)  // 宽度方向填充，初始化为0.0
     , letterbox_dh_(0.0)  // 高度方向填充，初始化为0.0
 {
-    // 根据嵌入式设备特点调整的配置
-    sessionOptions_.SetIntraOpNumThreads(4);
-    sessionOptions_.SetInterOpNumThreads(1);
+    // 从配置管理器获取优化参数
+    ConfigManager* config = ConfigManager::instance();
+    
+    // 设置线程数
+    sessionOptions_.SetIntraOpNumThreads(config->getIntraOpNumThreads());
+    sessionOptions_.SetInterOpNumThreads(config->getInterOpNumThreads());
 
-    // 根据内存情况选择：
-    // 如果内存紧张，禁用Arena分配器
-    // sessionOptions_.DisableCpuMemArena(); // 减少内存使用
-    // 如果内存充足，启用Arena分配器以提升性能
-    sessionOptions_.EnableCpuMemArena();
+    // 设置内存管理
+    if (config->getEnableCpuMemArena())
+    {
+        sessionOptions_.EnableCpuMemArena();
+    }
+    else
+    {
+        sessionOptions_.DisableCpuMemArena();
+    }
 
-    sessionOptions_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_EXTENDED);
-    sessionOptions_.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
+    // 设置图优化级别
+    QString graphOptLevel = config->getGraphOptimizationLevel();
+    if (graphOptLevel == "ORT_ENABLE_ALL")
+    {
+        sessionOptions_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+    }
+    else if (graphOptLevel == "ORT_ENABLE_EXTENDED")
+    {
+        sessionOptions_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_EXTENDED);
+    }
+    else if (graphOptLevel == "ORT_ENABLE_BASIC")
+    {
+        sessionOptions_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_BASIC);
+    }
+    else
+    {
+        sessionOptions_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_DISABLE_ALL);
+    }
+    
+    // 设置执行模式
+    QString execMode = config->getExecutionMode();
+    if (execMode == "ORT_PARALLEL")
+    {
+        sessionOptions_.SetExecutionMode(ExecutionMode::ORT_PARALLEL);
+    }
+    else
+    {
+        sessionOptions_.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
+    }
 
-    // 如果输入尺寸固定，启用内存模式优化
-    sessionOptions_.EnableMemPattern();
+    // 设置内存模式优化
+    if (config->getEnableMemPattern())
+    {
+        sessionOptions_.EnableMemPattern();
+    }
+    else
+    {
+        sessionOptions_.DisableMemPattern();
+    }
 
     // 可选：启用profiling（仅用于调试）
     // sessionOptions_.EnableProfiling("profile.json");
@@ -80,10 +123,15 @@ bool YOLOProcessorORT::InitModel(const string& modelPath, bool useCUDA)
 {
     try 
     {   
-        // 配置OpenCL参数
-        sessionOptions_.AddConfigEntry("session.enable_opencl","1");
-        sessionOptions_.AddConfigEntry("opencl_device_id", "0");  // 使用第一个OpenCL设备
-        sessionOptions_.AddConfigEntry("opencl_mem_limit", "4096");  // 4GB内存限制
+        // 从配置管理器获取加速选项
+        ConfigManager* config = ConfigManager::instance();
+        if (config->isAcceleratorEnabled("opencl")) {
+            sessionOptions_.AddConfigEntry("session.enable_opencl","1");
+            sessionOptions_.AddConfigEntry("opencl_device_id", "0");  // 使用第一个OpenCL设备
+            sessionOptions_.AddConfigEntry("opencl_mem_limit", "4096");  // 4GB内存限制
+        } else {
+            sessionOptions_.AddConfigEntry("session.enable_opencl","0");
+        }
         
         session_ = std::make_unique<Ort::Session>(env_, modelPath.c_str(), sessionOptions_);
         return true;

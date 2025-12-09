@@ -31,10 +31,10 @@ YOLOExample::YOLOExample(QWidget *parent)
     SetupUI();      // 设置UI界面
     ConnectSignals(); // 连接信号和槽
     
-    // 固定模型路径
-    QString modelPath = "../models/arcuchi2.onnx";
-    // 固定标签路径
-    QString labelPath = "../Data/Labels/class_labels.txt";
+    // 从配置管理器获取路径
+    ConfigManager* config = ConfigManager::instance();
+    QString modelPath = config->getModelPath() + "/arcuchi2.onnx";
+    QString labelPath = config->getLabelPath() + "/class_labels.txt";
     
     // 加载模型
     bool modelOk = yoloProcessor_->InitModel(modelPath.toStdString(), false);
