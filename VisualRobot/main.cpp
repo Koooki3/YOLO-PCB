@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "featureDetect.h"
+#include "configmanager.h"
 #include <QApplication>
 #include <QTranslator>
 #include <QLocale>
@@ -23,6 +24,14 @@ int main(int argc, char *argv[])
         translator.load(QString("VisualRobot_zh_EN.qm")); //ch:选择翻译文件 | en:Choose the translation file
         a.installTranslator(&translator);
     }
+
+    // 初始化配置管理器
+    if (!ConfigManager::instance()->init())
+    {
+        qCritical() << "Failed to initialize config manager!";
+        return -1;
+    }
+    qDebug() << "Config manager initialized successfully. Current config:" << ConfigManager::instance()->getCurrentConfigName();
 
     // 优先从资源加载样式表（打包情况），若资源不可用则回退到可执行目录下的 style.qss 文件
     QString resourcePath = ":/style/style.qss";
