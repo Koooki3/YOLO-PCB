@@ -7,6 +7,8 @@
 #include <QFile>
 #include <QDir>
 #include <QDebug>
+#include <QJsonArray>
+#include <QJsonValue>
 
 class ConfigManager : public QObject
 {
