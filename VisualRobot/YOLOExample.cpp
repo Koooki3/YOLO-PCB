@@ -30,7 +30,56 @@ YOLOExample::YOLOExample(QWidget *parent)
 {
     SetupUI();      // 设置UI界面
     ConnectSignals(); // 连接信号和槽
-}
+    
+    // 固定模型路径
+    QString modelPath = "../models/arcuchi2.onnx";
+    // 固定标签路径
+    QString labelPath = "../Data/Labels/class_labels.txt";
+    
+    // 加载模型
+    bool modelOk = yoloProcessor_->InitModel(modelPath.toStdString(), false);
+    if (modelOk)
+    {
+        statusLabel_->setText("状态: 模型已加载");
+    }
+    else
+    {
+        statusLabel_->setText("状态: 模型加载失败");
+        return;
+    }
+    
+    // 加载标签
+    QFile f(labelPath);
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        QStringList labels;
+        while (!f.atEnd())
+        {
+            QByteArray line = f.readLine();
+            QString s = QString::fromUtf8(line).trimmed();
+            if (!s.isEmpty())
+            {
+                labels.append(s);
+            }
+        }
+        f.close();
+        
+        // 保存标签并传递给处理器
+        currentClassLabels_ = labels;
+        vector<string> cls;
+        cls.reserve(labels.size());
+        for (const QString &qs : labels)
+        {
+            cls.push_back(qs.toStdString());
+        }
+        yoloProcessor_->SetClassLabels(cls);
+        
+        statusLabel_->setText(QString("状态: 模型和标签已加载，共 %1 类").arg(labels.size()));
+    }
+    else
+    {
+        statusLabel_->setText("状态: 模型已加载，但标签加载失败");
+    }
 
 /**
  * @brief YOLOExample析构函数
@@ -52,38 +101,7 @@ void YOLOExample::SetupUI()
 
     QVBoxLayout* mainLayout = new QVBoxLayout(this);  // 主布局
 
-    // 模型和标签文件选择布局
-    QHBoxLayout* modelLayout = new QHBoxLayout();
-    modelLayout->addWidget(new QLabel("YOLO ONNX 模型:"));
-    
-    // 模型路径编辑框
-    modelPathEdit_ = new QLineEdit();
-    modelPathEdit_->setPlaceholderText("选择 .onnx 模型文件");
-    modelLayout->addWidget(modelPathEdit_);
-    
-    // 浏览模型按钮
-    QPushButton* browseBtn = new QPushButton("浏览");
-    connect(browseBtn, &QPushButton::clicked, this, &YOLOExample::BrowseModel);
-    modelLayout->addWidget(browseBtn);
-    
-    // 加载模型按钮
-    QPushButton* loadBtn = new QPushButton("加载模型");
-    connect(loadBtn, &QPushButton::clicked, this, &YOLOExample::LoadModel);
-    modelLayout->addWidget(loadBtn);
-    
-    // 标签文件加载
-    modelLayout->addWidget(new QLabel("标签文件:"));
-    labelPathEdit_ = new QLineEdit();
-    labelPathEdit_->setPlaceholderText("Data/Labels/class_labels.txt");
-    modelLayout->addWidget(labelPathEdit_);
-    
-    // 加载标签按钮
-    QPushButton* browseLabelBtn = new QPushButton("加载标签");
-    connect(browseLabelBtn, &QPushButton::clicked, this, &YOLOExample::LoadLabels);
-    modelLayout->addWidget(browseLabelBtn);
-    mainLayout->addLayout(modelLayout);
-
-    // 图像选择和检测按钮布局
+    // 图像选择和置信度设置布局
     QHBoxLayout* imgLayout = new QHBoxLayout();
     
     // 选择图像按钮
@@ -91,22 +109,14 @@ void YOLOExample::SetupUI()
     connect(selImg, &QPushButton::clicked, this, &YOLOExample::SelectImage);
     imgLayout->addWidget(selImg);
     
-    // 开始检测按钮
-    detectBtn_ = new QPushButton("开始检测");
-    connect(detectBtn_, &QPushButton::clicked, this, &YOLOExample::RunDetect);
-    imgLayout->addWidget(detectBtn_);
-    
     // 置信度阈值设置
     imgLayout->addWidget(new QLabel("置信度阈值 (%):"));
     confidenceEdit_ = new QLineEdit("50.0");
     confidenceEdit_->setPlaceholderText("0-100");
     confidenceEdit_->setValidator(new QDoubleValidator(0.0, 100.0, 2, this));
+    // 置信度编辑框内容改变时自动更新并检测
+    connect(confidenceEdit_, &QLineEdit::editingFinished, this, &YOLOExample::UpdateConfidenceThreshold);
     imgLayout->addWidget(confidenceEdit_);
-    
-    // 更新置信度阈值按钮
-    QPushButton* updateConfBtn = new QPushButton("更新置信度阈值");
-    connect(updateConfBtn, &QPushButton::clicked, this, &YOLOExample::UpdateConfidenceThreshold);
-    imgLayout->addWidget(updateConfBtn);
     
     imgLayout->addStretch();
     mainLayout->addLayout(imgLayout);
@@ -239,13 +249,9 @@ void YOLOExample::SelectImage()
     if (!file.isEmpty()) 
     {
         currentImagePath_ = file;
-        QPixmap pm(file);
-        if (!pm.isNull()) 
-        {
-            // 缩放图像以适应显示区域
-            QPixmap scaled = pm.scaled(imageLabel_->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
-            imageLabel_->setPixmap(scaled);
-        }
+        
+        // 选择图片后自动进行检测
+        RunDetect();
     }
 }
 
