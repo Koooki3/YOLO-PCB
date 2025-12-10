@@ -252,7 +252,7 @@ void YOLOExample::RunDetect()
     }
 
     // 显示检测结果
-    QPixmap pm = QPixmap::fromImage(QImage(out.data, out.cols, out.rows, out.step, QImage::Format_BGR888).rgbSwapped());
+    QPixmap pm = QPixmap::fromImage(QImage(out.data, out.cols, out.rows, out.step, QImage::Format_RGB888).rgbSwapped());
     if (!pm.isNull()) 
     {
         imageLabel_->setPixmap(pm.scaled(imageLabel_->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
@@ -271,7 +271,7 @@ void YOLOExample::RunDetect()
 void YOLOExample::OnProcessingComplete(const cv::Mat& resultImage)
 {
     Mat out = resultImage.clone();
-    QPixmap pm = QPixmap::fromImage(QImage(out.data, out.cols, out.rows, out.step, QImage::Format_BGR888).rgbSwapped());
+    QPixmap pm = QPixmap::fromImage(QImage(out.data, out.cols, out.rows, out.step, QImage::Format_RGB888).rgbSwapped());
     if (!pm.isNull()) 
     {
         imageLabel_->setPixmap(pm.scaled(imageLabel_->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));

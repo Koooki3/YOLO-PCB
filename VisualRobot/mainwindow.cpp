@@ -1661,7 +1661,16 @@ void MainWindow::DrawOverlayOnDisplay2(double length, double width, double angle
     QRect boxRect;                  // 框矩形区域
 
     // 使用value方式获取pixmap
-    src = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue);
+    const QPixmap* pixmapPtr = ui->widgetDisplay_2->pixmap();
+    if (pixmapPtr)
+    {
+        src = *pixmapPtr;  // 解引用获取 QPixmap 对象
+    }
+    else
+    {
+        src = QPixmap();  // 或者处理空指针情况
+    }
+
     if (src.isNull()) 
     {
         AppendLog("没有可叠加的图像 (widgetDisplay_2 为空) ", WARNNING);
@@ -1926,7 +1935,15 @@ void MainWindow::HandleMouseClickOnDisplay2(const QPoint& pos)
     // 保存原始图片 (如果尚未保存) 
     if (!m_isImageLoaded) 
     {
-        m_originalPixmap = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue);
+        const QPixmap* pixmapPtr = ui->widgetDisplay_2->pixmap();
+        if (pixmapPtr)
+        {
+            m_originalPixmap = *pixmapPtr;  // 解引用
+        }
+        else
+        {
+            m_originalPixmap = QPixmap();  // 或者处理空指针情况
+        }
         m_isImageLoaded = true;
     }
     
@@ -1997,7 +2014,15 @@ QPoint MainWindow::ConvertToImageCoordinates(const QPoint& widgetPoint)
     originalSize = m_originalPixmap.size();
     if (originalSize.isEmpty()) 
     {
-        originalSize = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue).size();
+        const QPixmap* pixmapPtr = ui->widgetDisplay_2->pixmap();
+        if (pixmapPtr && !pixmapPtr->isNull())
+        {
+            originalSize = pixmapPtr->size();  // 直接通过指针调用 size()
+        }
+        else
+        {
+            originalSize = QSize();  // 或者处理空指针情况
+        }
     }
     
     // 获取控件尺寸
@@ -2447,7 +2472,15 @@ void MainWindow::HandleMousePressOnDisplay2(const QPoint& pos)
     // 保存原始图片（如果尚未保存）
     if (!m_isImageLoaded) 
     {
-        m_originalPixmap = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue);
+        const QPixmap* pixmapPtr = ui->widgetDisplay_2->pixmap();
+        if (pixmapPtr)
+        {
+            m_originalPixmap = *pixmapPtr;  // 解引用
+        }
+        else
+        {
+            m_originalPixmap = QPixmap();  // 或者处理空指针情况
+        }
         m_isImageLoaded = true;
     }
     
@@ -3140,10 +3173,10 @@ void MainWindow::on_detect_clicked()
 
         // 绘制检测结果
         Mat resultImage = testImage.clone();
-        for (size_t i = 0; i < boxes.size(); i++) 
-        {
-            Rect rect = boxes[i];
-        }
+//        for (size_t i = 0; i < boxes.size(); i++)
+//        {
+//            Rect rect = boxes[i];
+//        }
 
         // 保存结果图像
         imwrite("../Img/detection_result.jpg", resultImage);
@@ -3204,7 +3237,7 @@ void MainWindow::autoEnumDevices()
     }
     
     // 检查设备数量是否变化
-    if (stDevList.nDeviceNum != m_lastDeviceCount)
+    if (m_lastDeviceCount < 0 || stDevList.nDeviceNum != static_cast<unsigned int>(m_lastDeviceCount))
     {
         // 设备数量变化，更新设备列表
         AppendLog(QString("设备数量变化: %1 -> %2，自动更新设备列表").arg(m_lastDeviceCount).arg(stDevList.nDeviceNum), INFO);
