@@ -2706,11 +2706,11 @@ bool MainWindow::GrabLastFrameBGR(Mat& outBGR)
     memset(&stConvertParam, 0, sizeof(MV_CC_PIXEL_CONVERT_PARAM));
     stConvertParam.nWidth       = info.nWidth;
     stConvertParam.nHeight      = info.nHeight;
-    stConvertParam.pSrcBits     = frameCopy.data();
-    stConvertParam.nSrcLen      = info.nFrameLen;
+    stConvertParam.pSrcData     = frameCopy.data();
+    stConvertParam.nSrcDataLen  = info.nFrameLen;
     stConvertParam.enSrcPixelType = info.enPixelType;
     stConvertParam.enDstPixelType = PixelType_Gvsp_BGR8_Packed;  // 目标BGR8格式
-    stConvertParam.pDstBits     = pBGR.get();
+    stConvertParam.pDstBuffer   = pBGR.get();
     stConvertParam.nDstLen      = bgrSize;
 
     // 执行像素转换
