@@ -218,36 +218,48 @@ vector<KeyPoint> DataProcessor::DetectKeypoints(const Mat& input, Mat& descripto
     // 定义局部变量
     vector<KeyPoint> keypoints;  // 检测到的关键点集合
 
-    try {
+    try 
+    {
         // 根据当前选择的特征提取器类型进行检测
         if (currentFeatureType_ == FeatureType::ORB)
         {
-            if (orbDetector_) {
+            if (orbDetector_) 
+            {
                 // 使用ORB检测器检测关键点并计算描述符
                 orbDetector_->detectAndCompute(input, Mat(), keypoints, descriptors);
-            } else {
+            } 
+            else 
+            {
                 qDebug() << "错误: ORB检测器未初始化";
             }
         }
         else if (currentFeatureType_ == FeatureType::AKAZE)
         {
-            if (akazeDetector_) {
+            if (akazeDetector_) 
+            {
                 // 使用AKAZE检测器检测关键点并计算描述符
                 akazeDetector_->detectAndCompute(input, Mat(), keypoints, descriptors);
-            } else {
+            } 
+            else 
+            {
                 qDebug() << "错误: AKAZE检测器未初始化";
             }
         }
         else
         {
-            if (siftDetector_) {
+            if (siftDetector_) 
+            {
                 // 默认使用SIFT检测器
                 siftDetector_->detectAndCompute(input, Mat(), keypoints, descriptors);
-            } else {
+            } 
+            else 
+            {
                 qDebug() << "错误: SIFT检测器未初始化";
             }
         }
-    } catch (const cv::Exception& e) {
+    } 
+    catch (const cv::Exception& e) 
+    {
         qDebug() << "特征提取过程中发生异常:" << e.what();
         // 清空返回值，避免使用无效数据
         keypoints.clear();
@@ -511,5 +523,3 @@ int DataProcessor::RandomInt(int min, int max)
     // 生成随机整数
     return dist(rng_);
 }
-
-

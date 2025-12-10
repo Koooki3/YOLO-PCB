@@ -1066,8 +1066,7 @@ bool DefectDetection::ComputeHomographyWithFeatureAlignment(const cv::Mat& curre
     // 返回变换矩阵
     homography = result.transformMatrix;
     
-    qDebug() << "特征对齐成功 - 内点数量:" << result.inlierCount 
-             << "重投影误差:" << result.reprojectionError;
+    qDebug() << "特征对齐成功 - 内点数量:" << result.inlierCount << "重投影误差:" << result.reprojectionError;
     
     return true;
 }
