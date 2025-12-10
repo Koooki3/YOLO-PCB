@@ -1,4 +1,4 @@
-/************************************************************************/
+﻿/************************************************************************/
 /* 提供基于OpenCV和Eigen的坐标变换矩阵创建、计算、保存、读取支持和现有待测物体边缘检测和拟合算法支持 */
 /************************************************************************/
 
@@ -28,7 +28,8 @@ struct Params
     int thresh = 127;     ///< 二值化阈值，默认127
     int maxval = 255;     ///< 二值化最大值，默认255
     int blurK = 5;        ///< 模糊核大小，默认5
-    double areaMin = 100.0; ///< 最小轮廓面积，默认100.0
+    double areaMin = 8000.0; ///< 最小轮廓面积，默认5000.0
+    int mergeRadius = 8;    // 你新增的参数
 };
 
 /**
@@ -92,5 +93,12 @@ Result CalculateLength(const Mat& input, const Params& params, double bias);
  * @return 包含所有检测到物体的宽度、高度、角度和处理后图像的结果结构体
  */
 Result CalculateLengthMultiTarget(const Mat& input, const Params& params, double bias);
+
+/**
+ * @brief 使用PCA主轴方向计算点集的有向包围盒(OBB)，用于替代minAreaRect以获得更符合“主轴/最长方向”的旋转框
+ * @param pts 输入点集（通常是某个连通域/轮廓的像素点）
+ * @return PCA主轴对齐的旋转矩形
+ */
+RotatedRect GetOBBByPCA(const vector<Point>& pts);
 
 #endif // DIP_H
