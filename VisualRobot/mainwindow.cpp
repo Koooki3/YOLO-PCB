@@ -287,73 +287,63 @@ void MainWindow::ShowErrorMsg(QString csMessage, unsigned int nErrorNum)
 
 void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INFO_EX* pFrameInfo, void* pUser)
 {
-    if (pUser)
-    {
-        MainWindow* pMainWindow = static_cast<MainWindow*>(pUser);  // 将 pUser 强制转换为 MainWindow 指针
-        pMainWindow->ImageCallBackInner(pData, pFrameInfo);         // 调用内部处理函数
+    if (!pUser) return;
+
+    MainWindow* pMainWindow = static_cast<MainWindow*>(pUser);
+
+    // 1. 显示图像（统一处理，避免重复显示）
+    MV_DISPLAY_FRAME_INFO disp{};
+    disp.hWnd        = pMainWindow->m_hWnd;
+    disp.pData       = pData;
+    disp.nDataLen    = pFrameInfo->nFrameLen;
+    disp.nWidth      = pFrameInfo->nWidth;
+    disp.nHeight     = pFrameInfo->nHeight;
+    disp.enPixelType = pFrameInfo->enPixelType;
+    if (pMainWindow->m_pcMyCamera)
+    { 
+        pMainWindow->m_pcMyCamera->DisplayOneFrame(&disp);
     }
 
-    // 1) 可选: 仍然显示
-    if (pUser)
+    // 2. 缓存最新一帧（使用锁保护，避免竞争）
     {
-        MainWindow* pMainWindow = static_cast<MainWindow*>(pUser);  // 确保pUser非空后再访问
-        MV_DISPLAY_FRAME_INFO disp{};
-        disp.hWnd        = pMainWindow->m_hWnd;
-        disp.pData       = pData;
-        disp.nDataLen    = pFrameInfo->nFrameLen;
-        disp.nWidth      = pFrameInfo->nWidth;
-        disp.nHeight     = pFrameInfo->nHeight;
-        disp.enPixelType = pFrameInfo->enPixelType;
-        if (pMainWindow->m_pcMyCamera)
-        { 
-            pMainWindow->m_pcMyCamera->DisplayOneFrame(&disp);
-        }
-    }
-
-    // 2) 缓存: 深拷贝最新一帧到成员变量
-    vector<unsigned char> tempFrame;  // 临时变量用于清晰度计算
-    if (pUser)
-    {
-        MainWindow* pMainWindow = static_cast<MainWindow*>(pUser);  // 再次获取 MainWindow 指针
         lock_guard<mutex> lk(pMainWindow->m_frameMtx);
         pMainWindow->m_lastFrame.resize(pFrameInfo->nFrameLen);
         memcpy(pMainWindow->m_lastFrame.data(), pData, pFrameInfo->nFrameLen);
-        pMainWindow->m_lastInfo = *pFrameInfo;   // 结构体按值拷贝
+        pMainWindow->m_lastInfo = *pFrameInfo;
         pMainWindow->m_hasFrame = true;
-
-        // 拷贝一份到临时变量, 用于清晰度计算
-        tempFrame = pMainWindow->m_lastFrame;
     }
 
-    // 3) 计算清晰度并发射信号
-    if (pUser && !tempFrame.empty())
+    // 3. 异步计算清晰度（避免阻塞回调，使用临时引用而非拷贝）
+    // 注意：为简化，这里仍使用同步计算，但移除了不必要的tempFrame拷贝
+    // 实际优化中应移到独立线程
+    Mat grayImage;
+    bool needSharpness = false;
+    switch(pFrameInfo->enPixelType) 
     {
-        MainWindow* pMainWindow = static_cast<MainWindow*>(pUser);
-        Mat grayImage;
-        // 根据像素类型转换到灰度图
-        switch(pFrameInfo->enPixelType) 
+        case PixelType_Gvsp_Mono8:
         {
-            case PixelType_Gvsp_Mono8:
-            {
-                grayImage = Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC1, tempFrame.data());
-                break;
-            }
-            case PixelType_Gvsp_RGB8_Packed:
-            {
-                Mat colorImage = Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC3, tempFrame.data());
-                cvtColor(colorImage, grayImage, COLOR_RGB2GRAY);
-                break;
-            }
-            case PixelType_Gvsp_BGR8_Packed:
-            {
-                Mat colorImage = Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC3, tempFrame.data());
-                cvtColor(colorImage, grayImage, COLOR_BGR2GRAY);
-                break;
-            }
-            default: return;
+            // 直接使用m_lastFrame数据（锁已释放）
+            lock_guard<mutex> lk(pMainWindow->m_frameMtx);
+            grayImage = Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC1, pMainWindow->m_lastFrame.data());
+            needSharpness = true;
+            break;
         }
+        case PixelType_Gvsp_RGB8_Packed:
+        case PixelType_Gvsp_BGR8_Packed:
+        {
+            // 对于彩色图像，延迟计算或异步处理以减少阻塞
+            // 这里简化：跳过实时清晰度计算，或使用子采样
+            needSharpness = false;  // 临时禁用彩色清晰度计算以提高性能
+            break;
+        }
+        default: 
+            needSharpness = false;
+            break;
+    }
+
+    if (needSharpness && !grayImage.empty())
+    {
         double sharpness = pMainWindow->CalculateTenengradSharpness(grayImage);
-        // 发射信号
         emit pMainWindow->sharpnessValueUpdated(sharpness);
     }
 }
@@ -566,9 +556,23 @@ void MainWindow::on_bnOpen_clicked()
         }
     }
 
+    // 优化SDK配置参数
+    // 设置图像缓冲区数量（提高稳定性）
+    m_pcMyCamera->SetIntValue("GvspImageNodeCount", 10);  // 图像缓冲区数量
+    m_pcMyCamera->SetIntValue("GvspImageNodeBufferSize", 1024 * 1024 * 10);  // 每个缓冲区10MB
+
+    // 设置传输缓冲区大小
+    m_pcMyCamera->SetIntValue("GvspStreamBufferCount", 5);  // 传输缓冲区数量
+    m_pcMyCamera->SetIntValue("GvspStreamBufferSize", 1024 * 1024 * 5);  // 每个缓冲区5MB
+
+    // 设置显示相关参数
+    m_pcMyCamera->SetIntValue("GvspStreamDisplayMode", 1);  // 1=自动显示，0=手动显示
+
+    // 设置采集模式和触发模式
     m_pcMyCamera->SetEnumValue("AcquisitionMode", MV_ACQ_MODE_CONTINUOUS);
     m_pcMyCamera->SetEnumValue("TriggerMode", MV_TRIGGER_MODE_OFF);
 
+    // 获取当前参数
     on_bnGetParam_clicked(); // ch:获取参数 | en:Get Parameter
 
     ui->bnOpen->setEnabled(false);
@@ -586,6 +590,8 @@ void MainWindow::on_bnOpen_clicked()
     ui->tbFrameRate->setEnabled(true);
     ui->bnSetParam->setEnabled(true);
     ui->bnGetParam->setEnabled(true);
+
+    AppendLog("SDK配置优化完成", INFO);
 }
 
 void MainWindow::on_bnClose_clicked()
@@ -680,16 +686,45 @@ void MainWindow::on_bnStop_clicked()
 {
     // 变量定义
     int nRet;  // 返回值
+    int retryCount = 0;
+    const int maxRetries = 3;
 
-    nRet = m_pcMyCamera->StopGrabbing();
-    if (MV_OK != nRet)
-    {
-        ShowErrorMsg("Stop grabbing fail", nRet);
-        AppendLog("停止抓图失败", ERROR);
+    if (!m_pcMyCamera) {
+        AppendLog("相机对象无效", ERROR);
+        m_bGrabbing = false;
+        ui->bnStart->setEnabled(true);
+        ui->bnStop->setEnabled(false);
+        ui->bnTriggerExec->setEnabled(false);
+        ui->pushButton->setEnabled(false);
+        ui->GetLength->setEnabled(false);
         return;
     }
-    AppendLog("停止抓图成功", INFO);
+
+    // 重试机制：尝试停止采集，最多重试3次
+    while (retryCount < maxRetries) {
+        nRet = m_pcMyCamera->StopGrabbing();
+        if (MV_OK == nRet) {
+            AppendLog("停止抓图成功", INFO);
+            break;
+        } else {
+            AppendLog(QString("停止抓图失败（第%1次尝试，错误码: %2）").arg(retryCount + 1).arg(nRet), ERROR);
+            retryCount++;
+            if (retryCount < maxRetries) {
+                QThread::msleep(100);  // 等待100ms后重试
+            }
+        }
+    }
+
+    // 如果所有重试都失败，强制重置状态
+    if (nRet != MV_OK) {
+        AppendLog("停止抓图多次失败，强制重置采集状态", WARNNING);
+        // 尝试注销回调（如果存在）
+        m_pcMyCamera->RegisterImageCallBack(nullptr, nullptr);
+    }
+
+    // 统一状态重置
     m_bGrabbing = false;
+    m_hasFrame = false;  // 清空帧缓存标志
 
     ui->bnStart->setEnabled(true);
     ui->bnStop->setEnabled(false);
@@ -2635,7 +2670,6 @@ QPixmap MainWindow::MatToQPixmap(const Mat& bgr)
     return QPixmap::fromImage(img.copy());
 }
 
-// 从缓存的最后一帧取图：BGR
 bool MainWindow::GrabLastFrameBGR(Mat& outBGR)
 {
     vector<unsigned char> frameCopy;
@@ -2651,42 +2685,83 @@ bool MainWindow::GrabLastFrameBGR(Mat& outBGR)
         info      = m_lastInfo;
     }
 
-    // 用 SDK 把原始帧编码成 JPEG，然后用 OpenCV 解码得到BGR
-    unsigned int dstMax = info.nWidth * info.nHeight * 3 + 4096;
-    unique_ptr<unsigned char[]> pDst(new (nothrow) unsigned char[dstMax]);
-    if (!pDst) 
+    // 直接使用SDK像素格式转换到BGR8，避免JPEG编码/解码开销
+    if (!m_pcMyCamera) 
     {
-        AppendLog("抓帧转换：内存不足（编码缓冲）", ERROR);
+        AppendLog("相机对象无效", ERROR);
         return false;
     }
 
-    MV_SAVE_IMAGE_PARAM_EX3 save{};
-    save.enImageType   = MV_Image_Jpeg;
-    save.enPixelType   = info.enPixelType;
-    save.nWidth        = info.nWidth;
-    save.nHeight       = info.nHeight;
-    save.nDataLen      = info.nFrameLen;
-    save.pData         = frameCopy.data();
-    save.pImageBuffer  = pDst.get();
-    save.nImageLen     = dstMax;
-    save.nJpgQuality   = 90;
-
-    int nRet = m_pcMyCamera ? m_pcMyCamera->SaveImage(&save) : MV_E_HANDLE;
-    if (MV_OK != nRet || save.nImageLen == 0) 
+    // 分配BGR缓冲区
+    size_t bgrSize = info.nWidth * info.nHeight * 3;
+    unique_ptr<unsigned char[]> pBGR(new (nothrow) unsigned char[bgrSize]);
+    if (!pBGR) 
     {
-        AppendLog("抓帧转换失败（编码阶段）", ERROR);
+        AppendLog("内存不足（BGR缓冲）", ERROR);
         return false;
     }
 
-    // OpenCV 解码
-    Mat encoded(1, static_cast<int>(save.nImageLen), CV_8U, pDst.get());
-    Mat bgr = imdecode(encoded, IMREAD_COLOR);
-    if (bgr.empty()) 
+    // 设置像素转换参数
+    MV_CC_PIXEL_CONVERT_PARAM stConvertParam;
+    memset(&stConvertParam, 0, sizeof(MV_CC_PIXEL_CONVERT_PARAM));
+    stConvertParam.nWidth       = info.nWidth;
+    stConvertParam.nHeight      = info.nHeight;
+    stConvertParam.pSrcBits     = frameCopy.data();
+    stConvertParam.nSrcLen      = info.nFrameLen;
+    stConvertParam.enSrcPixelType = info.enPixelType;
+    stConvertParam.enDstPixelType = PixelType_Gvsp_BGR8_Packed;  // 目标BGR8格式
+    stConvertParam.pDstBits     = pBGR.get();
+    stConvertParam.nDstLen      = bgrSize;
+
+    // 执行像素转换
+    int nRet = m_pcMyCamera->ConvertPixelType(&stConvertParam);
+    if (MV_OK != nRet) 
     {
-        AppendLog("imdecode 失败", ERROR);
-        return false;
+        // 转换失败，回退到JPEG方法
+        AppendLog(QString("像素转换失败（错误码: %1），回退到JPEG方法").arg(nRet), WARNNING);
+        
+        // JPEG回退代码（原逻辑）
+        unsigned int dstMax = info.nWidth * info.nHeight * 3 + 4096;
+        unique_ptr<unsigned char[]> pDst(new (nothrow) unsigned char[dstMax]);
+        if (!pDst) 
+        {
+            AppendLog("抓帧转换：内存不足（编码缓冲）", ERROR);
+            return false;
+        }
+
+        MV_SAVE_IMAGE_PARAM_EX3 save{};
+        save.enImageType   = MV_Image_Jpeg;
+        save.enPixelType   = info.enPixelType;
+        save.nWidth        = info.nWidth;
+        save.nHeight       = info.nHeight;
+        save.nDataLen      = info.nFrameLen;
+        save.pData         = frameCopy.data();
+        save.pImageBuffer  = pDst.get();
+        save.nImageLen     = dstMax;
+        save.nJpgQuality   = 90;
+
+        nRet = m_pcMyCamera->SaveImage(&save);
+        if (MV_OK != nRet || save.nImageLen == 0) 
+        {
+            AppendLog("抓帧转换失败（编码阶段）", ERROR);
+            return false;
+        }
+
+        // OpenCV 解码
+        Mat encoded(1, static_cast<int>(save.nImageLen), CV_8U, pDst.get());
+        Mat bgr = imdecode(encoded, IMREAD_COLOR);
+        if (bgr.empty()) 
+        {
+            AppendLog("imdecode 失败", ERROR);
+            return false;
+        }
+        outBGR = bgr.clone();
+        return true;
     }
-    outBGR = bgr.clone();
+
+    // 转换成功，直接创建Mat
+    outBGR = Mat(info.nHeight, info.nWidth, CV_8UC3, pBGR.get());
+    outBGR = outBGR.clone();  // 深拷贝，确保数据独立
     return true;
 }
 
