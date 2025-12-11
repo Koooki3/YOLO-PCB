@@ -171,7 +171,7 @@ private:
     bool m_newFrameAvailable;
 
     // 图像缓存优化相关
-    size_t m_maxFrameSize = 10 * 1024 * 1024;  // 最大帧缓存大小 10MB
+    size_t m_maxFrameSize = 20 * 1024 * 1024;  // 最大帧缓存大小 20MB
     size_t m_expectedFrameSize = 0;             // 预期帧大小
 
     // 定时器安全相关

@@ -335,7 +335,7 @@ void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INF
 
         // 图像缓存清理检查
         if (pMainWindow->m_lastFrame.size() > pMainWindow->m_maxFrameSize) {
-            AppendLog(QString("图像缓存超过限制 (%1 > %2 字节)，可能内存问题").arg(pMainWindow->m_lastFrame.size()).arg(pMainWindow->m_maxFrameSize), ERROR);
+            pMainWindow->AppendLog(QString("图像缓存超过限制 (%1 > %2 字节)，可能内存问题").arg(pMainWindow->m_lastFrame.size()).arg(pMainWindow->m_maxFrameSize), ERROR);
             // 清空旧缓存，避免持续增长
             pMainWindow->m_lastFrame.clear();
             pMainWindow->m_hasFrame = false;
@@ -647,7 +647,7 @@ void MainWindow::on_bnOpen_clicked()
     }
 
     // 计算预期帧大小并预分配缓存
-    MVCC_INTVALUE stWidth, stHeight;
+    MVCC_INTVALUE_EX stWidth, stHeight;
     MVCC_ENUMVALUE stPixelFormat;
     nRet = m_pcMyCamera->GetIntValue("Width", &stWidth);
     if (MV_OK != nRet) {
