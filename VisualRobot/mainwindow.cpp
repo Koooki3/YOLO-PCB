@@ -75,6 +75,7 @@ MainWindow::MainWindow(QWidget *parent) :
     m_pcMyCamera = NULL;
     m_bGrabbing = false;
     m_hWnd = (void*)ui->widgetDisplay->winId();
+    m_isTriggerMode = false;  // 初始化触发模式标志
 
     // 初始化设备热拔插自动枚举相关变量
     m_deviceEnumTimer = new QTimer(this);
@@ -119,6 +120,14 @@ MainWindow::MainWindow(QWidget *parent) :
     // 初始化YOLO统计信息定时器，每1分钟触发一次
     m_yoloStatsTimer = new QTimer(this);
     connect(m_yoloStatsTimer, &QTimer::timeout, this, &MainWindow::UpdateYoloStats);
+
+    // 初始化间歇软触发定时器
+    m_softTriggerTimer = new QTimer(this);
+    m_softTriggerEnabled = false;
+    connect(m_softTriggerTimer, &QTimer::timeout, this, &MainWindow::onSoftTriggerTimeout);
+
+    // 初始化新帧等待相关
+    m_newFrameAvailable = false;
 
     // 加载缺陷分类模板库
     if (m_defectDetection->LoadTemplateLibrary("../Img/Templates"))
@@ -172,6 +181,9 @@ MainWindow::MainWindow(QWidget *parent) :
     // 初始时执行一次设备枚举
     on_bnEnum_clicked();
 }
+
+
+
 
 MainWindow::~MainWindow()
 {
@@ -323,6 +335,13 @@ void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INF
 
         // 拷贝一份到临时变量, 用于清晰度计算
         tempFrame = pMainWindow->m_lastFrame;
+
+        // 如果是触发模式，通知新帧可用
+        if (pMainWindow->m_isTriggerMode) {
+            QMutexLocker locker(&pMainWindow->m_newFrameMutex);
+            pMainWindow->m_newFrameAvailable = true;
+            pMainWindow->m_newFrameCondition.wakeAll();
+        }
     }
 
     // 3) 计算清晰度并发射信号
@@ -357,6 +376,7 @@ void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INF
         emit pMainWindow->sharpnessValueUpdated(sharpness);
     }
 }
+
 
 void MainWindow::ImageCallBackInner(unsigned char * pData, MV_FRAME_OUT_INFO_EX* pFrameInfo)
 {
@@ -623,9 +643,11 @@ void MainWindow::on_bnContinuesMode_clicked()
         m_pcMyCamera->SetEnumValue("TriggerMode", MV_TRIGGER_MODE_OFF);
         ui->cbSoftTrigger->setEnabled(false);
         ui->bnTriggerExec->setEnabled(false);
+        m_isTriggerMode = false;  // 切换到连续模式
     }
     AppendLog("连续模式已开启", INFO);
 }
+
 
 void MainWindow::on_bnTriggerMode_clicked()
 {
@@ -645,9 +667,11 @@ void MainWindow::on_bnTriggerMode_clicked()
             m_pcMyCamera->SetEnumValue("TriggerSource", MV_TRIGGER_SOURCE_LINE0);
         }
         ui->cbSoftTrigger->setEnabled(true);
+        m_isTriggerMode = true;  // 设置触发模式标志
     }
     AppendLog("触发模式已开启", INFO);
 }
+
 
 void MainWindow::on_bnStart_clicked()
 {
@@ -708,12 +732,44 @@ void MainWindow::on_cbSoftTrigger_clicked()
             ui->bnTriggerExec->setEnabled(true);
             AppendLog("软件触发已开启", INFO);
         }
+
+        // 启用间歇软触发，每0.5秒触发一次
+        m_softTriggerEnabled = true;
+        m_softTriggerTimer->start(500); // 500ms间隔
+        AppendLog("间歇软触发已启用，每0.5秒自动触发", INFO);
     }
     else
     {
         m_pcMyCamera->SetEnumValue("TriggerSource", MV_TRIGGER_SOURCE_LINE0);
         AppendLog("软件触发已关闭", INFO);
         ui->bnTriggerExec->setEnabled(false);
+
+        // 禁用间歇软触发
+        m_softTriggerEnabled = false;
+        m_softTriggerTimer->stop();
+        AppendLog("间歇软触发已禁用", INFO);
+    }
+}
+
+
+void MainWindow::onSoftTriggerTimeout()
+{
+    if (!m_softTriggerEnabled || !m_bGrabbing || !m_pcMyCamera) {
+        return;
+    }
+
+    // 执行软件触发
+    int nRet = m_pcMyCamera->CommandExecute("TriggerSoftware");
+    if (MV_OK != nRet) {
+        AppendLog("间歇软触发执行失败", ERROR);
+    } else {
+        // 只在第一次或每10次触发时记录日志，避免日志过多
+        static int triggerCount = 0;
+        if (triggerCount % 10 == 0 || triggerCount == 0) {
+            AppendLog(QString("间歇软触发执行成功 (第%1次)").arg(++triggerCount), INFO);
+        } else {
+            ++triggerCount;
+        }
     }
 }
 
@@ -733,6 +789,7 @@ void MainWindow::on_bnTriggerExec_clicked()
         AppendLog("软件触发成功", INFO);
     }
 }
+
 
 void MainWindow::on_bnGetParam_clicked()
 {
@@ -3224,6 +3281,19 @@ void MainWindow::YoloRealTimeDetectionThread()
             break;
         }
 
+        // 如果是触发模式，等待新帧可用
+        if (m_isTriggerMode) {
+            QMutexLocker locker(&m_newFrameMutex);
+            while (!m_newFrameAvailable && m_yoloDetectionRunning) {
+                m_newFrameCondition.wait(&m_newFrameMutex);
+            }
+            if (m_yoloDetectionRunning) {
+                m_newFrameAvailable = false;
+            } else {
+                break;
+            }
+        }
+
         // 获取最新帧
         if (!GrabLastFrameBGR(currentFrame))
         {
@@ -3298,6 +3368,7 @@ void MainWindow::YoloRealTimeDetectionThread()
         // 短暂休眠，避免CPU占用过高
         QThread::msleep(10);
     }
+
 
     // 停止统计信息定时器
     m_yoloStatsTimer->stop();

@@ -67,6 +67,7 @@ private slots:
     void on_CallDLwindow_clicked();
     // 新增的槽函数
     void on_bnCapture_clicked();                // 拍照按钮点击事件
+    void onSoftTriggerTimeout();                // 软件触发定时器超时槽函数
 
 private:
     Ui::MainWindow *ui;
@@ -158,6 +159,18 @@ private:
     // 几何参数变换系数
     double  m_biasLength = 0.0;      // 长度变换系数
     double  m_biasWidth = 0.0;       // 宽度变换系数
+
+    // 间歇软触发相关
+    QTimer* m_softTriggerTimer;      // 软件触发定时器
+    bool m_softTriggerEnabled;       // 软件触发使能标志
+    bool m_isTriggerMode;            // 当前是否为触发模式
+
+    // 新帧等待相关（用于YOLO在触发模式下等待）
+    QMutex m_newFrameMutex;
+    QWaitCondition m_newFrameCondition;
+    bool m_newFrameAvailable;
+
+
 
     // 将缓存的最新一帧转为BGR Mat（经SDK内存编码为JPEG后imdecode，稳妥）
     bool GrabLastFrameBGR(Mat& outBGR);
