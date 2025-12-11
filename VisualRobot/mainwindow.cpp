@@ -333,6 +333,15 @@ void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INF
         pMainWindow->m_lastInfo = *pFrameInfo;   // 结构体按值拷贝
         pMainWindow->m_hasFrame = true;
 
+        // 图像缓存清理检查
+        if (pMainWindow->m_lastFrame.size() > pMainWindow->m_maxFrameSize) {
+            AppendLog(QString("图像缓存超过限制 (%1 > %2 字节)，可能内存问题").arg(pMainWindow->m_lastFrame.size()).arg(pMainWindow->m_maxFrameSize), ERROR);
+            // 清空旧缓存，避免持续增长
+            pMainWindow->m_lastFrame.clear();
+            pMainWindow->m_hasFrame = false;
+            return; // 跳过本次缓存
+        }
+
         // 拷贝一份到临时变量, 用于清晰度计算
         tempFrame = pMainWindow->m_lastFrame;
 
@@ -528,6 +537,8 @@ void MainWindow::on_bnOpen_clicked()
     int nIndex;        // 设备索引
     int nRet;          // 返回值
     unsigned int nPacketSize;  // 数据包大小
+    int retryCount = 0; // 重试计数
+    const int maxRetries = 3; // 最大重试次数
 
     nIndex = ui->ComboDevices->currentIndex();
     if ((nIndex < 0) | (nIndex >= MV_MAX_DEVICE_NUM))
@@ -556,17 +567,42 @@ void MainWindow::on_bnOpen_clicked()
         }
     }
 
-    nRet = m_pcMyCamera->Open(m_stDevList.pDeviceInfo[nIndex]);
-    if (MV_OK != nRet)
-    {
-        delete m_pcMyCamera;
-        m_pcMyCamera = NULL;
-        ShowErrorMsg("Open Fail", nRet);
-        AppendLog("相机打开失败", ERROR);
-        return;
+    // 添加重试机制：如果打开失败，重新枚举设备
+    bool openSuccess = false;
+    while (retryCount < maxRetries && !openSuccess) {
+        nRet = m_pcMyCamera->Open(m_stDevList.pDeviceInfo[nIndex]);
+        if (MV_OK == nRet) {
+            openSuccess = true;
+            AppendLog("设备打开成功", INFO);
+        } else {
+            AppendLog(QString("相机打开失败 (尝试%1/%2): %3").arg(retryCount + 1).arg(maxRetries).arg(nRet), ERROR);
+            delete m_pcMyCamera;
+            m_pcMyCamera = NULL;
+
+            // 重新枚举设备
+            AppendLog("重新枚举设备...", INFO);
+            on_bnEnum_clicked();
+            nIndex = ui->ComboDevices->currentIndex();
+            if (nIndex < 0 || nIndex >= MV_MAX_DEVICE_NUM || NULL == m_stDevList.pDeviceInfo[nIndex]) {
+                AppendLog("重新枚举后设备无效，停止重试", ERROR);
+                return;
+            }
+
+            m_pcMyCamera = new (nothrow) CMvCamera;
+            if (NULL == m_pcMyCamera) {
+                AppendLog("新建相机实例失败", ERROR);
+                return;
+            }
+            retryCount++;
+            QThread::msleep(1000); // 等待1秒后重试
+        }
     }
 
-    AppendLog("设备打开成功", INFO);
+    if (!openSuccess) {
+        ShowErrorMsg("Open Fail after retries", nRet);
+        AppendLog("相机打开失败，已达最大重试次数", ERROR);
+        return;
+    }
 
     // ch:探测网络最佳包大小(只对GigE相机有效) | en:Detection network optimal package size(It only works for the GigE camera)
     if (m_stDevList.pDeviceInfo[nIndex]->nTLayerType == MV_GIGE_DEVICE)
@@ -585,6 +621,64 @@ void MainWindow::on_bnOpen_clicked()
             ShowErrorMsg("Warning: Get Packet Size fail!", nRet);
         }
     }
+
+    // 添加驱动状态检查：打开后验证状态
+    MVCC_ENUMVALUE stStatus;
+    nRet = m_pcMyCamera->GetEnumValue("AcquisitionStatus", &stStatus);
+    if (MV_OK == nRet) {
+        if (stStatus.nCurValue == 0) { // Idle
+            AppendLog("打开后相机状态检查：空闲", INFO);
+        } else {
+            AppendLog(QString("打开后相机状态异常：%1").arg(stStatus.nCurValue), WARNNING);
+        }
+    } else {
+        AppendLog("无法获取打开后相机状态", WARNNING);
+    }
+
+    // 对于USB3.0相机，添加额外初始化（如果适用）
+    if (m_stDevList.pDeviceInfo[nIndex]->nTLayerType == MV_USB_DEVICE) {
+        // USB3.0特有初始化：设置传输模式等，根据SDK
+        nRet = m_pcMyCamera->SetEnumValue("TransportLayerType", 2); // 假设2为USB3.0模式
+        if (MV_OK != nRet) {
+            AppendLog("USB3.0传输模式设置失败（可选）", WARNNING);
+        } else {
+            AppendLog("USB3.0传输模式已设置", INFO);
+        }
+    }
+
+    // 计算预期帧大小并预分配缓存
+    MVCC_INTVALUE stWidth, stHeight;
+    MVCC_ENUMVALUE stPixelFormat;
+    nRet = m_pcMyCamera->GetIntValue("Width", &stWidth);
+    if (MV_OK != nRet) {
+        AppendLog("获取宽度失败", ERROR);
+    }
+    nRet = m_pcMyCamera->GetIntValue("Height", &stHeight);
+    if (MV_OK != nRet) {
+        AppendLog("获取高度失败", ERROR);
+    }
+    nRet = m_pcMyCamera->GetEnumValue("PixelFormat", &stPixelFormat);
+    if (MV_OK != nRet) {
+        AppendLog("获取像素格式失败", ERROR);
+    }
+
+    size_t bpp = 1; // 默认Mono8
+    switch (stPixelFormat.nCurValue) {
+        case PixelType_Gvsp_RGB8_Packed:
+        case PixelType_Gvsp_BGR8_Packed:
+            bpp = 3;
+            break;
+        case PixelType_Gvsp_RGBA8_Packed:
+        case PixelType_Gvsp_BGRA8_Packed:
+            bpp = 4;
+            break;
+        // 添加其他格式根据需要
+        default:
+            break;
+    }
+    m_expectedFrameSize = static_cast<size_t>(stWidth.nCurValue) * stHeight.nCurValue * bpp;
+    m_lastFrame.reserve(m_expectedFrameSize);
+    AppendLog(QString("图像缓存预分配: %1 字节").arg(m_expectedFrameSize), INFO);
 
     m_pcMyCamera->SetEnumValue("AcquisitionMode", MV_ACQ_MODE_CONTINUOUS);
     m_pcMyCamera->SetEnumValue("TriggerMode", MV_TRIGGER_MODE_OFF);
@@ -612,12 +706,74 @@ void MainWindow::on_bnClose_clicked()
 {
     if (m_pcMyCamera)
     {
-        m_pcMyCamera->Close();
+        // 完善关闭流程：先停止触发模式，再停止采集，最后关闭设备
+        AppendLog("开始关闭设备...", INFO);
+
+        // 1. 停止触发模式
+        int nRet = m_pcMyCamera->SetEnumValue("TriggerMode", MV_TRIGGER_MODE_OFF);
+        if (MV_OK != nRet) {
+            AppendLog("设置触发模式为OFF失败", ERROR);
+        } else {
+            AppendLog("触发模式已关闭", INFO);
+        }
+
+        // 2. 停止采集（如果正在采集）
+        if (m_bGrabbing) {
+            nRet = m_pcMyCamera->StopGrabbing();
+            if (MV_OK != nRet) {
+                AppendLog("停止采集失败", ERROR);
+            } else {
+                AppendLog("采集已停止", INFO);
+                m_bGrabbing = false;
+            }
+        }
+
+        // 3. 添加驱动状态检查（可选：检查AcquisitionStatus等）
+        MVCC_ENUMVALUE stStatus;
+        nRet = m_pcMyCamera->GetEnumValue("AcquisitionStatus", &stStatus);
+        if (MV_OK == nRet) {
+            if (stStatus.nCurValue == 0) { // Idle
+                AppendLog("相机状态检查：空闲", INFO);
+            } else {
+                AppendLog(QString("相机状态异常：%1").arg(stStatus.nCurValue), WARNNING);
+            }
+        } else {
+            AppendLog("无法获取相机状态", WARNNING);
+        }
+
+        // 4. 对于USB3.0相机，添加额外清理（如果适用）
+        if (m_stDevList.nDeviceNum > 0 && m_stDevList.pDeviceInfo[ui->ComboDevices->currentIndex()]->nTLayerType == MV_USB_DEVICE) {
+            // USB3.0特有清理：重置设备或类似，根据SDK文档
+            // 这里假设使用CommandExecute("DeviceReset")，但需验证
+            nRet = m_pcMyCamera->CommandExecute("DeviceReset");
+            if (MV_OK != nRet) {
+                AppendLog("USB3.0设备重置失败（可选）", WARNNING);
+            } else {
+                AppendLog("USB3.0设备已重置", INFO);
+            }
+        }
+
+        // 5. 关闭设备
+        nRet = m_pcMyCamera->Close();
+        if (MV_OK != nRet) {
+            AppendLog("设备关闭失败", ERROR);
+        } else {
+            AppendLog("设备已关闭", INFO);
+        }
+
         delete m_pcMyCamera;
         m_pcMyCamera = NULL;
-    }
-    m_bGrabbing = false;
 
+        // 清空图像缓存
+        {
+            lock_guard<mutex> lk(m_frameMtx);
+            m_lastFrame.clear();
+            m_hasFrame = false;
+        }
+        AppendLog("图像缓存已清理", INFO);
+    }
+
+    // 更新UI
     ui->bnOpen->setEnabled(true);
     ui->bnClose->setEnabled(false);
     ui->bnStart->setEnabled(false);
@@ -633,7 +789,14 @@ void MainWindow::on_bnClose_clicked()
     ui->bnSetParam->setEnabled(false);
     ui->bnGetParam->setEnabled(false);
 
-    AppendLog("设备关闭成功", INFO);
+    // 停止软触发定时器
+    if (m_softTriggerTimer && m_softTriggerEnabled) {
+        m_softTriggerTimer->stop();
+        m_softTriggerEnabled = false;
+        AppendLog("软触发定时器已停止", INFO);
+    }
+
+    AppendLog("设备关闭流程完成", INFO);
 }
 
 void MainWindow::on_bnContinuesMode_clicked()
@@ -733,10 +896,10 @@ void MainWindow::on_cbSoftTrigger_clicked()
             AppendLog("软件触发已开启", INFO);
         }
 
-        // 启用间歇软触发，每0.5秒触发一次
+        // 启用间歇软触发，每1秒触发一次
         m_softTriggerEnabled = true;
-        m_softTriggerTimer->start(500); // 500ms间隔
-        AppendLog("间歇软触发已启用，每0.5秒自动触发", INFO);
+        m_softTriggerTimer->start(1000); // 1000ms间隔
+        AppendLog("间歇软触发已启用，每1秒自动触发", INFO);
     }
     else
     {
@@ -754,9 +917,20 @@ void MainWindow::on_cbSoftTrigger_clicked()
 
 void MainWindow::onSoftTriggerTimeout()
 {
-    if (!m_softTriggerEnabled || !m_bGrabbing || !m_pcMyCamera) {
+    if (!m_softTriggerEnabled || !m_bGrabbing || !m_pcMyCamera || m_softTriggerBusy) {
+        if (m_softTriggerBusy) {
+            // 可选：记录跳过日志，避免频繁
+            static int skipCount = 0;
+            if (skipCount % 5 == 0) {
+                AppendLog(QString("软触发忙碌，跳过本次触发 (已跳过%1次)").arg(++skipCount), WARNNING);
+            } else {
+                ++skipCount;
+            }
+        }
         return;
     }
+
+    m_softTriggerBusy = true;
 
     // 执行软件触发
     int nRet = m_pcMyCamera->CommandExecute("TriggerSoftware");
@@ -771,6 +945,8 @@ void MainWindow::onSoftTriggerTimeout()
             ++triggerCount;
         }
     }
+
+    m_softTriggerBusy = false;
 }
 
 void MainWindow::on_bnTriggerExec_clicked()
