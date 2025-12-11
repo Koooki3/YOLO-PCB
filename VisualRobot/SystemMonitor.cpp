@@ -7,6 +7,7 @@
 #include <sstream>
 #include <string>
 #include <cstdio>
+#include <QTime>
 
 #ifdef __arm__
 #include <unistd.h>
