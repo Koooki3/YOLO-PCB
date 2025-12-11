@@ -446,6 +446,67 @@ int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<dou
     return 1;
 }
 
+/**
+ * @brief 使用PCA主轴方向计算点集的有向包围盒(OBB)，用于替代minAreaRect以获得更符合“主轴/最长方向”的旋转框
+ * @param pts 输入点集（通常是某个连通域/轮廓的像素点）
+ * @return PCA主轴对齐的旋转矩形
+ */
+RotatedRect GetOBBByPCA(const vector<Point>& pts)
+{
+    // 基本保护
+    if (pts.size() < 10) 
+    {
+        // 点太少时退化为 minAreaRect，避免崩
+        return minAreaRect(pts);
+    }
+
+    // 1) PCA 输入矩阵：N x 2
+    Mat data((int)pts.size(), 2, CV_64F);
+    for (int i = 0; i < (int)pts.size(); ++i) 
+    {
+        data.at<double>(i, 0) = pts[i].x;
+        data.at<double>(i, 1) = pts[i].y;
+    }
+
+    // 2) PCA：取第一主轴
+    PCA pca(data, Mat(), PCA::DATA_AS_ROW);
+    Point2d mean(pca.mean.at<double>(0, 0), pca.mean.at<double>(0, 1));
+
+    Vec2d v(pca.eigenvectors.at<double>(0, 0), pca.eigenvectors.at<double>(0, 1));
+    double theta = std::atan2(v[1], v[0]); // rad
+
+    // 3) 旋转到主轴坐标系并求包围盒 min/max
+    double ca = std::cos(-theta), sa = std::sin(-theta);
+    double minx =  1e18, maxx = -1e18, miny =  1e18, maxy = -1e18;
+
+    for (const auto& p : pts) 
+    {
+        double x = p.x - mean.x;
+        double y = p.y - mean.y;
+        double xr = ca * x - sa * y;
+        double yr = sa * x + ca * y;
+
+        minx = std::min(minx, xr); 
+        maxx = std::max(maxx, xr);
+        miny = std::min(miny, yr); 
+        maxy = std::max(maxy, yr);
+    }
+
+    // 4) 主轴坐标系下中心和尺寸
+    Point2d cR((minx + maxx) * 0.5, (miny + maxy) * 0.5);
+    Size2d  sz(maxx - minx, maxy - miny);
+
+    // 5) 中心旋回原坐标系
+    double ca2 = std::cos(theta), sa2 = std::sin(theta);
+    Point2d cW(
+        ca2 * cR.x - sa2 * cR.y + mean.x,
+        sa2 * cR.x + ca2 * cR.y + mean.y
+    );
+
+    // 6) 输出 RotatedRect（角度用度）
+    float angleDeg = (float)(theta * 180.0 / CV_PI);
+    return RotatedRect(Point2f((float)cW.x, (float)cW.y), Size2f((float)sz.width, (float)sz.height), angleDeg);
+}
 
 /**
  * @brief 处理图像并计算单个物体的尺寸
@@ -462,130 +523,159 @@ int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<dou
  * 5. 计算物体尺寸和角度
  * 6. 绘制结果并返回
  */
-Result CalculateLength(const Mat& input, const Params& params, double bias)
+Result CalculateLength(const cv::Mat& input, const Params& params, double bias)
 {
-    // 变量定义
-    Result result;                            // 结果结构体
-    Mat source, binary, colorImage;           // 图像处理变量
-    int k;                                    // 滤波核大小
-    static Mat kernel;                        // 形态学核
-    vector<vector<Point>> contours;           // 轮廓列表
-    vector<Vec4i> hierarchy;                  // 轮廓层级
-    vector<vector<Point>> preservedContours;  // 保留的轮廓（面积大于阈值）
-    vector<vector<Point>> filteredContours;   // 过滤的轮廓（面积小于阈值）
-    int thickness;                            // 绘制线宽
-    RotatedRect rotatedRect;                  // 旋转矩形
-    Size2f rotatedSize;                       // 旋转矩形尺寸
-    float spring_length, spring_width, angle; // 物体尺寸和角度
-    Point2f vertices[4];                      // 矩形顶点
-    int thickBorder;                          // 边框厚度
-    
-    // 检查输入图像是否为空
+    Result result;
     if (input.empty()) 
     {
-        cerr << "图像读取失败" << endl;
-        return result;
+        return;
     }
 
-    // 检查通道数，如果需要则转换为灰度图
-    if (input.channels() > 1) 
+    // 0) 灰度
+    cv::Mat gray;
+    if (input.channels() == 3)
     {
-        cvtColor(input, source, COLOR_BGR2GRAY);
-    } 
-    else 
+        cv::cvtColor(input, gray, cv::COLOR_BGR2GRAY);
+    }
+    else
     {
-        source = input;
+        gray = input.clone();
     }
 
-    // 多阶段滤波：双边滤波 + 高斯模糊
-    if (params.blurK >= 3) 
-    {
-        // 确保滤波核大小为奇数
-        k = (params.blurK % 2 == 0) ? params.blurK - 1 : params.blurK;
-        if (k >= 3) 
+    // 1) 轻微降噪
+    cv::GaussianBlur(gray, gray, cv::Size(5,5), 0);
+
+    // 2) OTSU 阈值
+    cv::Mat binary;
+    cv::threshold(gray, binary, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
+
+    int imgW = gray.cols;
+    int imgH = gray.rows;
+
+    cv::Mat binaryMerged;
+    // 半径 r 可以根据图像分辨率来设，也可以放到 Params 里配置
+    int mergeRadius = (params.mergeRadius > 0) ? params.mergeRadius : std::max(imgW, imgH) / 150;   // 大概 5~15 像素
+
+    mergeRadius = std::max(1, mergeRadius);
+    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(2*mergeRadius+1, 2*mergeRadius+1));
+
+    // 闭运算 = 膨胀 + 腐蚀，更能填补物体内部的小空洞
+    cv::morphologyEx(binary, binaryMerged, cv::MORPH_CLOSE, kernel, cv::Point(-1,-1), 1);
+
+    // 3) 在 binaryMerged 上做连通域
+    cv::Mat labels, stats, centroids;
+    int n = cv::connectedComponentsWithStats(binaryMerged, labels, stats, centroids, 8, CV_32S);
+
+    // 4) 过滤太小的连通域
+    struct Obj {
+        cv::RotatedRect rr;
+        int area;
+    };
+    std::vector<Obj> objects;
+
+    int objAreaMin = (params.areaMin > 0) ? params.areaMin : 5000;
+
+    for (int i = 1; i < n; ++i) 
+    {  // 0 是背景
+        int area = stats.at<int>(i, cv::CC_STAT_AREA);
+        if (area < objAreaMin) 
         {
-            Mat dst;
-            bilateralFilter(source, dst, 5, 30, 2);  // 双边滤波，保留边缘同时去除噪声
-            GaussianBlur(dst, source, Size(k, k), 2.0, 2.0); // 高斯模糊，进一步平滑图像
-        }
-    }
-
-    // 预计算形态学操作核
-    kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
-
-    // 阈值处理：将图像转换为二值图
-    binary = source > params.thresh;
-    binary = 255 - binary;  // 反转二值图，使目标变为白色
-
-    // 形态学操作：膨胀，连接断裂的边缘
-    morphologyEx(binary, binary, MORPH_DILATE, kernel);
-
-    // 查找轮廓
-    findContours(binary, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
-
-    // 按面积过滤轮廓
-    for (const auto& contour : contours) 
-    {
-        if (contourArea(contour) < params.areaMin) 
-        {
-            filteredContours.push_back(contour);  // 面积小于阈值，过滤掉
-        } 
-        else 
-        {
-            preservedContours.push_back(contour);  // 面积大于阈值，保留
-        }
-    }
-
-    // 查找最大面积的轮廓
-    auto max_it = max_element(preservedContours.begin(), preservedContours.end(),
-                         [](const vector<Point>& a, const vector<Point>& b) {
-                             return contourArea(a) < contourArea(b);
-                         });
-
-    // 基于图像宽度计算线宽
-    thickness = round(source.cols * 0.002);
-
-    // 转换为BGR用于彩色绘图
-    cvtColor(source, colorImage, COLOR_GRAY2BGR);
-
-    if (max_it != preservedContours.end()) 
-    {
-        // 获取最小外接矩形
-        rotatedRect = minAreaRect(*max_it);
-        rotatedSize = rotatedRect.size;
-
-        // 计算物体尺寸：长度为矩形的长边，宽度为短边
-        spring_length = max(rotatedSize.width, rotatedSize.height);
-        spring_width = min(rotatedSize.width, rotatedSize.height);
-        result.widths.push_back(spring_width*bias);
-        result.heights.push_back(spring_length*bias);
-
-        // 用绿色绘制边界框
-        rotatedRect.points(vertices);
-        thickBorder = static_cast<int>(thickness * 1);
-
-        for (int i = 0; i < 4; i++) 
-        {
-            line(colorImage, vertices[i], vertices[(i+1)%4], Scalar(0, 255, 0),  thickBorder);
+            continue;
         }
 
-        // 输出测量结果
-        cout << "物件长度: " << spring_length*bias << ", 物件宽度: " << spring_width*bias << endl;
-        angle = rotatedRect.angle;
-        cout << "检测角度: " << angle << "°" << endl;
-        result.angles.push_back(angle);
-    } 
-    else 
+        int x = stats.at<int>(i, cv::CC_STAT_LEFT);
+        int y = stats.at<int>(i, cv::CC_STAT_TOP);
+        int w = stats.at<int>(i, cv::CC_STAT_WIDTH);
+        int h = stats.at<int>(i, cv::CC_STAT_HEIGHT);
+
+        std::vector<cv::Point> pts;
+
+        // ⚠ 这里用的是“binaryMerged 的 label + 原始 binary 作为掩码”
+        for (int yy = y; yy < y + h; ++yy) 
+        {
+            const int*   rowL = labels.ptr<int>(yy);
+            const uchar* rowB = binary.ptr<uchar>(yy);  // 原始二值
+            for (int xx = x; xx < x + w; ++xx) 
+            {
+                if (rowL[xx] == i && rowB[xx] > 0) 
+                {
+                    pts.emplace_back(xx, yy);
+                }
+            }
+        }
+
+        if (pts.size() < 80) 
+        {
+            continue;
+        }
+
+        cv::RotatedRect rr = GetOBBByPCA(pts);
+        objects.push_back({ rr, area });
+    }
+
+    // ========= 后面画框、算长宽角度=========
+    cv::Mat color;
+    cv::cvtColor(gray, color, cv::COLOR_GRAY2BGR);
+    int thickness = std::max(2, (int)std::round(imgW * 0.002));
+
+    if (objects.empty()) 
     {
-        // 未找到有效轮廓，返回默认值
+        std::cerr << "没有满足面积要求的物体\n";
         result.widths.push_back(0);
         result.heights.push_back(0);
         result.angles.push_back(0);
-        cerr << "未找到有效轮廓" << endl;
+        result.image = color;
+        return result;
     }
 
-    // 设置结果图像
-    result.image = colorImage;
+    // 按 x 排序
+    std::sort(objects.begin(), objects.end(),
+              [](const Obj& a, const Obj& b){
+                  return a.rr.center.x < b.rr.center.x;
+              });
+
+    int idx = 1;
+    for (const auto& obj : objects) 
+    {
+        cv::RotatedRect rr = obj.rr;
+
+        cv::Point2f v[4];
+        rr.points(v);
+        for (int k = 0; k < 4; ++k)
+        {
+            cv::line(color, v[k], v[(k+1)%4], cv::Scalar(0,255,0), thickness);
+        }
+
+        float L = std::max(rr.size.width,  rr.size.height);
+        float S = std::min(rr.size.width,  rr.size.height);
+        float angle = rr.angle;
+        if (rr.size.width < rr.size.height) 
+        {
+            angle += 90.0f;
+        }
+
+        result.heights.push_back(L * bias);
+        result.widths.push_back(S * bias);
+        result.angles.push_back(angle);
+
+        // 编号
+        std::string label = std::to_string(idx++);
+        double fontScale = std::max(1.6, imgW / 700.0);
+        int fontFace  = cv::FONT_HERSHEY_SIMPLEX;
+        int fontThick = std::max(2, thickness + 1);
+        int base = 0;
+        cv::Size ts = cv::getTextSize(label, fontFace, fontScale, fontThick, &base);
+        cv::Point c((int)rr.center.x, (int)rr.center.y);
+        cv::Point org(c.x - ts.width/2, c.y + ts.height/2);
+
+        cv::Rect bg(org.x - 8, org.y - ts.height - 8, ts.width + 16, ts.height + 16);
+        bg &= cv::Rect(0,0,color.cols,color.rows);
+        cv::rectangle(color, bg, cv::Scalar(255,255,255), cv::FILLED);
+        cv::rectangle(color, bg, cv::Scalar(0,0,0), 1);
+        cv::putText(color, label, org, fontFace, fontScale, cv::Scalar(0,255,0), fontThick, cv::LINE_AA);
+    }
+
+    result.image = color;
     return result;
 }
 

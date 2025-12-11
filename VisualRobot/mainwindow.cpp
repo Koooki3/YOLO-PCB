@@ -86,6 +86,14 @@ MainWindow::MainWindow(QWidget *parent) :
     // 启动定时器，每2秒自动枚举一次设备
     m_deviceEnumTimer->start(2000);
 
+    // 初始化显示定时器，用于控制图像显示频率
+    m_displayTimer = new QTimer(this);
+    connect(m_displayTimer, &QTimer::timeout, this, &MainWindow::updateDisplay);
+    connect(this, &MainWindow::newFrameAvailable, this, &MainWindow::updateDisplay, Qt::QueuedConnection);
+
+    // 初始化实时检测线程指针
+    m_realTimeDetectionThread = nullptr;
+
     // 初始化系统监控
     m_sysMonitor = new SystemMonitor(this);
     
@@ -291,20 +299,7 @@ void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INF
 
     MainWindow* pMainWindow = static_cast<MainWindow*>(pUser);
 
-    // 1. 显示图像（统一处理，避免重复显示）
-    MV_DISPLAY_FRAME_INFO disp{};
-    disp.hWnd        = pMainWindow->m_hWnd;
-    disp.pData       = pData;
-    disp.nDataLen    = pFrameInfo->nFrameLen;
-    disp.nWidth      = pFrameInfo->nWidth;
-    disp.nHeight     = pFrameInfo->nHeight;
-    disp.enPixelType = pFrameInfo->enPixelType;
-    if (pMainWindow->m_pcMyCamera)
-    { 
-        pMainWindow->m_pcMyCamera->DisplayOneFrame(&disp);
-    }
-
-    // 2. 缓存最新一帧（使用锁保护，避免竞争）
+    // 1. 缓存最新一帧（使用锁保护，避免竞争）
     {
         lock_guard<mutex> lk(pMainWindow->m_frameMtx);
         pMainWindow->m_lastFrame.resize(pFrameInfo->nFrameLen);
@@ -312,6 +307,9 @@ void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INF
         pMainWindow->m_lastInfo = *pFrameInfo;
         pMainWindow->m_hasFrame = true;
     }
+
+    // 2. 发出信号通知主线程有新帧可用
+    emit pMainWindow->newFrameAvailable();
 
     // 3. 异步计算清晰度（避免阻塞回调，使用临时引用而非拷贝）
     // 注意：为简化，这里仍使用同步计算，但移除了不必要的tempFrame拷贝
@@ -556,21 +554,26 @@ void MainWindow::on_bnOpen_clicked()
         }
     }
 
-    // 优化SDK配置参数
-    // 设置图像缓冲区数量（提高稳定性）
-    m_pcMyCamera->SetIntValue("GvspImageNodeCount", 10);  // 图像缓冲区数量
-    m_pcMyCamera->SetIntValue("GvspImageNodeBufferSize", 1024 * 1024 * 10);  // 每个缓冲区10MB
+    // 优化SDK配置参数（针对OrangePi5平台优化）
+    // 设置更大的图像缓冲区数量和大小，提高稳定性（ARM平台可能需要更多缓冲）
+    m_pcMyCamera->SetIntValue("GvspImageNodeCount", 20);  // 增加到20个图像缓冲区
+    m_pcMyCamera->SetIntValue("GvspImageNodeBufferSize", 1024 * 1024 * 20);  // 每个缓冲区20MB
 
-    // 设置传输缓冲区大小
-    m_pcMyCamera->SetIntValue("GvspStreamBufferCount", 5);  // 传输缓冲区数量
-    m_pcMyCamera->SetIntValue("GvspStreamBufferSize", 1024 * 1024 * 5);  // 每个缓冲区5MB
+    // 设置更大的传输缓冲区大小，减少丢帧
+    m_pcMyCamera->SetIntValue("GvspStreamBufferCount", 10);  // 增加到10个传输缓冲区
+    m_pcMyCamera->SetIntValue("GvspStreamBufferSize", 1024 * 1024 * 10);  // 每个缓冲区10MB
 
-    // 设置显示相关参数
-    m_pcMyCamera->SetIntValue("GvspStreamDisplayMode", 1);  // 1=自动显示，0=手动显示
+    // 设置显示相关参数：手动显示模式，确保主线程控制
+    m_pcMyCamera->SetIntValue("GvspStreamDisplayMode", 0);  // 0=手动显示
 
     // 设置采集模式和触发模式
     m_pcMyCamera->SetEnumValue("AcquisitionMode", MV_ACQ_MODE_CONTINUOUS);
     m_pcMyCamera->SetEnumValue("TriggerMode", MV_TRIGGER_MODE_OFF);
+
+    // 平台特定优化：设置更高的线程优先级或超时（如果SDK支持）
+    // 示例：设置采集超时为更长值，防止ARM平台超时崩溃
+    m_pcMyCamera->SetIntValue("GevSCPD", 9000);  // 数据包延迟9000ms
+    m_pcMyCamera->SetIntValue("GevSCDA", 1);     // 丢包重传启用
 
     // 获取当前参数
     on_bnGetParam_clicked(); // ch:获取参数 | en:Get Parameter
@@ -672,6 +675,11 @@ void MainWindow::on_bnStart_clicked()
     AppendLog("开始抓图成功", INFO);
     m_bGrabbing = true;
 
+    // 启动显示定时器，控制显示频率（可选，30FPS）
+    if (m_displayTimer) {
+        m_displayTimer->start(33);  // 约30FPS
+    }
+
     ui->bnStart->setEnabled(false);
     ui->bnStop->setEnabled(true);
     ui->pushButton->setEnabled(true);
@@ -725,6 +733,15 @@ void MainWindow::on_bnStop_clicked()
     // 统一状态重置
     m_bGrabbing = false;
     m_hasFrame = false;  // 清空帧缓存标志
+
+    // 停止显示定时器
+    if (m_displayTimer) {
+        m_displayTimer->stop();
+    }
+
+    // 停止所有实时检测线程和定时器
+    StopYoloRealTimeDetection();
+    StopRealTimeDetection();
 
     ui->bnStart->setEnabled(true);
     ui->bnStop->setEnabled(false);
@@ -1769,6 +1786,26 @@ double MainWindow::CalculateTenengradSharpness(const Mat& image)
     meanValue = mean(imageSobel)[0];
     
     return meanValue;
+}
+
+void MainWindow::updateDisplay()
+{
+    if (!m_hasFrame || m_lastFrame.empty()) return;
+
+    MV_DISPLAY_FRAME_INFO disp{};
+    {
+        lock_guard<mutex> lk(m_frameMtx);
+        disp.hWnd = m_hWnd;
+        disp.pData = m_lastFrame.data();
+        disp.nDataLen = m_lastInfo.nFrameLen;
+        disp.nWidth = m_lastInfo.nWidth;
+        disp.nHeight = m_lastInfo.nHeight;
+        disp.enPixelType = m_lastInfo.enPixelType;
+    }
+
+    if (m_pcMyCamera) {
+        m_pcMyCamera->DisplayOneFrame(&disp);
+    }
 }
 
 // 更新清晰度显示
