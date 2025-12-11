@@ -154,7 +154,7 @@ private:
     double  m_diffThresh = 25.0;     // 差异二值阈值（配准后的 absdiff 后再高斯平滑）
     double  m_minDefectArea = 1200;  // 过滤小区域（像素），按你的分辨率可调
     int     m_orbFeatures = 1500;    // ORB特征点数量（配准用）
-    
+
     // 几何参数变换系数
     double  m_biasLength = 0.0;      // 长度变换系数
     double  m_biasWidth = 0.0;       // 宽度变换系数
@@ -177,31 +177,31 @@ private:
     void RealTimeDetectionThread();
     void StartRealTimeDetection();
     void HandleQKeyPress(); // 处理Q键, 退出实时检测模式
-    
+
     // 日志优化相关
     int m_lastDefectCount;        // 上次记录的缺陷数量
     QTime m_lastLogTime;          // 上次记录日志的时间
     QTime m_stableStateStartTime; // 当前稳定状态开始时间
     bool m_isStableState;         // 是否处于稳定状态
-    
+
     // 设备热拔插自动枚举相关
     QTimer* m_deviceEnumTimer;    // 定时器用于自动枚举设备
     int m_lastDeviceCount;        // 上次枚举的设备数量
     void autoEnumDevices();       // 自动枚举设备的槽函数
-    
+
     // YOLO实时检测相关
     YOLOProcessorORT* m_yoloProcessor;  // YOLO处理器实例
     bool m_yoloDetectionRunning;        // YOLO检测运行标志
     QMutex m_yoloDetectionMutex;        // YOLO检测互斥锁
     QThread* m_yoloDetectionThread;     // YOLO检测线程
     QTimer* m_yoloStatsTimer;           // YOLO统计信息定时器
-    
+
     // YOLO显示线程相关
     bool m_yoloDisplayRunning;          // YOLO显示运行标志
     QMutex m_yoloDisplayMutex;          // YOLO显示互斥锁
     QThread* m_yoloDisplayThread;       // YOLO显示线程
     int m_displayUpdateInterval;        // 显示更新间隔（毫秒）
-    
+
     // YOLO检测结果双缓冲
     struct YoloResultBuffer {
         Mat frame;                               // 检测的帧
@@ -209,18 +209,18 @@ private:
         double processingTime;                   // 处理时间
         bool newDataAvailable;                   // 是否有新数据
     };
-    
+
     YoloResultBuffer m_yoloBuffers[2];           // 双缓冲
     int m_writeBufferIndex;                      // 当前写入缓冲区索引
     int m_readBufferIndex;                       // 当前读取缓冲区索引
     QMutex m_bufferMutex;                        // 缓冲区互斥锁
     QWaitCondition m_bufferReady;                // 缓冲区就绪条件变量
-    
+
     // YOLO统计信息
     int m_yoloFrameCount;                       // 帧计数
     QTime m_yoloStatsStartTime;                 // 统计开始时间
     double m_yoloTotalProcessingTime;           // 总处理时间
-    
+
     void YoloRealTimeDetectionThread();         // YOLO实时检测线程
     void YoloDisplayThread();                   // YOLO显示线程
     void StartYoloRealTimeDetection();          // 开始YOLO实时检测
@@ -228,7 +228,7 @@ private:
     void UpdateYoloStats();                     // 更新YOLO统计信息
     void DrawYoloResults(Mat& frame, const vector<DetectionResult>& results); // 绘制YOLO检测结果
     void UpdateYoloDisplay();                   // 更新YOLO显示
-    
+
 };
 
 #endif // MAINWINDOW_H
