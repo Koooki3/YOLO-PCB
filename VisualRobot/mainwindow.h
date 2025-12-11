@@ -35,6 +35,7 @@ class MainWindow : public QMainWindow
 
 signals:
     void sharpnessValueUpdated(double sharpness);
+    void newFrameAvailable();  // 新帧可用信号，用于主线程显示
 
 public:
     explicit MainWindow(QWidget *parent = 0);
@@ -102,6 +103,7 @@ private slots:
     void updateSystemStats(float cpuUsage, float memUsage, float temperature);
     void on_btnOpenManual_clicked();
     void updateSharpnessDisplay(double sharpness);
+    void updateDisplay();  // 主线程图像显示槽
 
     void on_setTemplate_clicked();   // 可选：从当前帧设模板（或弹框选择文件）
     void on_detect_clicked();        // 你要的检测按钮
@@ -174,8 +176,10 @@ private:
     // 实时检测相关
     bool m_realTimeDetectionRunning;
     QMutex m_realTimeDetectionMutex;
+    QThread* m_realTimeDetectionThread;  // 实时检测线程指针
     void RealTimeDetectionThread();
     void StartRealTimeDetection();
+    void StopRealTimeDetection();  // 新增停止函数
     void HandleQKeyPress(); // 处理Q键, 退出实时检测模式
     
     // 日志优化相关
@@ -215,6 +219,9 @@ private:
     int m_readBufferIndex;                       // 当前读取缓冲区索引
     QMutex m_bufferMutex;                        // 缓冲区互斥锁
     QWaitCondition m_bufferReady;                // 缓冲区就绪条件变量
+    
+    // 显示定时器
+    QTimer* m_displayTimer;                     // 显示更新定时器
     
     // YOLO统计信息
     int m_yoloFrameCount;                       // 帧计数
