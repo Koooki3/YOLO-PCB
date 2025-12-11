@@ -170,6 +170,16 @@ private:
     QWaitCondition m_newFrameCondition;
     bool m_newFrameAvailable;
 
+    // 图像缓存优化相关
+    size_t m_maxFrameSize = 10 * 1024 * 1024;  // 最大帧缓存大小 10MB
+    size_t m_expectedFrameSize = 0;             // 预期帧大小
+
+    // 定时器安全相关
+    bool m_softTriggerBusy = false;             // 软触发忙碌标志
+
+    // 线程资源管理相关
+    QElapsedTimer m_yoloThreadTimer;            // YOLO线程超时计时器
+
 
 
     // 将缓存的最新一帧转为BGR Mat（经SDK内存编码为JPEG后imdecode，稳妥）

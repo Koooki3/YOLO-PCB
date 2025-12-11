@@ -296,4 +296,44 @@ void SystemMonitor::updateSystemStats()
     
     // 发送系统状态更新信号
     emit systemStatsUpdated(cpuUsage, memUsage, temperature);
+    
+    // 添加内存监控日志，每分钟记录一次内存使用趋势（增强版：包括实际使用量）
+    static QTime lastLogTime = QTime::currentTime();
+    if (lastLogTime.msecsTo(QTime::currentTime()) > 60000) {  // 每60秒
+        // 计算实际内存使用量 (MB)
+        unsigned long totalMemKB = 0, usedMemKB = 0;
+        ifstream memFile("/proc/meminfo");
+        if (memFile.is_open()) {
+            string line;
+            while (getline(memFile, line)) {
+                if (line.find("MemTotal:") != string::npos) {
+                    sscanf(line.c_str(), "MemTotal: %lu", &totalMemKB);
+                } else if (line.find("MemFree:") != string::npos) {
+                    unsigned long freeMemKB = 0, buffersKB = 0, cachedKB = 0;
+                    sscanf(line.c_str(), "MemFree: %lu", &freeMemKB);
+                    // 简单估算：读取后续Buffers和Cached
+                    if (getline(memFile, line) && line.find("Buffers:") != string::npos) {
+                        sscanf(line.c_str(), "Buffers: %lu", &buffersKB);
+                    }
+                    if (getline(memFile, line) && line.find("Cached:") != string::npos) {
+                        sscanf(line.c_str(), "Cached: %lu", &cachedKB);
+                    }
+                    usedMemKB = totalMemKB - freeMemKB - buffersKB - cachedKB;
+                    break;
+                }
+            }
+            memFile.close();
+        }
+        double usedMemMB = usedMemKB / 1024.0;
+        double totalMemMB = totalMemKB / 1024.0;
+        
+        QString logEntry = QString("内存监控 - 使用率: %1%, 已用: %2 MB / 总: %3 MB, 时间: %4")
+                              .arg(memUsage, 0, 'f', 2)
+                              .arg(usedMemMB, 0, 'f', 1)
+                              .arg(totalMemMB, 0, 'f', 1)
+                              .arg(QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss"));
+        qDebug() << logEntry;  // 输出到控制台，可扩展到文件日志
+        // TODO: 可集成到主程序的AppendLog系统
+        lastLogTime = QTime::currentTime();
+    }
 }
