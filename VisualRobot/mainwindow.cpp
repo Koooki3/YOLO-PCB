@@ -58,13 +58,13 @@ MainWindow::MainWindow(QWidget *parent) :
 
     // 自动创建log文件夹
     QDir logDir("../log");
-    if (!logDir.exists()) 
+    if (!logDir.exists())
     {
-        if (logDir.mkpath(".")) 
+        if (logDir.mkpath("."))
         {
             AppendLog("log文件夹创建成功", INFO);
-        } 
-        else 
+        }
+        else
         {
             AppendLog("log文件夹创建失败", ERROR);
         }
@@ -75,20 +75,20 @@ MainWindow::MainWindow(QWidget *parent) :
     m_pcMyCamera = NULL;
     m_bGrabbing = false;
     m_hWnd = (void*)ui->widgetDisplay->winId();
-    
+
     // 初始化设备热拔插自动枚举相关变量
     m_deviceEnumTimer = new QTimer(this);
     m_lastDeviceCount = 0;
-    
+
     // 连接定时器信号到槽函数
     connect(m_deviceEnumTimer, &QTimer::timeout, this, &MainWindow::autoEnumDevices);
-    
+
     // 启动定时器，每2秒自动枚举一次设备
     m_deviceEnumTimer->start(2000);
 
     // 初始化系统监控
     m_sysMonitor = new SystemMonitor(this);
-    
+
     // 创建系统信息标签
     m_cpuLabel = new QLabel(this);
     m_memLabel = new QLabel(this);
@@ -97,41 +97,41 @@ MainWindow::MainWindow(QWidget *parent) :
 
     // 初始化缺陷检测库
     m_defectDetection = new DefectDetection();
-    
+
     // 初始化YOLO处理器
     m_yoloProcessor = new YOLOProcessorORT(this);
     m_yoloDetectionRunning = false;
     m_yoloDetectionThread = nullptr;
     m_yoloFrameCount = 0;
     m_yoloTotalProcessingTime = 0.0;
-    
+
     // 初始化YOLO显示线程相关
     m_yoloDisplayRunning = false;
     m_yoloDisplayThread = nullptr;
     m_displayUpdateInterval = 333; // 显示更新间隔333ms，3FPS
-    
+
     // 初始化双缓冲
     m_writeBufferIndex = 0;
     m_readBufferIndex = 1;
     m_yoloBuffers[0].newDataAvailable = false;
     m_yoloBuffers[1].newDataAvailable = false;
-    
+
     // 初始化YOLO统计信息定时器，每1分钟触发一次
     m_yoloStatsTimer = new QTimer(this);
     connect(m_yoloStatsTimer, &QTimer::timeout, this, &MainWindow::UpdateYoloStats);
-    
+
     // 加载缺陷分类模板库
-    if (m_defectDetection->LoadTemplateLibrary("../Img/Templates")) 
+    if (m_defectDetection->LoadTemplateLibrary("../Img/Templates"))
     {
         AppendLog("缺陷分类模板库加载成功", INFO);
         auto templateNames = m_defectDetection->GetTemplateNames();
         AppendLog(QString("加载的模板类型: %1").arg(templateNames.size()), INFO);
-        for (const auto& name : templateNames) 
+        for (const auto& name : templateNames)
         {
             AppendLog(QString("模板: %1").arg(QString::fromStdString(name)), INFO);
         }
-    } 
-    else 
+    }
+    else
     {
         AppendLog("缺陷分类模板库加载失败", WARNNING);
     }
@@ -159,41 +159,41 @@ MainWindow::MainWindow(QWidget *parent) :
 
     // 连接清晰度信号
     connect(this, &MainWindow::sharpnessValueUpdated, this, &MainWindow::updateSharpnessDisplay);
-    
+
     // 初始化多边形绘制功能
     SetupPolygonDrawing();
-    
+
     // 日志优化相关初始化
     m_lastDefectCount = -1;  // -1 表示首次运行
     m_lastLogTime = QTime::currentTime();
     m_stableStateStartTime = QTime::currentTime();
     m_isStableState = false;
-    
+
     // 初始时执行一次设备枚举
     on_bnEnum_clicked();
 }
 
 MainWindow::~MainWindow()
 {
-    if (m_sysMonitor) 
+    if (m_sysMonitor)
     {
         m_sysMonitor->stopMonitoring();
     }
-    
+
     // 释放YOLO处理器
     if (m_yoloProcessor)
     {
         delete m_yoloProcessor;
         m_yoloProcessor = nullptr;
     }
-    
+
     // 释放YOLO统计信息定时器
     if (m_yoloStatsTimer)
     {
         delete m_yoloStatsTimer;
         m_yoloStatsTimer = nullptr;
     }
-    
+
     delete ui;
 }
 
@@ -202,7 +202,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
 {
     // 停止YOLO实时检测
     StopYoloRealTimeDetection();
-    
+
     // 变量定义
     QString logContent;           // 日志内容
     QString logFileName;          // 日志文件名
@@ -213,8 +213,8 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
     // 获取displayLogMsg中的所有文本内容
     logContent = ui->displayLogMsg->toPlainText();
-    
-    if (logContent.isEmpty()) 
+
+    if (logContent.isEmpty())
     {
         // 如果没有日志内容, 直接关闭
         event->accept();
@@ -228,7 +228,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
     // 打开文件进行写入
     logFile.setFileName(logFilePath);
-    if (!logFile.open(QIODevice::WriteOnly | QIODevice::Text)) 
+    if (!logFile.open(QIODevice::WriteOnly | QIODevice::Text))
     {
         AppendLog("无法创建日志文件", ERROR);
         event->accept();
@@ -243,7 +243,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
     out << logContent;
 
     logFile.close();
-    
+
     // 接受关闭事件
     event->accept();
 }
@@ -287,63 +287,73 @@ void MainWindow::ShowErrorMsg(QString csMessage, unsigned int nErrorNum)
 
 void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INFO_EX* pFrameInfo, void* pUser)
 {
-    if (!pUser) return;
-
-    MainWindow* pMainWindow = static_cast<MainWindow*>(pUser);
-
-    // 1. 显示图像（统一处理，避免重复显示）
-    MV_DISPLAY_FRAME_INFO disp{};
-    disp.hWnd        = pMainWindow->m_hWnd;
-    disp.pData       = pData;
-    disp.nDataLen    = pFrameInfo->nFrameLen;
-    disp.nWidth      = pFrameInfo->nWidth;
-    disp.nHeight     = pFrameInfo->nHeight;
-    disp.enPixelType = pFrameInfo->enPixelType;
-    if (pMainWindow->m_pcMyCamera)
-    { 
-        pMainWindow->m_pcMyCamera->DisplayOneFrame(&disp);
+    if (pUser)
+    {
+        MainWindow* pMainWindow = static_cast<MainWindow*>(pUser);  // 将 pUser 强制转换为 MainWindow 指针
+        pMainWindow->ImageCallBackInner(pData, pFrameInfo);         // 调用内部处理函数
     }
 
-    // 2. 缓存最新一帧（使用锁保护，避免竞争）
+    // 1) 可选: 仍然显示
+    if (pUser)
     {
+        MainWindow* pMainWindow = static_cast<MainWindow*>(pUser);  // 确保pUser非空后再访问
+        MV_DISPLAY_FRAME_INFO disp{};
+        disp.hWnd        = pMainWindow->m_hWnd;
+        disp.pData       = pData;
+        disp.nDataLen    = pFrameInfo->nFrameLen;
+        disp.nWidth      = pFrameInfo->nWidth;
+        disp.nHeight     = pFrameInfo->nHeight;
+        disp.enPixelType = pFrameInfo->enPixelType;
+        if (pMainWindow->m_pcMyCamera)
+        {
+            pMainWindow->m_pcMyCamera->DisplayOneFrame(&disp);
+        }
+    }
+
+    // 2) 缓存: 深拷贝最新一帧到成员变量
+    vector<unsigned char> tempFrame;  // 临时变量用于清晰度计算
+    if (pUser)
+    {
+        MainWindow* pMainWindow = static_cast<MainWindow*>(pUser);  // 再次获取 MainWindow 指针
         lock_guard<mutex> lk(pMainWindow->m_frameMtx);
         pMainWindow->m_lastFrame.resize(pFrameInfo->nFrameLen);
         memcpy(pMainWindow->m_lastFrame.data(), pData, pFrameInfo->nFrameLen);
-        pMainWindow->m_lastInfo = *pFrameInfo;
+        pMainWindow->m_lastInfo = *pFrameInfo;   // 结构体按值拷贝
         pMainWindow->m_hasFrame = true;
+
+        // 拷贝一份到临时变量, 用于清晰度计算
+        tempFrame = pMainWindow->m_lastFrame;
     }
 
-    // 3. 异步计算清晰度（避免阻塞回调，使用临时引用而非拷贝）
-    // 注意：为简化，这里仍使用同步计算，但移除了不必要的tempFrame拷贝
-    // 实际优化中应移到独立线程
-    Mat grayImage;
-    bool needSharpness = false;
-    switch(pFrameInfo->enPixelType) 
+    // 3) 计算清晰度并发射信号
+    if (pUser && !tempFrame.empty())
     {
-        case PixelType_Gvsp_Mono8:
+        MainWindow* pMainWindow = static_cast<MainWindow*>(pUser);
+        Mat grayImage;
+        // 根据像素类型转换到灰度图
+        switch(pFrameInfo->enPixelType)
         {
-            // 直接使用m_lastFrame数据（锁已释放）
-            lock_guard<mutex> lk(pMainWindow->m_frameMtx);
-            grayImage = Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC1, pMainWindow->m_lastFrame.data());
-            needSharpness = true;
-            break;
+            case PixelType_Gvsp_Mono8:
+            {
+                grayImage = Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC1, tempFrame.data());
+                break;
+            }
+            case PixelType_Gvsp_RGB8_Packed:
+            {
+                Mat colorImage = Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC3, tempFrame.data());
+                cvtColor(colorImage, grayImage, COLOR_RGB2GRAY);
+                break;
+            }
+            case PixelType_Gvsp_BGR8_Packed:
+            {
+                Mat colorImage = Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC3, tempFrame.data());
+                cvtColor(colorImage, grayImage, COLOR_BGR2GRAY);
+                break;
+            }
+            default: return;
         }
-        case PixelType_Gvsp_RGB8_Packed:
-        case PixelType_Gvsp_BGR8_Packed:
-        {
-            // 对于彩色图像，延迟计算或异步处理以减少阻塞
-            // 这里简化：跳过实时清晰度计算，或使用子采样
-            needSharpness = false;  // 临时禁用彩色清晰度计算以提高性能
-            break;
-        }
-        default: 
-            needSharpness = false;
-            break;
-    }
-
-    if (needSharpness && !grayImage.empty())
-    {
         double sharpness = pMainWindow->CalculateTenengradSharpness(grayImage);
+        // 发射信号
         emit pMainWindow->sharpnessValueUpdated(sharpness);
     }
 }
@@ -375,14 +385,14 @@ void MainWindow::on_bnEnum_clicked()
     ui->ComboDevices->clear();
     QTextCodec::setCodecForLocale(QTextCodec::codecForName("GBK"));
     ui->ComboDevices->setStyle(QStyleFactory::create("Windows"));
-    
+
     // 记录总设备数量
     int totalDeviceCount = 0;
-    
+
     // ch:枚举子网内所有MvCamera设备 | en:Enumerate all MvCamera devices within subnet
     memset(&m_stDevList, 0, sizeof(MV_CC_DEVICE_INFO_LIST));
     nRet = CMvCamera::EnumDevices(MV_GIGE_DEVICE | MV_USB_DEVICE | MV_GENTL_CAMERALINK_DEVICE | MV_GENTL_CXP_DEVICE | MV_GENTL_XOF_DEVICE, &m_stDevList);
-    
+
     if (MV_OK == nRet)
     {
         AppendLog(QString("枚举到 %1 个MvCamera设备").arg(m_stDevList.nDeviceNum), INFO);
@@ -480,7 +490,7 @@ void MainWindow::on_bnEnum_clicked()
     {
         AppendLog("枚举MvCamera设备错误", ERROR);
     }
-    
+
     AppendLog(QString("共枚举到 %1 个设备").arg(totalDeviceCount), INFO);
 
     if (totalDeviceCount == 0)
@@ -556,23 +566,9 @@ void MainWindow::on_bnOpen_clicked()
         }
     }
 
-    // 优化SDK配置参数
-    // 设置图像缓冲区数量（提高稳定性）
-    m_pcMyCamera->SetIntValue("GvspImageNodeCount", 10);  // 图像缓冲区数量
-    m_pcMyCamera->SetIntValue("GvspImageNodeBufferSize", 1024 * 1024 * 10);  // 每个缓冲区10MB
-
-    // 设置传输缓冲区大小
-    m_pcMyCamera->SetIntValue("GvspStreamBufferCount", 5);  // 传输缓冲区数量
-    m_pcMyCamera->SetIntValue("GvspStreamBufferSize", 1024 * 1024 * 5);  // 每个缓冲区5MB
-
-    // 设置显示相关参数
-    m_pcMyCamera->SetIntValue("GvspStreamDisplayMode", 1);  // 1=自动显示，0=手动显示
-
-    // 设置采集模式和触发模式
     m_pcMyCamera->SetEnumValue("AcquisitionMode", MV_ACQ_MODE_CONTINUOUS);
     m_pcMyCamera->SetEnumValue("TriggerMode", MV_TRIGGER_MODE_OFF);
 
-    // 获取当前参数
     on_bnGetParam_clicked(); // ch:获取参数 | en:Get Parameter
 
     ui->bnOpen->setEnabled(false);
@@ -590,8 +586,6 @@ void MainWindow::on_bnOpen_clicked()
     ui->tbFrameRate->setEnabled(true);
     ui->bnSetParam->setEnabled(true);
     ui->bnGetParam->setEnabled(true);
-
-    AppendLog("SDK配置优化完成", INFO);
 }
 
 void MainWindow::on_bnClose_clicked()
@@ -686,45 +680,16 @@ void MainWindow::on_bnStop_clicked()
 {
     // 变量定义
     int nRet;  // 返回值
-    int retryCount = 0;
-    const int maxRetries = 3;
 
-    if (!m_pcMyCamera) {
-        AppendLog("相机对象无效", ERROR);
-        m_bGrabbing = false;
-        ui->bnStart->setEnabled(true);
-        ui->bnStop->setEnabled(false);
-        ui->bnTriggerExec->setEnabled(false);
-        ui->pushButton->setEnabled(false);
-        ui->GetLength->setEnabled(false);
+    nRet = m_pcMyCamera->StopGrabbing();
+    if (MV_OK != nRet)
+    {
+        ShowErrorMsg("Stop grabbing fail", nRet);
+        AppendLog("停止抓图失败", ERROR);
         return;
     }
-
-    // 重试机制：尝试停止采集，最多重试3次
-    while (retryCount < maxRetries) {
-        nRet = m_pcMyCamera->StopGrabbing();
-        if (MV_OK == nRet) {
-            AppendLog("停止抓图成功", INFO);
-            break;
-        } else {
-            AppendLog(QString("停止抓图失败（第%1次尝试，错误码: %2）").arg(retryCount + 1).arg(nRet), ERROR);
-            retryCount++;
-            if (retryCount < maxRetries) {
-                QThread::msleep(100);  // 等待100ms后重试
-            }
-        }
-    }
-
-    // 如果所有重试都失败，强制重置状态
-    if (nRet != MV_OK) {
-        AppendLog("停止抓图多次失败，强制重置采集状态", WARNNING);
-        // 尝试注销回调（如果存在）
-        m_pcMyCamera->RegisterImageCallBack(nullptr, nullptr);
-    }
-
-    // 统一状态重置
+    AppendLog("停止抓图成功", INFO);
     m_bGrabbing = false;
-    m_hasFrame = false;  // 清空帧缓存标志
 
     ui->bnStart->setEnabled(true);
     ui->bnStop->setEnabled(false);
@@ -891,17 +856,17 @@ void MainWindow::on_pushButton_clicked()
     cornerButton = msgBox.addButton("角点检测模式", QMessageBox::ActionRole);
     circleButton = msgBox.addButton("最小外接矩形检测模式", QMessageBox::ActionRole);
     cancelButton = msgBox.addButton(QMessageBox::Cancel);
-    
+
     msgBox.exec();
 
     clicked = msgBox.clickedButton();
-    if (clicked == cancelButton) 
+    if (clicked == cancelButton)
     {
         return;
     }
 
     needDetection = ((clicked == cornerButton) || (clicked != circleButton));
-    
+
 
     // 取出一份缓存快照
     lock_guard<mutex> lk(m_frameMtx);
@@ -914,7 +879,7 @@ void MainWindow::on_pushButton_clicked()
     frame = m_lastFrame;   // 拷贝到本地变量, 避免持锁编码
     info  = m_lastInfo;
 
-    // 预分配编码缓冲 (给足空间) 
+    // 预分配编码缓冲 (给足空间)
     dstMax = info.nWidth * info.nHeight * 3 + 4096;
     pDst = make_unique<unsigned char[]>(dstMax);
     if (!pDst)
@@ -924,9 +889,9 @@ void MainWindow::on_pushButton_clicked()
         return;
     }
 
-    // 让 SDK 负责像素转换 + JPEG/PNG 编码 (与头文件一致) 
+    // 让 SDK 负责像素转换 + JPEG/PNG 编码 (与头文件一致)
     save.enImageType   = MV_Image_Jpeg;              // 也可 MV_Image_Png
-    save.enPixelType   = info.enPixelType;           // 源像素格式 (SDK内部转) 
+    save.enPixelType   = info.enPixelType;           // 源像素格式 (SDK内部转)
     save.nWidth        = info.nWidth;
     save.nHeight       = info.nHeight;
     save.nDataLen      = info.nFrameLen;
@@ -999,7 +964,7 @@ void MainWindow::on_pushButton_clicked()
     m_polygonCompleted = false;
 
     // 如果选择了角点检测, 才执行检测算法
-    if (needDetection) 
+    if (needDetection)
     {
         //OpenCV版本
         ProcessedOK = DetectRectangleOpenCV(fpath.toStdString(), Row, Col);
@@ -1047,7 +1012,7 @@ void MainWindow::on_pushButton_clicked()
 
         // 加载图片
         pixmap = QPixmap(imagePath);
-        if (pixmap.isNull()) 
+        if (pixmap.isNull())
         {
             QMessageBox::warning(this, "加载图片失败", "无法加载保存的图片！");
             return;
@@ -1081,7 +1046,7 @@ void MainWindow::on_pushButton_clicked()
     }
 }
 
-// 调试信息打印函数 (输入: 调试信息 (QString) +宏定义调试信息等级) 
+// 调试信息打印函数 (输入: 调试信息 (QString) +宏定义调试信息等级)
 void MainWindow::AppendLog(const QString &message, int logType, double value)
 {
     // 变量定义
@@ -1097,8 +1062,8 @@ void MainWindow::AppendLog(const QString &message, int logType, double value)
 
     // 检查value是否为有效值 (非零或非默认值) , 您可以根据需要调整条件
     // 这里使用了一个简单的检查: 如果value不是0.0, 则追加它
-    // 注意: 这可能不适用于所有情况, 您可能需要更精确的检查 (例如与NaN比较) 
-    if (value != 0.0) 
+    // 注意: 这可能不适用于所有情况, 您可能需要更精确的检查 (例如与NaN比较)
+    if (value != 0.0)
     {
         fullMessage += " " + QString::number(value);
     }
@@ -1121,7 +1086,7 @@ void MainWindow::AppendLog(const QString &message, int logType, double value)
 
     // 滚动条设置
     scrollbar = ui->displayLogMsg->verticalScrollBar();
-    if (scrollbar) 
+    if (scrollbar)
     {
         scrollbar->setValue(scrollbar->maximum());
     }
@@ -1148,21 +1113,21 @@ void MainWindow::on_GetLength_clicked()
     if (!m_hasCroppedImage)
     {
         ClearPolygonDisplay();
-        
+
         inputPath = "/home/orangepi/Desktop/VisualRobot_Local/Img/capture.jpg";
         outputPath = "../detectedImg.jpg";
         output = "../detectedImg.jpg";
 
         // 读取输入图像
         inputImage = imread(inputPath);
-        if (inputImage.empty()) 
+        if (inputImage.empty())
         {
             cerr << "无法读取输入图像: " << inputPath << endl;
             AppendLog("无法读取输入图像", ERROR);
             return;
         }
 
-        // 设置参数 (可根据需要修改) 
+        // 设置参数 (可根据需要修改)
         params.thresh = 127;
         params.maxval = 255;
         params.blurK = 5;
@@ -1173,7 +1138,7 @@ void MainWindow::on_GetLength_clicked()
         importCoeff = QMessageBox::question(this, "导入几何参数", "是否导入新几何参数变换系数？", QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
 
         // 处理图像 - 使用多目标检长算法
-        if (importCoeff == QMessageBox::Yes) 
+        if (importCoeff == QMessageBox::Yes)
         {
             // 首先用bias=1.0计算得到像素数据
             bias = 1.0;
@@ -1185,10 +1150,10 @@ void MainWindow::on_GetLength_clicked()
             AppendLog(QString("图像处理时间 (毫秒) : %1").arg(elapsed), INFO);
 
             // 如果有检测到目标，计算统计平均值
-            if (!result.heights.empty() && !result.widths.empty()) 
+            if (!result.heights.empty() && !result.widths.empty())
             {
                 double avgHeight = 0.0, avgWidth = 0.0;
-                for (size_t i = 0; i < result.heights.size(); i++) 
+                for (size_t i = 0; i < result.heights.size(); i++)
                 {
                     avgHeight += result.heights[i];
                     avgWidth += result.widths[i];
@@ -1200,24 +1165,24 @@ void MainWindow::on_GetLength_clicked()
                 bool okLength, okWidth;
                 double idealLength = QInputDialog::getDouble(this, "输入理想长度", "请输入理想目标长度 (μm):", 100.0, 0.0, 10000.0, 2, &okLength);
                 double idealWidth = 0.0;
-                if (okLength) 
+                if (okLength)
                 {
                     idealWidth = QInputDialog::getDouble(this, "输入理想宽度", "请输入理想目标宽度 (μm):", 100.0, 0.0, 10000.0, 2, &okWidth);
                 }
 
                 // 计算并更新变换系数
-                if (okLength && okWidth && avgHeight > 0 && avgWidth > 0) 
+                if (okLength && okWidth && avgHeight > 0 && avgWidth > 0)
                 {
                     m_biasLength = idealLength / avgHeight;
                     m_biasWidth = idealWidth / avgWidth;
                     AppendLog(QString("已更新几何参数变换系数 - 长度系数: %1, 宽度系数: %2").arg(m_biasLength).arg(m_biasWidth), INFO);
                 }
             }
-        } 
-        else 
+        }
+        else
         {
             // 如果不导入新系数，先判断是否已有系数
-            if (m_biasLength > 0 && m_biasWidth > 0) 
+            if (m_biasLength > 0 && m_biasWidth > 0)
             {
                 // 已有系数，直接使用bias=1.0计算像素数据，后续手动转换
                 bias = 1.0;
@@ -1227,8 +1192,8 @@ void MainWindow::on_GetLength_clicked()
                 result = CalculateLength(inputImage, params, bias);
                 qint64 elapsed = timer.elapsed(); // 获取经过的时间 (毫秒)
                 AppendLog(QString("图像处理时间 (毫秒) : %1").arg(elapsed), INFO);
-            } 
-            else 
+            }
+            else
             {
                 // 没有系数，使用bias=1.0计算并输出像素数据
                 bias = 1.0;
@@ -1242,20 +1207,20 @@ void MainWindow::on_GetLength_clicked()
         }
 
         // 保存输出图像
-        if (!result.image.empty()) 
+        if (!result.image.empty())
         {
             success = imwrite(outputPath, result.image);
-            if (success) 
+            if (success)
             {
                 cout << "输出图像已保存到: " << outputPath << endl;
-            } 
-            else 
+            }
+            else
             {
                 cerr << "保存输出图像失败: " << outputPath << endl;
                 return;
             }
-        } 
-        else 
+        }
+        else
         {
             cerr << "处理后的图像为空, 无法保存" << endl;
             return;
@@ -1263,7 +1228,7 @@ void MainWindow::on_GetLength_clicked()
 
         // 加载图片
         pixmap = QPixmap(output);
-        if (pixmap.isNull()) 
+        if (pixmap.isNull())
         {
             QMessageBox::warning(this, "加载图片失败", "无法加载保存的图片！");
             return;
@@ -1276,12 +1241,12 @@ void MainWindow::on_GetLength_clicked()
 
         AppendLog("检测后图像显示成功", INFO);
         AppendLog("基于连通域的多目标检长算法执行完成", INFO);
-        
+
         // 输出所有目标的检长结果到日志
-        for (size_t i = 0; i < result.heights.size(); i++) 
+        for (size_t i = 0; i < result.heights.size(); i++)
         {
             // 判断是否有有效的变换系数
-            if (m_biasLength > 0 && m_biasWidth > 0) 
+            if (m_biasLength > 0 && m_biasWidth > 0)
             {
                 // 使用变换系数计算真实尺寸
                 double realLength = result.heights[i] * m_biasLength;
@@ -1289,8 +1254,8 @@ void MainWindow::on_GetLength_clicked()
                 AppendLog(QString("目标%1 - 长度 (μm) : %2").arg(i+1).arg(realLength), INFO);
                 AppendLog(QString("目标%1 - 宽度 (μm) : %2").arg(i+1).arg(realWidth), INFO);
                 AppendLog(QString("目标%1 - 倾角 (°) : %2").arg(i+1).arg((double)result.angles[i]), INFO);
-            } 
-            else 
+            }
+            else
             {
                 // 没有变换系数，输出像素数据
                 AppendLog(QString("目标%1 - 长度 (pixs) : %2").arg(i+1).arg((double)result.heights[i]), INFO);
@@ -1306,11 +1271,11 @@ void MainWindow::on_GetLength_clicked()
         timer.start();           // 开始计时
 
         AppendLog("检测到多边形区域, 将处理裁剪后的图像", INFO);
-        
+
         // 如果之前 CropImageToRectangle/CropImageToPolygon 已经保存了裁剪图像到 ../Img/cropped_polygon.jpg
         QString tempCroppedPath = "../Img/cropped_polygon.jpg";
         // 尝试保存当前 m_croppedPixmap（如果未保存）以确保文件存在
-        if (!m_croppedPixmap.isNull()) 
+        if (!m_croppedPixmap.isNull())
         {
             m_croppedPixmap.save(tempCroppedPath);
         }
@@ -1321,27 +1286,27 @@ void MainWindow::on_GetLength_clicked()
 
         // 读取裁剪后的图像
         inputImage = imread(inputPath);
-        if (inputImage.empty()) 
+        if (inputImage.empty())
         {
             cerr << "无法读取裁剪后的图像: " << inputPath << endl;
             AppendLog("无法读取裁剪后的图像", ERROR);
             return;
         }
 
-        // 设置参数 (可根据需要修改) 
+        // 设置参数 (可根据需要修改)
         params.thresh = 127;
         params.maxval = 255;
         params.blurK = 5;
         params.areaMin = 100.0;
 
         // 对于裁剪区域的处理，同样支持几何参数变换
-        if (m_biasLength > 0 && m_biasWidth > 0) 
+        if (m_biasLength > 0 && m_biasWidth > 0)
         {
             // 已有系数，直接使用bias=1.0计算像素数据，后续手动转换
             bias = 1.0;
             result = CalculateLength(inputImage, params, bias);
-        } 
-        else 
+        }
+        else
         {
             // 没有系数，使用bias=1.0计算
             bias = 1.0;
@@ -1349,31 +1314,31 @@ void MainWindow::on_GetLength_clicked()
         }
 
         // 保存输出图像
-        if (!result.image.empty()) 
+        if (!result.image.empty())
         {
             success = imwrite(outputPath, result.image);
-            if (success) 
+            if (success)
             {
                 cout << "输出图像已保存到: " << outputPath << endl;
-            } 
-            else 
+            }
+            else
             {
                 cerr << "保存输出图像失败: " << outputPath << endl;
                 return;
             }
-        } 
-        else 
+        }
+        else
         {
             cerr << "处理后的图像为空, 无法保存" << endl;
             return;
         }
 
-        qint64 elapsed = timer.elapsed(); // 获取经过的时间 (毫秒) 
+        qint64 elapsed = timer.elapsed(); // 获取经过的时间 (毫秒)
         AppendLog(QString("裁剪区域图像处理时间 (毫秒) : %1").arg(elapsed), INFO);
 
         // 加载图片
         pixmap = QPixmap(output);
-        if (pixmap.isNull()) 
+        if (pixmap.isNull())
         {
             QMessageBox::warning(this, "加载图片失败", "无法加载保存的图片！");
             return;
@@ -1386,9 +1351,9 @@ void MainWindow::on_GetLength_clicked()
 
         AppendLog("裁剪区域检测后图像显示成功", INFO);
         AppendLog("裁剪区域检长算法执行完成", INFO);
-        
+
         // 判断是否有有效的变换系数
-        if (m_biasLength > 0 && m_biasWidth > 0) 
+        if (m_biasLength > 0 && m_biasWidth > 0)
         {
             // 使用变换系数计算真实尺寸
             double realLength = result.heights[0] * m_biasLength;
@@ -1396,8 +1361,8 @@ void MainWindow::on_GetLength_clicked()
             AppendLog(QString("裁剪区域物件长度 (μm) : %1").arg(realLength), INFO);
             AppendLog(QString("裁剪区域物件宽度 (μm) : %1").arg(realWidth), INFO);
             AppendLog(QString("裁剪区域物件倾角 (°) : %1").arg((double)result.angles[0]), INFO);
-        } 
-        else 
+        }
+        else
         {
             // 没有变换系数，输出像素数据
             AppendLog(QString("裁剪区域物件长度 (pixs) : %1").arg((double)result.heights[0]), INFO);
@@ -1499,10 +1464,10 @@ void MainWindow::on_genMatrix_clicked()
 
 //         // 首先显示变换矩阵
 //         matrixStr = "变换矩阵:\n";
-//         for (int i = 0; i < 3; i++) 
+//         for (int i = 0; i < 3; i++)
 //         {
 //             matrixStr += "| ";
-//             for (int j = 0; j < 3; j++) 
+//             for (int j = 0; j < 3; j++)
 //             {
 //                 matrixStr += QString::number(transformationMatrix(i, j), 'g', 15) + " ";
 //             }
@@ -1511,7 +1476,7 @@ void MainWindow::on_genMatrix_clicked()
 //         AppendLog(matrixStr, INFO);
 
 //         // 然后显示误差结果
-//         for (i = 0; i < PixelCoord.size(); i++) 
+//         for (i = 0; i < PixelCoord.size(); i++)
 //         {
 //             // 将像素坐标转换为齐次坐标 (x, y, 1)
 //             pixelHomogeneous = Vector3d(PixelCoord[i].x(), PixelCoord[i].y(), 1.0);
@@ -1639,10 +1604,10 @@ void MainWindow::on_btnOpenManual_clicked()
 
     // 构建PDF文件的路径
     pdfPath = QDir(QCoreApplication::applicationDirPath()).filePath("../Doc/调试信息手册.pdf");
-    
+
     // 尝试使用系统默认程序打开PDF
     QDesktopServices::openUrl(QUrl::fromLocalFile(pdfPath));
-    
+
     AppendLog("已尝试打开调试信息手册", INFO);
 }
 
@@ -1662,7 +1627,7 @@ void MainWindow::DrawOverlayOnDisplay2(double length, double width, double angle
 
     // 使用value方式获取pixmap
     src = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue);
-    if (src.isNull()) 
+    if (src.isNull())
     {
         AppendLog("没有可叠加的图像 (widgetDisplay_2 为空) ", WARNNING);
         return;
@@ -1674,20 +1639,20 @@ void MainWindow::DrawOverlayOnDisplay2(double length, double width, double angle
     p.setRenderHint(QPainter::TextAntialiasing, true);
 
     // 根据是否有有效的变换系数选择显示单位
-    if (m_biasLength > 0 && m_biasWidth > 0) 
+    if (m_biasLength > 0 && m_biasWidth > 0)
     {
         // 使用变换系数计算真实尺寸并显示μm单位
         double realLength = length * m_biasLength;
         double realWidth = width * m_biasWidth;
         text = QString("长: %1 μm\n宽: %2 μm\n角度: %3 °").arg(realLength, 0, 'f', 3).arg(realWidth, 0, 'f', 3).arg(angle, 0, 'f', 3);
-    } 
-    else 
+    }
+    else
     {
         // 没有变换系数，显示像素数据
         text = QString("长: %1 pixs\n宽: %2 pixs\n角度: %3 °").arg(length, 0, 'f', 3).arg(width, 0, 'f', 3).arg(angle, 0, 'f', 3);
     }
 
-    font.setPointSize(12); 
+    font.setPointSize(12);
     font.setBold(true);
     p.setFont(font);
 
@@ -1744,21 +1709,21 @@ double MainWindow::CalculateTenengradSharpness(const Mat& image)
     double meanValue;       // 平均值
 
     // 转换为灰度图
-    if (image.channels() == 3) 
+    if (image.channels() == 3)
     {
         cvtColor(image, imageGrey, COLOR_BGR2GRAY);
-    } 
-    else 
+    }
+    else
     {
         imageGrey = image.clone();
     }
-    
+
     // 计算Sobel梯度
     Sobel(imageGrey, imageSobel, CV_16U, 1, 1);
-    
+
     // 计算梯度的平方和
     meanValue = mean(imageSobel)[0];
-    
+
     return meanValue;
 }
 
@@ -1769,7 +1734,7 @@ void MainWindow::updateSharpnessDisplay(double sharpness)
     QString sharpnessText;  // 清晰度文本
 
     // 更新状态栏的清晰度标签
-    if (m_sharpnessLabel) 
+    if (m_sharpnessLabel)
     {
         sharpnessText = QString("清晰度: %1").arg(sharpness, 0, 'f', 2);
         m_sharpnessLabel->setText(sharpnessText);
@@ -1784,17 +1749,17 @@ void MainWindow::SetupPolygonDrawing()
     m_isImageLoaded = false;
     m_polygonCompleted = false;
     m_hasCroppedImage = false;
-    
+
     // 初始化矩形拖动选取变量
     m_isDragging = false;
     m_rectCompleted = false;
     m_useRectangleMode = false; // 默认使用多边形模式
-    
+
     // 设置widgetDisplay_2接受鼠标和键盘事件
     ui->widgetDisplay_2->setMouseTracking(true);
     ui->widgetDisplay_2->setFocusPolicy(Qt::StrongFocus); // 允许获得焦点
     ui->widgetDisplay_2->installEventFilter(this);
-    
+
     AppendLog("多边形绘制和矩形拖动功能已初始化, 当前模式: 多边形点击模式", INFO);
 }
 
@@ -1805,87 +1770,87 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
     QMouseEvent* mouseEvent;  // 鼠标事件
     QKeyEvent* keyEvent;      // 键盘事件
 
-    if (obj == ui->widgetDisplay_2) 
+    if (obj == ui->widgetDisplay_2)
     {
-        if (event->type() == QEvent::MouseButtonPress) 
+        if (event->type() == QEvent::MouseButtonPress)
         {
             mouseEvent = static_cast<QMouseEvent*>(event);
-            if (mouseEvent->button() == Qt::LeftButton) 
+            if (mouseEvent->button() == Qt::LeftButton)
             {
                 // 根据当前模式选择处理方式
-                if (m_useRectangleMode) 
+                if (m_useRectangleMode)
                 {
                     HandleMousePressOnDisplay2(mouseEvent->pos());
                 }
-                else 
+                else
                 {
                     HandleMouseClickOnDisplay2(mouseEvent->pos());
                 }
                 return true;
             }
         }
-        else if (event->type() == QEvent::MouseMove) 
+        else if (event->type() == QEvent::MouseMove)
         {
             mouseEvent = static_cast<QMouseEvent*>(event);
-            if (m_useRectangleMode && m_isDragging) 
+            if (m_useRectangleMode && m_isDragging)
             {
                 HandleMouseMoveOnDisplay2(mouseEvent->pos());
                 return true;
             }
         }
-        else if (event->type() == QEvent::MouseButtonRelease) 
+        else if (event->type() == QEvent::MouseButtonRelease)
         {
             mouseEvent = static_cast<QMouseEvent*>(event);
-            if (m_useRectangleMode && mouseEvent->button() == Qt::LeftButton && m_isDragging) 
+            if (m_useRectangleMode && mouseEvent->button() == Qt::LeftButton && m_isDragging)
             {
                 HandleMouseReleaseOnDisplay2(mouseEvent->pos());
                 return true;
             }
         }
-        else if (event->type() == QEvent::KeyPress) 
+        else if (event->type() == QEvent::KeyPress)
         {
             QKeyEvent* keyEvent = static_cast<QKeyEvent*>(event);
-            if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) 
+            if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter)
             {
                 HandleEnterKeyPress();
                 return true;
             }
-            else if (keyEvent->key() == Qt::Key_Escape) 
+            else if (keyEvent->key() == Qt::Key_Escape)
             {
                 HandleEscKeyPress();
                 return true;
             }
-            else if (keyEvent->key() == Qt::Key_Space) 
+            else if (keyEvent->key() == Qt::Key_Space)
             {
                 HandleSpaceKeyPress();
                 return true;
             }
         }
     }
-    
+
     // 如果widgetDisplay_2有焦点, 也捕获主窗口的Enter键事件
-    if (ui->widgetDisplay_2->hasFocus() && event->type() == QEvent::KeyPress) 
+    if (ui->widgetDisplay_2->hasFocus() && event->type() == QEvent::KeyPress)
     {
         keyEvent = static_cast<QKeyEvent*>(event);
-        if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) 
+        if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter)
         {
             HandleEnterKeyPress();
             return true;
         }
-        else if (keyEvent->key() == Qt::Key_Space) 
+        else if (keyEvent->key() == Qt::Key_Space)
         {
             HandleSpaceKeyPress();
             return true;
         }
     }
-    
+
     return QMainWindow::eventFilter(obj, event);
 }
 
 // 主窗口键盘事件处理
 void MainWindow::keyPressEvent(QKeyEvent *event)
 {
-    if (event->key() == Qt::Key_Space) 
+    if (event->key() == Qt::Key_Space)
     {
         // 处理空格键, 切换选择模式
         HandleSpaceKeyPress();
@@ -1897,7 +1862,7 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         HandleQKeyPress();
         event->accept(); // 标记事件已处理, 阻止传播
     }
-    else 
+    else
     {
         // 其他按键交给父类处理
         QMainWindow::keyPressEvent(event);
@@ -1914,63 +1879,63 @@ void MainWindow::HandleMouseClickOnDisplay2(const QPoint& pos)
     int i;                    // 循环索引
 
     // 检查是否有图片加载
-    if (!ui->widgetDisplay_2->pixmap() || ui->widgetDisplay_2->pixmap()->isNull()) 
+    if (!ui->widgetDisplay_2->pixmap() || ui->widgetDisplay_2->pixmap()->isNull())
     {
         AppendLog("请在widgetDisplay_2上显示图片后再进行点击", WARNNING);
         return;
     }
-    
+
     // 让widgetDisplay_2获得焦点, 以便接收键盘事件
     ui->widgetDisplay_2->setFocus();
-    
-    // 保存原始图片 (如果尚未保存) 
-    if (!m_isImageLoaded) 
+
+    // 保存原始图片 (如果尚未保存)
+    if (!m_isImageLoaded)
     {
         m_originalPixmap = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue);
         m_isImageLoaded = true;
     }
-    
+
     // 将控件坐标转换为图像坐标
     imagePoint = ConvertToImageCoordinates(pos);
-    
+
     // 添加点到多边形点列表
     m_polygonPoints.append(imagePoint);
-    
+
     // 在图片上显示点击点
     currentPixmap = m_originalPixmap.copy();
     painter.begin(&currentPixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    
+
     // 绘制点击点
     painter.setPen(QPen(Qt::red, 3));
     painter.setBrush(QBrush(Qt::red));
     painter.drawEllipse(imagePoint, 5, 5);
-    
+
     // 绘制点序号
     painter.setPen(QPen(Qt::white, 2));
     painter.setFont(QFont("Arial", 10, QFont::Bold));
     painter.drawText(imagePoint + QPoint(8, -8), QString::number(m_polygonPoints.size()));
-    
+
     // 如果已有多个点, 绘制连线
-    if (m_polygonPoints.size() > 1) 
+    if (m_polygonPoints.size() > 1)
     {
         painter.setPen(QPen(Qt::green, 2, Qt::DashLine));
-        for (i = 1; i < m_polygonPoints.size(); ++i) 
+        for (i = 1; i < m_polygonPoints.size(); ++i)
         {
             painter.drawLine(m_polygonPoints[i-1], m_polygonPoints[i]);
         }
         // 如果是最后一个点, 连接到第一个点形成闭合多边形预览
-        if (m_polygonPoints.size() >= 3) 
+        if (m_polygonPoints.size() >= 3)
         {
             painter.drawLine(m_polygonPoints.last(), m_polygonPoints.first());
         }
     }
-    
+
     painter.end();
-    
+
     // 更新显示
     ui->widgetDisplay_2->setPixmap(currentPixmap);
-    
+
     AppendLog(QString("已添加第%1个点, 坐标(%2, %3)").arg(m_polygonPoints.size()).arg(imagePoint.x()).arg(imagePoint.y()), INFO);
 }
 
@@ -1988,34 +1953,34 @@ QPoint MainWindow::ConvertToImageCoordinates(const QPoint& widgetPoint)
     int imageX;            // 图像X坐标
     int imageY;            // 图像Y坐标
 
-    if (!ui->widgetDisplay_2->pixmap() || ui->widgetDisplay_2->pixmap()->isNull()) 
+    if (!ui->widgetDisplay_2->pixmap() || ui->widgetDisplay_2->pixmap()->isNull())
     {
         return widgetPoint;
     }
-    
+
     // 获取原始图像尺寸
     originalSize = m_originalPixmap.size();
-    if (originalSize.isEmpty()) 
+    if (originalSize.isEmpty())
     {
         originalSize = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue).size();
     }
-    
+
     // 获取控件尺寸
     widgetSize = ui->widgetDisplay_2->size();
-    
-    // 计算图像在控件中的显示区域 (保持宽高比居中显示) 
+
+    // 计算图像在控件中的显示区域 (保持宽高比居中显示)
     widgetAspect = static_cast<double>(widgetSize.width()) / widgetSize.height();
     imageAspect = static_cast<double>(originalSize.width()) / originalSize.height();
-    
-    if (widgetAspect > imageAspect) 
+
+    if (widgetAspect > imageAspect)
     {
         // 控件更宽, 图像在垂直方向填充
         int displayHeight = widgetSize.height();
         int displayWidth = static_cast<int>(displayHeight * imageAspect);
         int offsetX = (widgetSize.width() - displayWidth) / 2;
         displayRect = QRect(offsetX, 0, displayWidth, displayHeight);
-    } 
-    else 
+    }
+    else
     {
         // 控件更高, 图像在水平方向填充
         int displayWidth = widgetSize.width();
@@ -2023,26 +1988,26 @@ QPoint MainWindow::ConvertToImageCoordinates(const QPoint& widgetPoint)
         int offsetY = (widgetSize.height() - displayHeight) / 2;
         displayRect = QRect(0, offsetY, displayWidth, displayHeight);
     }
-    
+
     // 检查点击是否在图像显示区域内
-    if (!displayRect.contains(widgetPoint)) 
+    if (!displayRect.contains(widgetPoint))
     {
         // 如果点击在图像区域外, 返回无效点
         return QPoint(-1, -1);
     }
-    
+
     // 计算相对位置比例
     relX = static_cast<double>(widgetPoint.x() - displayRect.x()) / displayRect.width();
     relY = static_cast<double>(widgetPoint.y() - displayRect.y()) / displayRect.height();
-    
+
     // 映射到原始图像坐标
     imageX = static_cast<int>(relX * originalSize.width());
     imageY = static_cast<int>(relY * originalSize.height());
-    
+
     // 确保坐标在图像范围内
     imageX = qMax(0, qMin(imageX, originalSize.width() - 1));
     imageY = qMax(0, qMin(imageY, originalSize.height() - 1));
-    
+
     return QPoint(imageX, imageY);
 }
 
@@ -2056,31 +2021,31 @@ void MainWindow::DrawPolygonOnImage()
     QString infoText;         // 信息文本
     int i;                    // 循环索引
 
-    if (m_polygonPoints.size() < 3) 
+    if (m_polygonPoints.size() < 3)
     {
         AppendLog("需要至少3个点才能绘制多边形", WARNNING);
         return;
     }
-    
+
     // 恢复原始图片
     currentPixmap = m_originalPixmap.copy();
     painter.begin(&currentPixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    
+
     // 绘制多边形
     painter.setPen(QPen(Qt::blue, 3));
     painter.setBrush(QBrush(QColor(0, 0, 255, 50))); // 半透明蓝色填充
-    
-    for (const QPoint& point : m_polygonPoints) 
+
+    for (const QPoint& point : m_polygonPoints)
     {
         polygon << point;
     }
     painter.drawPolygon(polygon);
-    
+
     // 绘制顶点和序号
     painter.setPen(QPen(Qt::red, 3));
     painter.setBrush(QBrush(Qt::red));
-    for (i = 0; i < m_polygonPoints.size(); ++i) 
+    for (i = 0; i < m_polygonPoints.size(); ++i)
     {
         painter.drawEllipse(m_polygonPoints[i], 5, 5);
         painter.setPen(QPen(Qt::white, 2));
@@ -2088,29 +2053,29 @@ void MainWindow::DrawPolygonOnImage()
         painter.drawText(m_polygonPoints[i] + QPoint(8, -8), QString::number(i+1));
         painter.setPen(QPen(Qt::red, 3));
     }
-    
+
     // 在图像上显示多边形信息
     infoText = QString("多边形: %1个顶点").arg(m_polygonPoints.size());
     painter.setPen(QPen(Qt::white, 2));
     painter.setFont(QFont("Arial", 12, QFont::Bold));
     painter.drawText(10, 30, infoText);
-    
+
     painter.end();
-    
+
     // 更新显示
     ui->widgetDisplay_2->setPixmap(currentPixmap);
-    
+
     // 在日志中显示所有点的坐标
     AppendLog("多边形绘制完成, 顶点坐标: ", INFO);
-    for (i = 0; i < m_polygonPoints.size(); ++i) 
+    for (i = 0; i < m_polygonPoints.size(); ++i)
     {
         AppendLog(QString("顶点%1: (%2, %3)").arg(i+1).arg(m_polygonPoints[i].x()).arg(m_polygonPoints[i].y()), INFO);
     }
-    
+
     // 标记多边形完成并裁剪图像
     m_polygonCompleted = true;
     CropImageToPolygon();
-    
+
     // 清空点列表, 准备下一次绘制
     m_polygonPoints.clear();
     m_isImageLoaded = false;
@@ -2131,7 +2096,7 @@ void MainWindow::CropImageToPolygon()
     QPolygon relativePolygon; // 相对多边形
     QPainterPath clipPath;    // 裁剪路径
 
-    if (m_polygonPoints.size() < 3) 
+    if (m_polygonPoints.size() < 3)
     {
         AppendLog("需要至少3个点才能裁剪图像", WARNNING);
         return;
@@ -2141,7 +2106,7 @@ void MainWindow::CropImageToPolygon()
     originalImage = m_originalPixmap.toImage();
 
     // 计算多边形的边界框
-    for (const QPoint& point : m_polygonPoints) 
+    for (const QPoint& point : m_polygonPoints)
     {
         polygon << point;
     }
@@ -2151,7 +2116,7 @@ void MainWindow::CropImageToPolygon()
     // 确保边界框在图像范围内
     boundingRect = boundingRect.intersected(QRect(0, 0, originalImage.width(), originalImage.height()));
 
-    if (boundingRect.isEmpty()) 
+    if (boundingRect.isEmpty())
     {
         AppendLog("多边形区域超出图像范围", WARNNING);
         return;
@@ -2162,19 +2127,19 @@ void MainWindow::CropImageToPolygon()
     squareRect = QRect(boundingRect.x(), boundingRect.y(), maxSize, maxSize);
 
     // 调整正方形区域确保在图像范围内
-    if (squareRect.right() >= originalImage.width()) 
+    if (squareRect.right() >= originalImage.width())
     {
         squareRect.moveLeft(originalImage.width() - maxSize);
     }
-    if (squareRect.bottom() >= originalImage.height()) 
+    if (squareRect.bottom() >= originalImage.height())
     {
         squareRect.moveTop(originalImage.height() - maxSize);
     }
-    if (squareRect.left() < 0) 
+    if (squareRect.left() < 0)
     {
         squareRect.moveLeft(0);
     }
-    if (squareRect.top() < 0) 
+    if (squareRect.top() < 0)
     {
         squareRect.moveTop(0);
     }
@@ -2192,8 +2157,8 @@ void MainWindow::CropImageToPolygon()
     painter.begin(&croppedImage);
     painter.setRenderHint(QPainter::Antialiasing, true);
 
-    // 设置剪裁路径为多边形 (相对于正方形区域的坐标) 
-    for (const QPoint& point : m_polygonPoints) 
+    // 设置剪裁路径为多边形 (相对于正方形区域的坐标)
+    for (const QPoint& point : m_polygonPoints)
     {
         relativePolygon << QPoint(point.x() - squareRect.x(), point.y() - squareRect.y());
     }
@@ -2212,7 +2177,7 @@ void MainWindow::CropImageToPolygon()
     m_hasCroppedImage = true;
 
     // 将裁剪后的图像显示到widgetDisplay_2上
-    if (!m_croppedPixmap.isNull()) 
+    if (!m_croppedPixmap.isNull())
     {
         // 缩放图片以适应widgetDisplay_2大小, 保持宽高比
         QPixmap scaledPixmap = m_croppedPixmap.scaled(ui->widgetDisplay->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
@@ -2245,58 +2210,58 @@ QColor MainWindow::SampleBorderColor(const QImage& image, const QPolygon& polygo
 
     borderPixels = QVector<QRgb>();
     sampleCount = 0;
-    
+
     // 在多边形边缘取样像素颜色
-    for (i = 0; i < polygon.size(); ++i) 
+    for (i = 0; i < polygon.size(); ++i)
     {
         p1 = polygon[i];
         p2 = polygon[(i + 1) % polygon.size()];
-        
+
         // 沿着边缘取样
         steps = qMax(qAbs(p2.x() - p1.x()), qAbs(p2.y() - p1.y()));
-        if (steps > 0) 
+        if (steps > 0)
         {
-            for (j = 0; j <= steps; ++j) 
+            for (j = 0; j <= steps; ++j)
             {
                 t = (float)j / steps;
                 samplePoint = QPoint(qRound(p1.x() * (1 - t) + p2.x() * t), qRound(p1.y() * (1 - t) + p2.y() * t));
-                
+
                 // 确保采样点在图像范围内
-                if (samplePoint.x() >= 0 && samplePoint.x() < image.width() && samplePoint.y() >= 0 && samplePoint.y() < image.height()) 
-                { 
+                if (samplePoint.x() >= 0 && samplePoint.x() < image.width() && samplePoint.y() >= 0 && samplePoint.y() < image.height())
+                {
                     borderPixels.append(image.pixel(samplePoint));
                     sampleCount++;
-                    
+
                     // 限制采样数量以提高性能
-                    if (sampleCount >= 100) 
+                    if (sampleCount >= 100)
                     {
                         break;
                     }
                 }
             }
         }
-        if (sampleCount >= 100) 
+        if (sampleCount >= 100)
         {
             break;
         }
     }
-    
-    if (borderPixels.isEmpty()) 
+
+    if (borderPixels.isEmpty())
     {
         return Qt::white; // 默认背景色
     }
-    
+
     // 计算平均颜色
     r = 0;
     g = 0;
     b = 0;
-    for (QRgb pixel : borderPixels) 
+    for (QRgb pixel : borderPixels)
     {
         r += qRed(pixel);
         g += qGreen(pixel);
         b += qBlue(pixel);
     }
-    
+
     return QColor(r / borderPixels.size(), g / borderPixels.size(), b / borderPixels.size());
 }
 
@@ -2304,17 +2269,17 @@ QColor MainWindow::SampleBorderColor(const QImage& image, const QPolygon& polygo
 void MainWindow::ClearPolygonDisplay()
 {
     // 恢复原始图片显示
-    if (!m_originalPixmap.isNull()) 
+    if (!m_originalPixmap.isNull())
     {
         ui->widgetDisplay_2->setPixmap(m_originalPixmap);
     }
-    
+
     // 重置状态
     m_polygonPoints.clear();
     m_polygonCompleted = false;
     m_hasCroppedImage = false;
     m_isImageLoaded = false;
-    
+
     AppendLog("已清除多边形显示", INFO);
 }
 
@@ -2322,7 +2287,7 @@ void MainWindow::ClearPolygonDisplay()
 void MainWindow::HandleEscKeyPress()
 {
     // 检查是否有鼠标点击产生的点或矩形框
-    if (!m_polygonPoints.isEmpty() || m_rectCompleted) 
+    if (!m_polygonPoints.isEmpty() || m_rectCompleted)
     {
         // 清空所有点并还原状态
         m_polygonPoints.clear();
@@ -2331,16 +2296,16 @@ void MainWindow::HandleEscKeyPress()
         m_hasCroppedImage = false;
         m_rectCompleted = false;
         m_isDragging = false;
-        
+
         // 恢复原始图片显示
-        if (!m_originalPixmap.isNull()) 
+        if (!m_originalPixmap.isNull())
         {
             ui->widgetDisplay_2->setPixmap(m_originalPixmap);
         }
-        
+
         AppendLog("已清空所有已选点和矩形框", INFO);
     }
-    else 
+    else
     {
         // 如果没有选点, 显示警告信息
         AppendLog("无ROI选点", WARNNING);
@@ -2357,7 +2322,7 @@ void MainWindow::HandleSpaceKeyPress()
 void MainWindow::HandleQKeyPress()
 {
     bool isInAnyDetectionMode = false;
-    
+
     // 检查并停止传统实时检测
     {
         QMutexLocker locker(&m_realTimeDetectionMutex);
@@ -2366,17 +2331,17 @@ void MainWindow::HandleQKeyPress()
             // 停止实时检测
             m_realTimeDetectionRunning = false;
             AppendLog("已按Q键退出实时检测模式", INFO);
-            
+
             // 清空widgetDisplay_2内容
             QMetaObject::invokeMethod(this, [this]() {
                 ui->widgetDisplay_2->clear();
                 AppendLog("已清空实时检测显示", INFO);
             }, Qt::QueuedConnection);
-            
+
             isInAnyDetectionMode = true;
         }
     }
-    
+
     // 检查并停止YOLO实时检测
     {
         QMutexLocker locker(&m_yoloDetectionMutex);
@@ -2385,17 +2350,17 @@ void MainWindow::HandleQKeyPress()
             // 停止YOLO实时检测
             m_yoloDetectionRunning = false;
             AppendLog("已按Q键退出YOLO实时检测模式", INFO);
-            
+
             // 清空widgetDisplay_2内容
             QMetaObject::invokeMethod(this, [this]() {
                 ui->widgetDisplay_2->clear();
                 AppendLog("已清空YOLO实时检测显示", INFO);
             }, Qt::QueuedConnection);
-            
+
             isInAnyDetectionMode = true;
         }
     }
-    
+
     // 如果不在任何检测模式中
     if (!isInAnyDetectionMode)
     {
@@ -2408,24 +2373,24 @@ void MainWindow::SwitchSelectionMode()
 {
     // 切换模式
     m_useRectangleMode = !m_useRectangleMode;
-    
+
     // 清空当前状态
     m_polygonPoints.clear();
     m_rectCompleted = false;
     m_isDragging = false;
-    
+
     // 恢复原始图片显示
-    if (!m_originalPixmap.isNull()) 
+    if (!m_originalPixmap.isNull())
     {
         ui->widgetDisplay_2->setPixmap(m_originalPixmap);
     }
-    
+
     // 记录模式切换
-    if (m_useRectangleMode) 
+    if (m_useRectangleMode)
     {
         AppendLog("已切换到矩形拖动模式", INFO);
     }
-    else 
+    else
     {
         AppendLog("已切换到多边形点击模式", INFO);
     }
@@ -2435,67 +2400,67 @@ void MainWindow::SwitchSelectionMode()
 void MainWindow::HandleMousePressOnDisplay2(const QPoint& pos)
 {
     // 检查是否有图片加载
-    if (!ui->widgetDisplay_2->pixmap() || ui->widgetDisplay_2->pixmap()->isNull()) 
+    if (!ui->widgetDisplay_2->pixmap() || ui->widgetDisplay_2->pixmap()->isNull())
     {
         AppendLog("请在widgetDisplay_2上显示图片后再进行拖动", WARNNING);
         return;
     }
-    
+
     // 让widgetDisplay_2获得焦点, 以便接收键盘事件
     ui->widgetDisplay_2->setFocus();
-    
+
     // 保存原始图片（如果尚未保存）
-    if (!m_isImageLoaded) 
+    if (!m_isImageLoaded)
     {
         m_originalPixmap = ui->widgetDisplay_2->pixmap(Qt::ReturnByValue);
         m_isImageLoaded = true;
     }
-    
+
     // 开始拖动
     m_isDragging = true;
     m_dragStartPoint = pos;
     m_dragEndPoint = pos;
-    
+
     AppendLog("开始矩形拖动选取", INFO);
 }
 
 // 处理鼠标移动事件（矩形拖动预览）
 void MainWindow::HandleMouseMoveOnDisplay2(const QPoint& pos)
 {
-    if (!m_isDragging) 
+    if (!m_isDragging)
     {
         return;
     }
-    
+
     m_dragEndPoint = pos;
-    
+
     // 显示矩形预览
     QPixmap currentPixmap = m_originalPixmap.copy();
     QPainter painter(&currentPixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    
+
     // 计算矩形区域
     QRect dragRect = QRect(m_dragStartPoint, m_dragEndPoint).normalized();
-    
+
     // 绘制半透明矩形
     painter.setPen(QPen(Qt::red, 2));
     painter.setBrush(QBrush(QColor(255, 0, 0, 50))); // 半透明红色填充
     painter.drawRect(dragRect);
-    
+
     // 显示矩形尺寸信息
     painter.setPen(QPen(Qt::white, 2));
     painter.setFont(QFont("Arial", 12, QFont::Bold));
-    
+
     // 将控件坐标转换为图像坐标
     QPoint startImagePoint = ConvertToImageCoordinates(m_dragStartPoint);
     QPoint endImagePoint = ConvertToImageCoordinates(m_dragEndPoint);
     QRect imageRect = QRect(startImagePoint, endImagePoint).normalized();
-    
+
     QString sizeText = QString("%1 x %2 像素").arg(imageRect.width()).arg(imageRect.height());
     painter.drawText(dragRect.bottomRight() + QPoint(5, 15), sizeText);
-    
+
     painter.end();
-    
+
     // 更新显示
     ui->widgetDisplay_2->setPixmap(currentPixmap);
 }
@@ -2503,32 +2468,32 @@ void MainWindow::HandleMouseMoveOnDisplay2(const QPoint& pos)
 // 处理鼠标释放事件（完成矩形选择）
 void MainWindow::HandleMouseReleaseOnDisplay2(const QPoint& pos)
 {
-    if (!m_isDragging) 
+    if (!m_isDragging)
     {
         return;
     }
-    
+
     m_dragEndPoint = pos;
     m_isDragging = false;
-    
+
     // 将控件坐标转换为图像坐标
     QPoint startImagePoint = ConvertToImageCoordinates(m_dragStartPoint);
     QPoint endImagePoint = ConvertToImageCoordinates(m_dragEndPoint);
-    
+
     // 计算选中的矩形区域
     m_selectedRect = QRect(startImagePoint, endImagePoint).normalized();
-    
+
     // 确保矩形区域有效
-    if (m_selectedRect.width() < 10 || m_selectedRect.height() < 10) 
+    if (m_selectedRect.width() < 10 || m_selectedRect.height() < 10)
     {
         AppendLog("选择的矩形区域太小, 请重新选择", WARNNING);
         // 恢复原始图片
         ui->widgetDisplay_2->setPixmap(m_originalPixmap);
         return;
     }
-    
+
     AppendLog(QString("矩形选择完成, 区域: %1x%2 像素").arg(m_selectedRect.width()).arg(m_selectedRect.height()), INFO);
-    
+
     // 绘制最终矩形并裁剪图像
     DrawRectangleOnImage();
 }
@@ -2536,34 +2501,34 @@ void MainWindow::HandleMouseReleaseOnDisplay2(const QPoint& pos)
 // 绘制矩形区域
 void MainWindow::DrawRectangleOnImage()
 {
-    if (m_selectedRect.isEmpty()) 
+    if (m_selectedRect.isEmpty())
     {
         AppendLog("无效的矩形区域", WARNNING);
         return;
     }
-    
+
     // 恢复原始图片
     QPixmap currentPixmap = m_originalPixmap.copy();
     QPainter painter(&currentPixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    
+
     // 绘制矩形边框
     painter.setPen(QPen(Qt::blue, 3));
     painter.setBrush(QBrush(QColor(0, 0, 255, 30))); // 半透明蓝色填充
     painter.drawRect(m_selectedRect);
-    
+
     // 绘制矩形信息
     painter.setPen(QPen(Qt::white, 2));
     painter.setFont(QFont("Arial", 12, QFont::Bold));
-    
+
     QString infoText = QString("矩形区域: %1x%2").arg(m_selectedRect.width()).arg(m_selectedRect.height());
     painter.drawText(m_selectedRect.topLeft() + QPoint(5, -5), infoText);
-    
+
     painter.end();
-    
+
     // 更新显示
     ui->widgetDisplay_2->setPixmap(currentPixmap);
-    
+
     // 标记矩形完成
     m_rectCompleted = true;
     AppendLog("矩形区域已绘制完成, 按Enter键确认裁剪", INFO);
@@ -2576,46 +2541,46 @@ void MainWindow::CropImageToRectangle()
     QString savePath;        // 保存路径
     bool saveSuccess;        // 保存成功标志
 
-    if (m_selectedRect.isEmpty()) 
+    if (m_selectedRect.isEmpty())
     {
         AppendLog("无效的矩形区域", WARNNING);
         return;
     }
-    
+
     // 将QPixmap转换为QImage
     QImage originalImage = m_originalPixmap.toImage();
-    
+
     // 确保矩形区域在图像范围内
     QRect validRect = m_selectedRect.intersected(QRect(0, 0, originalImage.width(), originalImage.height()));
-    
-    if (validRect.isEmpty()) 
+
+    if (validRect.isEmpty())
     {
         AppendLog("矩形区域超出图像范围", WARNNING);
         return;
     }
-    
+
     // 裁剪图像
     QImage croppedImage = originalImage.copy(validRect);
-    
+
     // 转换为QPixmap
     m_croppedPixmap = QPixmap::fromImage(croppedImage);
     m_hasCroppedImage = true;
-    
+
     // 保存裁剪后的图像到Img文件夹
     savePath = "../Img/cropped_polygon.jpg";
     saveSuccess = m_croppedPixmap.save(savePath);
-    
-    if (saveSuccess) 
+
+    if (saveSuccess)
     {
         AppendLog(QString("裁剪后的矩形区域图像已保存到: %1").arg(savePath), INFO);
-    } 
-    else 
+    }
+    else
     {
         AppendLog("保存裁剪后的矩形区域图像失败", WARNNING);
     }
-    
+
     // 将裁剪后的图像显示到widgetDisplay_2上
-    if (!m_croppedPixmap.isNull()) 
+    if (!m_croppedPixmap.isNull())
     {
         // 缩放图片以适应widgetDisplay_2大小, 保持宽高比
         QPixmap scaledPixmap = m_croppedPixmap.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
@@ -2623,7 +2588,7 @@ void MainWindow::CropImageToRectangle()
         ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
         AppendLog("裁剪后的矩形区域图像已显示", INFO);
     }
-    
+
     AppendLog(QString("矩形区域图像裁剪完成, 尺寸: %1x%2 像素").arg(validRect.width()).arg(validRect.height()), INFO);
     ui->GetLength->setEnabled(true);
 }
@@ -2631,27 +2596,27 @@ void MainWindow::CropImageToRectangle()
 // 修改Enter键处理函数以支持矩形模式
 void MainWindow::HandleEnterKeyPress()
 {
-    if (m_useRectangleMode) 
+    if (m_useRectangleMode)
     {
         // 矩形模式处理
-        if (!m_rectCompleted) 
+        if (!m_rectCompleted)
         {
             AppendLog("请先完成矩形选择", WARNNING);
             return;
         }
-        
+
         AppendLog("开始裁剪矩形区域", INFO);
         CropImageToRectangle();
     }
-    else 
+    else
     {
         // 多边形模式处理
-        if (m_polygonPoints.size() < 3) 
+        if (m_polygonPoints.size() < 3)
         {
             AppendLog(QString("需要至少3个点才能绘制多边形, 当前只有%1个点").arg(m_polygonPoints.size()), WARNNING);
             return;
         }
-        
+
         AppendLog(QString("开始绘制多边形, 共%1个点").arg(m_polygonPoints.size()), INFO);
         DrawPolygonOnImage();
     }
@@ -2660,7 +2625,7 @@ void MainWindow::HandleEnterKeyPress()
 // Mat 转 QPixmap
 QPixmap MainWindow::MatToQPixmap(const Mat& bgr)
 {
-    if (bgr.empty()) 
+    if (bgr.empty())
     {
         return QPixmap();
     }
@@ -2670,13 +2635,14 @@ QPixmap MainWindow::MatToQPixmap(const Mat& bgr)
     return QPixmap::fromImage(img.copy());
 }
 
+// 从缓存的最后一帧取图：BGR
 bool MainWindow::GrabLastFrameBGR(Mat& outBGR)
 {
     vector<unsigned char> frameCopy;
     MV_FRAME_OUT_INFO_EX info{};
     {
         lock_guard<mutex> lk(m_frameMtx);
-        if (!m_hasFrame || m_lastFrame.empty()) 
+        if (!m_hasFrame || m_lastFrame.empty())
         {
             AppendLog("暂无可用图像，请先开始采集。", WARNNING);
             return false;
@@ -2685,83 +2651,42 @@ bool MainWindow::GrabLastFrameBGR(Mat& outBGR)
         info      = m_lastInfo;
     }
 
-    // 直接使用SDK像素格式转换到BGR8，避免JPEG编码/解码开销
-    if (!m_pcMyCamera) 
+    // 用 SDK 把原始帧编码成 JPEG，然后用 OpenCV 解码得到BGR
+    unsigned int dstMax = info.nWidth * info.nHeight * 3 + 4096;
+    unique_ptr<unsigned char[]> pDst(new (nothrow) unsigned char[dstMax]);
+    if (!pDst)
     {
-        AppendLog("相机对象无效", ERROR);
+        AppendLog("抓帧转换：内存不足（编码缓冲）", ERROR);
         return false;
     }
 
-    // 分配BGR缓冲区
-    size_t bgrSize = info.nWidth * info.nHeight * 3;
-    unique_ptr<unsigned char[]> pBGR(new (nothrow) unsigned char[bgrSize]);
-    if (!pBGR) 
+    MV_SAVE_IMAGE_PARAM_EX3 save{};
+    save.enImageType   = MV_Image_Jpeg;
+    save.enPixelType   = info.enPixelType;
+    save.nWidth        = info.nWidth;
+    save.nHeight       = info.nHeight;
+    save.nDataLen      = info.nFrameLen;
+    save.pData         = frameCopy.data();
+    save.pImageBuffer  = pDst.get();
+    save.nImageLen     = dstMax;
+    save.nJpgQuality   = 90;
+
+    int nRet = m_pcMyCamera ? m_pcMyCamera->SaveImage(&save) : MV_E_HANDLE;
+    if (MV_OK != nRet || save.nImageLen == 0)
     {
-        AppendLog("内存不足（BGR缓冲）", ERROR);
+        AppendLog("抓帧转换失败（编码阶段）", ERROR);
         return false;
     }
 
-    // 设置像素转换参数
-    MV_CC_PIXEL_CONVERT_PARAM stConvertParam;
-    memset(&stConvertParam, 0, sizeof(MV_CC_PIXEL_CONVERT_PARAM));
-    stConvertParam.nWidth       = info.nWidth;
-    stConvertParam.nHeight      = info.nHeight;
-    stConvertParam.pSrcData     = frameCopy.data();
-    stConvertParam.nSrcDataLen  = info.nFrameLen;
-    stConvertParam.enSrcPixelType = info.enPixelType;
-    stConvertParam.enDstPixelType = PixelType_Gvsp_BGR8_Packed;  // 目标BGR8格式
-    stConvertParam.pDstBuffer   = pBGR.get();
-    stConvertParam.nDstLen      = bgrSize;
-
-    // 执行像素转换
-    int nRet = m_pcMyCamera->ConvertPixelType(&stConvertParam);
-    if (MV_OK != nRet) 
+    // OpenCV 解码
+    Mat encoded(1, static_cast<int>(save.nImageLen), CV_8U, pDst.get());
+    Mat bgr = imdecode(encoded, IMREAD_COLOR);
+    if (bgr.empty())
     {
-        // 转换失败，回退到JPEG方法
-        AppendLog(QString("像素转换失败（错误码: %1），回退到JPEG方法").arg(nRet), WARNNING);
-        
-        // JPEG回退代码（原逻辑）
-        unsigned int dstMax = info.nWidth * info.nHeight * 3 + 4096;
-        unique_ptr<unsigned char[]> pDst(new (nothrow) unsigned char[dstMax]);
-        if (!pDst) 
-        {
-            AppendLog("抓帧转换：内存不足（编码缓冲）", ERROR);
-            return false;
-        }
-
-        MV_SAVE_IMAGE_PARAM_EX3 save{};
-        save.enImageType   = MV_Image_Jpeg;
-        save.enPixelType   = info.enPixelType;
-        save.nWidth        = info.nWidth;
-        save.nHeight       = info.nHeight;
-        save.nDataLen      = info.nFrameLen;
-        save.pData         = frameCopy.data();
-        save.pImageBuffer  = pDst.get();
-        save.nImageLen     = dstMax;
-        save.nJpgQuality   = 90;
-
-        nRet = m_pcMyCamera->SaveImage(&save);
-        if (MV_OK != nRet || save.nImageLen == 0) 
-        {
-            AppendLog("抓帧转换失败（编码阶段）", ERROR);
-            return false;
-        }
-
-        // OpenCV 解码
-        Mat encoded(1, static_cast<int>(save.nImageLen), CV_8U, pDst.get());
-        Mat bgr = imdecode(encoded, IMREAD_COLOR);
-        if (bgr.empty()) 
-        {
-            AppendLog("imdecode 失败", ERROR);
-            return false;
-        }
-        outBGR = bgr.clone();
-        return true;
+        AppendLog("imdecode 失败", ERROR);
+        return false;
     }
-
-    // 转换成功，直接创建Mat
-    outBGR = Mat(info.nHeight, info.nWidth, CV_8UC3, pBGR.get());
-    outBGR = outBGR.clone();  // 深拷贝，确保数据独立
+    outBGR = bgr.clone();
     return true;
 }
 
@@ -2818,14 +2743,14 @@ void MainWindow::on_setTemplate_clicked()
 
     msg.exec();
     QAbstractButton* clicked = msg.clickedButton();
-    if (clicked == btnCur) 
+    if (clicked == btnCur)
     {
         if (SetTemplateFromCurrent())
         {
             AppendLog("模板已更新（来自当前帧）", INFO);
         }
     }
-    else if (clicked == btnFile) 
+    else if (clicked == btnFile)
     {
         QString path = QFileDialog::getOpenFileName(this, "选择模板图像", ".", "Images (*.png *.jpg *.jpeg *.bmp)");
         if (!path.isEmpty() && SetTemplateFromFile(path))
@@ -2876,18 +2801,18 @@ void MainWindow::RealTimeDetectionThread()
         QElapsedTimer t; t.start();
         Mat dbgMask;
         auto boxes = DetectDefects(curBGR, H, &dbgMask);
-        
+
         // 绘制结果
         Mat draw = curBGR.clone();
-        for (size_t i = 0; i < boxes.size(); ++i) 
+        for (size_t i = 0; i < boxes.size(); ++i)
         {
             auto& b = boxes[i];
             rectangle(draw, b, Scalar(0,0,255), 2); // 红框
-            
+
             // 对缺陷区域进行分类
             Mat defectROI = curBGR(b);
             std::string defectType = m_defectDetection->ClassifyDefect(defectROI);
-            
+
             // 在缺陷框左上角显示缺陷类型
             QString typeText = QString::fromStdString(defectType);
             int fontFace = FONT_HERSHEY_SIMPLEX;
@@ -2895,19 +2820,19 @@ void MainWindow::RealTimeDetectionThread()
             int thickness = 2;
             int baseline = 0;
             Size textSize = getTextSize(typeText.toStdString(), fontFace, fontScale, thickness, &baseline);
-            
+
             // 计算文本位置（框内左上角）
             Point textOrg(b.x + 5, b.y + textSize.height + 5);
-            
+
             // 绘制半透明背景
             rectangle(draw,  Point(b.x, b.y),  Point(b.x + textSize.width + 10, b.y + textSize.height + 10), Scalar(0, 0, 0), -1);
-            
+
             // 绘制文本
             putText(draw, typeText.toStdString(), textOrg, fontFace, fontScale, Scalar(0, 255, 0), thickness);
-            
+
             // 记录分类结果
             // 只在非稳定状态下记录具体缺陷类型，避免日志过多
-            if (!m_isStableState || QTime::currentTime().msecsTo(m_lastLogTime) > 60000) 
+            if (!m_isStableState || QTime::currentTime().msecsTo(m_lastLogTime) > 60000)
             { // 每分钟记录一次详细信息
                 QMetaObject::invokeMethod(this, [this, i, typeText]() {
                     AppendLog(QString("缺陷框 %1: 类型=%2").arg(i+1).arg(typeText), INFO);
@@ -2918,25 +2843,25 @@ void MainWindow::RealTimeDetectionThread()
         // 在图像上显示检测信息
         QString infoText = QString("REALTIME DETECTION - DEFECTS: %1").arg(boxes.size());
         putText(draw, infoText.toStdString(), Point(100, 150), FONT_HERSHEY_SIMPLEX, 4, Scalar(0, 255, 0), 10);
-        
+
         // 优化日志记录：仅在缺陷数发生变化并保持2秒以上时记录
         int currentDefectCount = boxes.size();
         QTime currentTime = QTime::currentTime();
-        
+
         // 在主线程中处理日志逻辑
         QMetaObject::invokeMethod(this, [this, currentDefectCount, currentTime]() {
             // 如果是首次运行或者缺陷数量发生变化
-            if (m_lastDefectCount == -1 || m_lastDefectCount != currentDefectCount) 
+            if (m_lastDefectCount == -1 || m_lastDefectCount != currentDefectCount)
             {
                 // 更新状态为非稳定，并记录开始时间
                 m_isStableState = false;
                 m_stableStateStartTime = currentTime;
                 m_lastDefectCount = currentDefectCount;
-            } 
-            else 
+            }
+            else
             {
                 // 检查当前状态是否已经稳定2秒以上
-                if (!m_isStableState && m_stableStateStartTime.secsTo(currentTime) >= 2) 
+                if (!m_isStableState && m_stableStateStartTime.secsTo(currentTime) >= 2)
                 {
                     // 状态稳定，记录日志
                     m_isStableState = true;
@@ -2948,7 +2873,7 @@ void MainWindow::RealTimeDetectionThread()
 
         // 展示到 widgetDisplay_2
         QPixmap pm = MatToQPixmap(draw);
-        if (!pm.isNull()) 
+        if (!pm.isNull())
         {
             // 在主线程中更新UI
             QMetaObject::invokeMethod(this, [this, pm]() {
@@ -2979,7 +2904,7 @@ void MainWindow::StartRealTimeDetection()
     QThread* thread = QThread::create([this]() { RealTimeDetectionThread(); });
     connect(thread, &QThread::finished, thread, &QThread::deleteLater);
     thread->start();
-    
+
     // 重置日志状态变量
     m_lastDefectCount = -1;
     m_lastLogTime = QTime::currentTime();
@@ -2996,15 +2921,15 @@ void MainWindow::on_detect_clicked()
     QMessageBox msgBox(this);
     msgBox.setWindowTitle("选择检测模式");
     msgBox.setText("请选择检测模式:");
-    
+
     QPushButton *singleButton = msgBox.addButton("单次", QMessageBox::ActionRole);
     QPushButton *realTimeButton = msgBox.addButton("实时", QMessageBox::ActionRole);
     QPushButton *cancelButton = msgBox.addButton("取消", QMessageBox::RejectRole);
-    
+
     msgBox.exec();
-    
+
     QAbstractButton* clicked = msgBox.clickedButton();
-    if (clicked == cancelButton) 
+    if (clicked == cancelButton)
     {
         AppendLog("检测已取消", INFO);
         return;
@@ -3012,7 +2937,7 @@ void MainWindow::on_detect_clicked()
     else if (clicked == realTimeButton)
     {
         // 实时检测模式
-        if (!m_defectDetection->HasTemplate()) 
+        if (!m_defectDetection->HasTemplate())
         {
             AppendLog("尚未设置模板，请先设置模板。", WARNNING);
             // 尝试直接用当前帧设模板
@@ -3027,7 +2952,7 @@ void MainWindow::on_detect_clicked()
     else if (clicked == singleButton)
     {
         // 单次检测模式（集成特征对齐）
-        if (!m_defectDetection->HasTemplate()) 
+        if (!m_defectDetection->HasTemplate())
         {
             AppendLog("尚未设置模板，请先设置模板。", WARNNING);
             // 尝试直接用当前帧设模板，继续流程（也可直接 return）
@@ -3047,7 +2972,7 @@ void MainWindow::on_detect_clicked()
         // 使用特征对齐进行图像配准
         QElapsedTimer alignTimer;
         alignTimer.start();
-        
+
         Mat H;
         if (!m_defectDetection->ComputeHomographyWithFeatureAlignment(curBGR, H))
         {
@@ -3056,7 +2981,7 @@ void MainWindow::on_detect_clicked()
             Mat curGray;
             cvtColor(curBGR, curGray, COLOR_BGR2GRAY);
             GaussianBlur(curGray, curGray, cv::Size(3,3), 0);
-            
+
             if (!ComputeHomography(curGray, H))
             {
                 return;
@@ -3084,19 +3009,19 @@ void MainWindow::on_detect_clicked()
 
         // 步骤6: 从文件重新读取模板图和重构图像进行缺陷检测
         AppendLog("步骤6: 从文件重新读取图像进行缺陷检测...", INFO);
-        
+
         // 读取模板图像
         Mat templateBGR = imread("../Img/templateBGR.jpg");
-        if (templateBGR.empty()) 
+        if (templateBGR.empty())
         {
             AppendLog("错误: 无法加载模板图像: ../Img/templateBGR.jpg", ERROR);
             return;
         }
         AppendLog("模板图像加载成功", INFO);
-        
+
         // 读取重构后的待检测图像
         Mat testImage = imread("../Img/alignedBGR.jpg");
-        if (testImage.empty()) 
+        if (testImage.empty())
         {
             AppendLog("错误: 无法加载待检测图像: ../Img/alignedBGR.jpg", ERROR);
             return;
@@ -3105,9 +3030,9 @@ void MainWindow::on_detect_clicked()
 
         // 创建新的缺陷检测对象进行独立检测
         DefectDetection fileDetector;
-        
+
         // 设置模板
-        if (!fileDetector.SetTemplateFromFile("../Img/templateBGR.jpg")) 
+        if (!fileDetector.SetTemplateFromFile("../Img/templateBGR.jpg"))
         {
             AppendLog("错误: 无法设置模板图像", ERROR);
             return;
@@ -3117,14 +3042,14 @@ void MainWindow::on_detect_clicked()
         // 使用ORB方法计算单应性矩阵
         QElapsedTimer orbTimer;
         orbTimer.start();
-        
+
         Mat testGray;
         cvtColor(testImage, testGray, COLOR_BGR2GRAY);
         GaussianBlur(testGray, testGray, cv::Size(3,3), 0);
-        
+
         Mat fileHomography;
         vector<DMatch> fileDebugMatches;
-        if (!fileDetector.ComputeHomography(testGray, fileHomography, &fileDebugMatches)) 
+        if (!fileDetector.ComputeHomography(testGray, fileHomography, &fileDebugMatches))
         {
             AppendLog("ORB方法配准失败，无法进行缺陷检测", ERROR);
             return;
@@ -3140,7 +3065,7 @@ void MainWindow::on_detect_clicked()
 
         // 绘制检测结果
         Mat resultImage = testImage.clone();
-        for (size_t i = 0; i < boxes.size(); i++) 
+        for (size_t i = 0; i < boxes.size(); i++)
         {
             Rect rect = boxes[i];
         }
@@ -3151,15 +3076,15 @@ void MainWindow::on_detect_clicked()
 
         // 显示结果
         QPixmap pm = MatToQPixmap(resultImage);
-        if (!pm.isNull()) 
+        if (!pm.isNull())
         {
             // 自适应显示
             QPixmap scaled = pm.scaled(ui->widgetDisplay_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
             ui->widgetDisplay_2->setPixmap(scaled);
             ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
             AppendLog("缺陷结果已显示（基于文件读取的模板和重构图像）。", INFO);
-        } 
-        else 
+        }
+        else
         {
             AppendLog("显示失败: QPixmap 为空。", ERROR);
         }
@@ -3193,76 +3118,76 @@ void MainWindow::autoEnumDevices()
     // 临时存储设备信息
     MV_CC_DEVICE_INFO_LIST stDevList;
     memset(&stDevList, 0, sizeof(MV_CC_DEVICE_INFO_LIST));
-    
+
     // 枚举设备
     int nRet = CMvCamera::EnumDevices(MV_GIGE_DEVICE | MV_USB_DEVICE | MV_GENTL_CAMERALINK_DEVICE | MV_GENTL_CXP_DEVICE | MV_GENTL_XOF_DEVICE, &stDevList);
-    
+
     if (MV_OK != nRet)
     {
         // 枚举失败，不做处理，避免频繁日志
         return;
     }
-    
+
     // 检查设备数量是否变化
     if (stDevList.nDeviceNum != m_lastDeviceCount)
     {
         // 设备数量变化，更新设备列表
         AppendLog(QString("设备数量变化: %1 -> %2，自动更新设备列表").arg(m_lastDeviceCount).arg(stDevList.nDeviceNum), INFO);
-        
+
         // 调用现有的枚举设备按钮的槽函数
         on_bnEnum_clicked();
-        
+
         // 更新上次设备数量
         m_lastDeviceCount = stDevList.nDeviceNum;
     }
 }
 void MainWindow::YoloRealTimeDetectionThread()
 {
-    // 加载YOLO模型和标签    
+    // 加载YOLO模型和标签
     QString modelPath = "../models/arcuchi2.onnx";
     QString labelPath = "../labels/class_labels.txt";
-    
+
     // 加载模型
-    if (!m_yoloProcessor->InitModel(modelPath.toStdString(), false)) 
+    if (!m_yoloProcessor->InitModel(modelPath.toStdString(), false))
     {
         AppendLog("YOLO模型加载失败", ERROR);
         return;
     }
-    
+
     // 加载标签
     QFile labelFile(labelPath);
-    if (!labelFile.open(QIODevice::ReadOnly | QIODevice::Text)) 
+    if (!labelFile.open(QIODevice::ReadOnly | QIODevice::Text))
     {
         AppendLog("YOLO标签文件加载失败", ERROR);
         return;
     }
-    
+
     QStringList labels;
-    while (!labelFile.atEnd()) 
+    while (!labelFile.atEnd())
     {
         QByteArray line = labelFile.readLine();
         QString s = QString::fromUtf8(line).trimmed();
-        if (!s.isEmpty()) 
+        if (!s.isEmpty())
         {
             labels.append(s);
         }
     }
     labelFile.close();
-    
+
     vector<string> cls;
     cls.reserve(labels.size());
-    for (const QString &qs : labels) 
+    for (const QString &qs : labels)
     {
         cls.push_back(qs.toStdString());
     }
     m_yoloProcessor->SetClassLabels(cls);
-    
+
     bool enableDebug = true; // 默认为开启
     m_yoloProcessor->SetDebugOutput(enableDebug);
 
     AppendLog("YOLO模型和标签加载成功", INFO);
-    
-    // 初始化统计信息    
+
+    // 初始化统计信息
     m_yoloFrameCount = 0;
     m_yoloStatsStartTime.start();
     m_yoloTotalProcessingTime = 0.0;
@@ -3270,26 +3195,26 @@ void MainWindow::YoloRealTimeDetectionThread()
     double totalPreprocessTime = 0.0;
     double totalInferenceTime = 0.0;
     double totalPostprocessTime = 0.0;
-    
+
     // 重置统计信息定时器，确保它在主线程中执行
     QMetaObject::invokeMethod(this, [this]() {
         m_yoloStatsTimer->start(1000); // 每1秒钟触发一次，符合需求
-    }, Qt::QueuedConnection);    
+    }, Qt::QueuedConnection);
     Mat currentFrame;
     vector<DetectionResult> results;
-    
+
     int frameFailCount = 0; // 帧获取失败计数器
     int lastLogTime = 0; // 上次记录日志的时间（毫秒）
-    
+
     while (true) {
-        // 检查是否需要停止检测        
-        {   
+        // 检查是否需要停止检测
+        {
             QMutexLocker locker(&m_yoloDetectionMutex);
             if (!m_yoloDetectionRunning) {
                 break;
             }
         }
-        
+
         // 检查相机是否仍然在采集图像
         if (!m_bGrabbing) {
             // 只记录一次日志
@@ -3298,12 +3223,12 @@ void MainWindow::YoloRealTimeDetectionThread()
             }, Qt::QueuedConnection);
             break;
         }
-        
+
         // 获取最新帧
-        if (!GrabLastFrameBGR(currentFrame)) 
+        if (!GrabLastFrameBGR(currentFrame))
         {
             frameFailCount++;
-            
+
             // 限制错误日志的输出频率，每1秒最多输出一次
             int currentTime = QDateTime::currentMSecsSinceEpoch();
             if (currentTime - lastLogTime > 1000) {
@@ -3312,7 +3237,7 @@ void MainWindow::YoloRealTimeDetectionThread()
                 }, Qt::QueuedConnection);
                 lastLogTime = currentTime;
             }
-            
+
             // 如果连续100次获取帧失败，自动停止检测
             if (frameFailCount >= 100) {
                 QMetaObject::invokeMethod(this, [this]() {
@@ -3320,27 +3245,27 @@ void MainWindow::YoloRealTimeDetectionThread()
                 }, Qt::QueuedConnection);
                 break;
             }
-            
+
             QThread::msleep(10);
             continue;
         }
-        
+
         // 重置失败计数器
         frameFailCount = 0;
-        
-        // 记录开始时间        
+
+        // 记录开始时间
         QElapsedTimer timer;
         timer.start();
-        
+
         // 执行YOLO检测
-        if (m_yoloProcessor->DetectObjects(currentFrame, results)) 
+        if (m_yoloProcessor->DetectObjects(currentFrame, results))
         {
             // 记录处理时间
             double processingTime = timer.elapsed() / 1000.0; // 转换为秒
 
             // 获取详细的延时统计
             auto timingStats = m_yoloProcessor->GetTimingStats();
-            
+
             // 更新统计信息
             m_yoloFrameCount++;
             m_yoloTotalProcessingTime += processingTime;
@@ -3348,35 +3273,35 @@ void MainWindow::YoloRealTimeDetectionThread()
             totalPreprocessTime += timingStats.preprocessTime / 1000.0; // 转换为秒
             totalInferenceTime += timingStats.inferenceTime / 1000.0;
             totalPostprocessTime += timingStats.postprocessTime / 1000.0;
-            
+
             // 将检测结果写入双缓冲
-            {   
+            {
                 QMutexLocker locker(&m_bufferMutex);
-                
+
                 // 获取当前写入缓冲区
                 YoloResultBuffer& buffer = m_yoloBuffers[m_writeBufferIndex];
-                
+
                 // 复制检测结果
                 buffer.frame = currentFrame.clone();
                 buffer.results = results;
                 buffer.processingTime = processingTime;
                 buffer.newDataAvailable = true;
-                
+
                 // 切换缓冲区索引
                 m_writeBufferIndex = (m_writeBufferIndex + 1) % 2;
-                
+
                 // 唤醒显示线程
                 m_bufferReady.wakeOne();
             }
         }
-        
+
         // 短暂休眠，避免CPU占用过高
         QThread::msleep(10);
     }
-    
+
     // 停止统计信息定时器
     m_yoloStatsTimer->stop();
-    
+
     AppendLog("YOLO实时检测已停止", INFO);
 }
 
@@ -3388,67 +3313,67 @@ void MainWindow::StartYoloRealTimeDetection()
         AppendLog("YOLO实时检测已经在运行", INFO);
         return;
     }
-    
+
     // 检查相机是否正在采集图像
     if (!m_bGrabbing) {
         AppendLog("相机未开始采集图像，无法启动YOLO实时检测", WARNNING);
         return;
     }
-    
+
     // 设置运行标志
     m_yoloDetectionRunning = true;
     m_yoloDisplayRunning = true;
-    
+
     // 创建并启动检测线程
     m_yoloDetectionThread = QThread::create([this]() {
         YoloRealTimeDetectionThread();
     });
-    
+
     // 创建并启动显示线程
     m_yoloDisplayThread = QThread::create([this]() {
         YoloDisplayThread();
     });
-    
+
     connect(m_yoloDetectionThread, &QThread::finished, m_yoloDetectionThread, &QThread::deleteLater);
     connect(m_yoloDisplayThread, &QThread::finished, m_yoloDisplayThread, &QThread::deleteLater);
-    
+
     m_yoloDetectionThread->start();
     m_yoloDisplayThread->start();
-    
+
     AppendLog("YOLO实时检测已启动", INFO);
 }
 
 void MainWindow::StopYoloRealTimeDetection()
 {
     // 设置停止标志
-    {   
+    {
         QMutexLocker locker(&m_yoloDetectionMutex);
         m_yoloDetectionRunning = false;
     }
-    
+
     // 设置显示线程停止标志
-    {   
+    {
         QMutexLocker locker(&m_yoloDisplayMutex);
         m_yoloDisplayRunning = false;
     }
-    
+
     // 唤醒等待的显示线程
     m_bufferReady.wakeOne();
-    
+
     // 等待检测线程结束
     if (m_yoloDetectionThread) {
         m_yoloDetectionThread->wait();
         delete m_yoloDetectionThread;
         m_yoloDetectionThread = nullptr;
     }
-    
+
     // 等待显示线程结束
     if (m_yoloDisplayThread) {
         m_yoloDisplayThread->wait();
         delete m_yoloDisplayThread;
         m_yoloDisplayThread = nullptr;
     }
-    
+
     AppendLog("YOLO实时检测已停止", INFO);
 }
 
@@ -3456,31 +3381,31 @@ void MainWindow::UpdateYoloStats()
 {
     // 计算统计信息
     double elapsedTime = m_yoloStatsStartTime.elapsed() / 1000.0; // 转换为秒
-    
+
     // 防止除以零
     if (elapsedTime <= 0 || m_yoloFrameCount <= 0) {
         return;
     }
-    
+
     double fps = m_yoloFrameCount / elapsedTime;
-    double avgProcessingTime = m_yoloTotalProcessingTime / m_yoloFrameCount * 1000.0; // 转换为毫秒    
-    
+    double avgProcessingTime = m_yoloTotalProcessingTime / m_yoloFrameCount * 1000.0; // 转换为毫秒
+
     // 使用QMetaObject::invokeMethod确保AppendLog在主线程中执行
     QMetaObject::invokeMethod(this, [this, fps, avgProcessingTime]() {
         // 获取最新的单帧统计信息
         auto timingStats = m_yoloProcessor->GetTimingStats();
-        
+
         // 输出更详细的统计信息
         AppendLog(QString("YOLO实时检测统计- 帧率: %1 FPS, 总平均处理延时: %2 ms")
                   .arg(fps).arg(avgProcessingTime), INFO);
-        
+
         // 新增：输出各阶段详细延时
         AppendLog(QString("  预处理: %1 ms, 推理: %2 ms, 后处理: %3 ms")
                   .arg(timingStats.preprocessTime, 0, 'f', 2)
                   .arg(timingStats.inferenceTime, 0, 'f', 2)
                   .arg(timingStats.postprocessTime, 0, 'f', 2), INFO);
     }, Qt::QueuedConnection);
-    
+
     // 重置统计信息
     m_yoloFrameCount = 0;
     m_yoloStatsStartTime.restart();
@@ -3491,20 +3416,20 @@ void MainWindow::YoloDisplayThread()
 {
     while (true) {
         // 检查是否需要停止显示
-        {   
+        {
             QMutexLocker locker(&m_yoloDisplayMutex);
             if (!m_yoloDisplayRunning) {
                 break;
             }
         }
-        
+
         // 等待新的检测结果
         YoloResultBuffer currentResult;
         bool hasNewData = false;
-        
-        {   
+
+        {
             QMutexLocker locker(&m_bufferMutex);
-            
+
             // 等待新数据或超时
             if (!m_yoloBuffers[m_readBufferIndex].newDataAvailable) {
                 // 超时等待，避免死锁
@@ -3512,32 +3437,32 @@ void MainWindow::YoloDisplayThread()
                     continue; // 超时，继续下一次循环
                 }
             }
-            
+
             // 检查是否需要停止显示
-            {   
+            {
                 QMutexLocker displayLocker(&m_yoloDisplayMutex);
                 if (!m_yoloDisplayRunning) {
                     break;
                 }
             }
-            
+
             // 检查是否有新数据
             if (m_yoloBuffers[m_readBufferIndex].newDataAvailable) {
                 // 复制检测结果
                 currentResult = m_yoloBuffers[m_readBufferIndex];
                 m_yoloBuffers[m_readBufferIndex].newDataAvailable = false;
-                
+
                 // 切换读取缓冲区索引
                 m_readBufferIndex = (m_readBufferIndex + 1) % 2;
                 hasNewData = true;
             }
         }
-        
+
         if (hasNewData) {
             // 绘制检测结果
             Mat displayFrame = currentResult.frame.clone();
             DrawYoloResults(displayFrame, currentResult.results);
-            
+
             // 更新显示
             QPixmap pixmap = MatToQPixmap(displayFrame);
             QMetaObject::invokeMethod(this, [this, pixmap]() {
@@ -3545,7 +3470,7 @@ void MainWindow::YoloDisplayThread()
                 ui->widgetDisplay_2->setAlignment(Qt::AlignCenter);
             }, Qt::QueuedConnection);
         }
-        
+
         // 控制显示更新频率
         QThread::msleep(m_displayUpdateInterval);
     }
@@ -3553,7 +3478,7 @@ void MainWindow::YoloDisplayThread()
 
 void MainWindow::DrawYoloResults(Mat& frame, const vector<DetectionResult>& results)
 {
-    // 为每个类别生成不同颜色（静态，避免重复创建）    
+    // 为每个类别生成不同颜色（静态，避免重复创建）
     static vector<Scalar> colors = {
         Scalar(255, 0, 0),    // 蓝色
         Scalar(0, 255, 0),    // 绿色
@@ -3568,19 +3493,19 @@ void MainWindow::DrawYoloResults(Mat& frame, const vector<DetectionResult>& resu
         Scalar(128, 0, 128),  // 深品
         Scalar(0, 128, 128)   // 深黄
     };
-    
+
     // 遍历所有检测结果
     for (const auto& result : results) {
         // 确保类别ID在有效范围内
         int color_idx = result.classId;
         if (color_idx < 0 || color_idx >= static_cast<int>(colors.size())) {
-            color_idx = 0;  // 默认使用第一个颜色        
+            color_idx = 0;  // 默认使用第一个颜色
         }
-        
+
         // 绘制边界框，使用优化的线宽
         Scalar color = colors[color_idx];
         rectangle(frame, result.boundingBox, color, 3);
-        
+
         // 准备标签文本
         string label;
         if (!result.className.empty()) {
@@ -3588,21 +3513,21 @@ void MainWindow::DrawYoloResults(Mat& frame, const vector<DetectionResult>& resu
         } else {
             label = to_string(result.classId) + " " + cv::format("%.2f", result.confidence);
         }
-        
-        // 确保标签大小和位置正确，使用优化的字体      
+
+        // 确保标签大小和位置正确，使用优化的字体
         int baseLine;
         Size labelSize = getTextSize(label, FONT_HERSHEY_SIMPLEX, 1.0, 3, &baseLine);
-        
+
         // 确保标签不会超出图像边界
         int top = result.boundingBox.y - labelSize.height - 3;
         if (top < 0) {
             top = result.boundingBox.y + 3;
         }
-        
+
         // 计算标签背景位置
         Point bottomLeft(result.boundingBox.x, top + labelSize.height + baseLine + 3);
         Point topRight(result.boundingBox.x + labelSize.width + 6, top - 3);
-        
+
         // 确保标签背景不会超出图像边界
         if (bottomLeft.x < 0) {
             bottomLeft.x = 0;
@@ -3616,18 +3541,18 @@ void MainWindow::DrawYoloResults(Mat& frame, const vector<DetectionResult>& resu
         if (topRight.y < 0) {
             topRight.y = 0;
         }
-        
+
         // 绘制标签背景，使用不透明填充（更高效）
         rectangle(frame, bottomLeft, topRight, color, FILLED);
-        
+
         // 绘制文本，使用优化的字体
-        putText(frame, label, Point(result.boundingBox.x + 3, top + labelSize.height + baseLine), 
+        putText(frame, label, Point(result.boundingBox.x + 3, top + labelSize.height + baseLine),
                 FONT_HERSHEY_SIMPLEX, 1, Scalar(255, 255, 255), 3);
     }
 }
 
 void MainWindow::on_bnCapture_clicked()
-{       
+{
     StartYoloRealTimeDetection();
     AppendLog("YOLO实时检测已启动", INFO);
 }
