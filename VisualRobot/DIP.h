@@ -15,10 +15,13 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 #include <vector>
+#include <fstream>
+#include <nlohmann/json.hpp>
 
 using namespace Eigen;
 using namespace std;
 using namespace cv;
+using json = nlohmann::json;
 
 /**
  * @brief 参数结构体，用于配置图像处理和检测算法的参数
@@ -41,6 +44,15 @@ struct Result
     vector<float> heights;  ///< 检测到的物体高度列表
     vector<float> angles;   ///< 检测到的物体角度列表
     Mat image;              ///< 处理后的图像，包含检测结果可视化
+};
+
+// YOLO 检测框结构
+struct YoloDetBox
+{
+    cv::Rect2f bbox;     // [xmin, ymin, xmax, ymax] -> Rect2f
+    std::string cls;     // "defect1" / "defect2" / "module1" ...
+    int class_id = -1;
+    float confidence = 0.f;
 };
 
 /**

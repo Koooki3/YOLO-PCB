@@ -126,8 +126,7 @@ float SystemMonitor::GetCpuUsage()
         unsigned long long idleTimeDelta = totalIdle - m_lastTotalIdle;
         
         // 计算总的时间差
-        unsigned long long totalDelta = userTimeDelta + userLowDelta + 
-                                      sysTimeDelta + idleTimeDelta;
+        unsigned long long totalDelta = userTimeDelta + userLowDelta + sysTimeDelta + idleTimeDelta;
         
         // 计算CPU使用率
         float cpuUsage = 0.0f;
@@ -300,23 +299,31 @@ void SystemMonitor::updateSystemStats()
     
     // 添加内存监控日志，每分钟记录一次内存使用趋势（增强版：包括实际使用量）
     static QTime lastLogTime = QTime::currentTime();
-    if (lastLogTime.msecsTo(QTime::currentTime()) > 60000) {  // 每60秒
+    if (lastLogTime.msecsTo(QTime::currentTime()) > 60000) 
+    {  // 每60秒
         // 计算实际内存使用量 (MB)
         unsigned long totalMemKB = 0, usedMemKB = 0;
         ifstream memFile("/proc/meminfo");
-        if (memFile.is_open()) {
+        if (memFile.is_open()) 
+        {
             string line;
-            while (getline(memFile, line)) {
-                if (line.find("MemTotal:") != string::npos) {
+            while (getline(memFile, line)) 
+            {
+                if (line.find("MemTotal:") != string::npos) 
+                {
                     sscanf(line.c_str(), "MemTotal: %lu", &totalMemKB);
-                } else if (line.find("MemFree:") != string::npos) {
+                } 
+                else if (line.find("MemFree:") != string::npos) 
+                {
                     unsigned long freeMemKB = 0, buffersKB = 0, cachedKB = 0;
                     sscanf(line.c_str(), "MemFree: %lu", &freeMemKB);
                     // 简单估算：读取后续Buffers和Cached
-                    if (getline(memFile, line) && line.find("Buffers:") != string::npos) {
+                    if (getline(memFile, line) && line.find("Buffers:") != string::npos) 
+                    {
                         sscanf(line.c_str(), "Buffers: %lu", &buffersKB);
                     }
-                    if (getline(memFile, line) && line.find("Cached:") != string::npos) {
+                    if (getline(memFile, line) && line.find("Cached:") != string::npos) 
+                    {
                         sscanf(line.c_str(), "Cached: %lu", &cachedKB);
                     }
                     usedMemKB = totalMemKB - freeMemKB - buffersKB - cachedKB;

@@ -22,6 +22,8 @@
 #include <opencv2/highgui.hpp>
 #include <vector>
 #include <algorithm>
+#include <fstream>
+#include <nlohmann/json.hpp>
 
 #define ERROR 2
 #define WARNNING 1
@@ -30,6 +32,161 @@
 using namespace Eigen;
 using namespace std;
 using namespace cv;
+using json = nlohmann::json;
+
+//读取json
+bool LoadYoloDetections(const std::string& jsonPath, std::vector<YoloDetBox>& dets)
+{
+    dets.clear();
+
+    std::ifstream ifs(jsonPath);
+    if (!ifs.is_open()) 
+    {
+        std::cerr << "Failed to open detection json: " << jsonPath << std::endl;
+        return false;
+    }
+
+    json j;
+    try 
+    {
+        ifs >> j;
+    } 
+    catch (const std::exception& e) 
+    {
+        std::cerr << "Json parse error: " << e.what() << std::endl;
+        return false;
+    }
+
+    if (!j.is_array()) 
+    {
+        std::cerr << "Json format error: root is not array.\n";
+        return false;
+    }
+
+    for (auto& item : j) 
+    {
+        if (!item.contains("bbox")) 
+        {
+            continue;
+        }
+        auto jb = item["bbox"];
+        if (!jb.is_array() || jb.size() != 4) 
+        {
+            continue;
+        }
+
+        float xmin = jb[0].get<float>();
+        float ymin = jb[1].get<float>();
+        float xmax = jb[2].get<float>();
+        float ymax = jb[3].get<float>();
+
+        YoloDetBox box;
+        box.bbox = cv::Rect2f(cv::Point2f(xmin, ymin), cv::Point2f(xmax, ymax));
+
+        if (item.contains("class"))
+        {
+            box.cls = item["class"].get<std::string>();
+        }
+        else
+        {
+            box.cls = "";
+        }
+
+        if (item.contains("class_id"))
+        {
+            box.class_id = item["class_id"].get<int>();
+        }
+
+        if (item.contains("confidence"))
+        {
+            box.confidence = item["confidence"].get<float>();
+        }
+
+        // ★★ 这里就只要 defect1 / defect2 ★★
+        if (box.cls != "defect1" && box.cls != "defect2") 
+        {
+            continue;
+        }
+
+        dets.push_back(std::move(box));
+    }
+
+    return true;
+}
+
+//放大
+cv::Rect EnlargeBBox(const cv::Rect2f& box, int imgW, int imgH, float scale)
+{
+    float xmin = box.x;
+    float ymin = box.y;
+    float xmax = box.x + box.width;
+    float ymax = box.y + box.height;
+
+    float cx = 0.5f * (xmin + xmax);
+    float cy = 0.5f * (ymin + ymax);
+    float w  = (xmax - xmin);
+    float h  = (ymax - ymin);
+
+    float newW = w * scale;
+    float newH = h * scale;
+
+    float newXmin = cx - newW * 0.5f;
+    float newYmin = cy - newH * 0.5f;
+    float newXmax = cx + newW * 0.5f;
+    float newYmax = cy + newH * 0.5f;
+
+    // 限制在图像范围内
+    newXmin = std::max(0.0f, newXmin);
+    newYmin = std::max(0.0f, newYmin);
+    newXmax = std::min((float)imgW - 1, newXmax);
+    newYmax = std::min((float)imgH - 1, newYmax);
+
+    if (newXmax <= newXmin || newYmax <= newYmin) 
+    {
+        return cv::Rect(); // 空
+    }
+
+    cv::Rect r(
+        (int)std::floor(newXmin),
+        (int)std::floor(newYmin),
+        (int)std::ceil(newXmax - newXmin),
+        (int)std::ceil(newYmax - newYmin)
+    );
+
+    r &= cv::Rect(0, 0, imgW, imgH);
+    return r;
+}
+
+//涂黑
+cv::Mat MaskImageByYoloJson(const cv::Mat& input, const std::string& jsonPath, float scale)
+{
+    CV_Assert(!input.empty());
+
+    int imgW = input.cols;
+    int imgH = input.rows;
+
+    std::vector<YoloDetBox> dets;
+    if (!LoadYoloDetections(jsonPath, dets)) 
+    {
+        // 失败就返回一张全黑，避免程序崩
+        return cv::Mat::zeros(input.size(), input.type());
+    }
+
+    // 单通道 mask
+    cv::Mat mask = cv::Mat::zeros(input.size(), CV_8UC1);
+
+    for (const auto& d : dets) 
+    {
+        cv::Rect enlarged = EnlargeBBox(d.bbox, imgW, imgH, scale);
+        if (enlarged.area() <= 0) continue;
+
+        cv::rectangle(mask, enlarged, cv::Scalar(255), cv::FILLED);
+    }
+
+    cv::Mat result = cv::Mat::zeros(input.size(), input.type());
+    input.copyTo(result, mask);  // 只有 mask=255 的地方会拷贝原图
+    return result;
+}
 
 /**
  * @brief 创建目录的辅助函数
@@ -454,14 +611,16 @@ int DetectRectangleOpenCV(const string& imgPath, vector<double>& Row, vector<dou
 RotatedRect GetOBBByPCA(const vector<Point>& pts)
 {
     // 基本保护
-    if (pts.size() < 10) {
+    if (pts.size() < 10) 
+    {
         // 点太少时退化为 minAreaRect，避免崩
         return minAreaRect(pts);
     }
 
     // 1) PCA 输入矩阵：N x 2
     Mat data((int)pts.size(), 2, CV_64F);
-    for (int i = 0; i < (int)pts.size(); ++i) {
+    for (int i = 0; i < (int)pts.size(); ++i) 
+    {
         data.at<double>(i, 0) = pts[i].x;
         data.at<double>(i, 1) = pts[i].y;
     }
@@ -470,15 +629,15 @@ RotatedRect GetOBBByPCA(const vector<Point>& pts)
     PCA pca(data, Mat(), PCA::DATA_AS_ROW);
     Point2d mean(pca.mean.at<double>(0, 0), pca.mean.at<double>(0, 1));
 
-    Vec2d v(pca.eigenvectors.at<double>(0, 0),
-            pca.eigenvectors.at<double>(0, 1));
+    Vec2d v(pca.eigenvectors.at<double>(0, 0), pca.eigenvectors.at<double>(0, 1));
     double theta = std::atan2(v[1], v[0]); // rad
 
     // 3) 旋转到主轴坐标系并求包围盒 min/max
     double ca = std::cos(-theta), sa = std::sin(-theta);
     double minx =  1e18, maxx = -1e18, miny =  1e18, maxy = -1e18;
 
-    for (const auto& p : pts) {
+    for (const auto& p : pts) 
+    {
         double x = p.x - mean.x;
         double y = p.y - mean.y;
         double xr = ca * x - sa * y;
@@ -501,9 +660,7 @@ RotatedRect GetOBBByPCA(const vector<Point>& pts)
 
     // 6) 输出 RotatedRect（角度用度）
     float angleDeg = (float)(theta * 180.0 / CV_PI);
-    return RotatedRect(Point2f((float)cW.x, (float)cW.y),
-                       Size2f((float)sz.width, (float)sz.height),
-                       angleDeg);
+    return RotatedRect(Point2f((float)cW.x, (float)cW.y), Size2f((float)sz.width, (float)sz.height), angleDeg);
 }
 
 /**
@@ -524,46 +681,59 @@ RotatedRect GetOBBByPCA(const vector<Point>& pts)
 Result CalculateLength(const cv::Mat& input, const Params& params, double bias)
 {
     Result result;
-    if (input.empty()) { /* ... */ }
+    if (input.empty()) 
+    { 
+        /* ... */ 
+    }
 
-    // 0) 灰度
+    cv::Mat croppedInput;
+    {
+        const std::string jsonPath = "/home/orangepi/Desktop/VisualRobot_Local/Img/capture_detections.json";
+
+        float enlargeScale = 1.0f; // 按需调整
+
+        croppedInput = MaskImageByYoloJson(input, jsonPath, enlargeScale);
+
+        // 如果 JSON 不存在或无 defect1/2，则 fallback 使用原图
+        if (croppedInput.empty())
+        {
+            croppedInput = input.clone();
+        }
+    }
+
     cv::Mat gray;
-    if (input.channels() == 3)
-        cv::cvtColor(input, gray, cv::COLOR_BGR2GRAY);
+    if (croppedInput.channels() == 3)
+    {
+        cv::cvtColor(croppedInput, gray, cv::COLOR_BGR2GRAY);
+    }
     else
-        gray = input.clone();
+    {
+        gray = croppedInput.clone();
+    }
 
     // 1) 轻微降噪
     cv::GaussianBlur(gray, gray, cv::Size(5,5), 0);
 
     // 2) OTSU 阈值
     cv::Mat binary;
-    cv::threshold(gray, binary, 0, 255,
-                  cv::THRESH_BINARY | cv::THRESH_OTSU);
+    cv::threshold(gray, binary, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
 
     int imgW = gray.cols;
     int imgH = gray.rows;
 
-    // =========【新的关键步骤：用膨胀来“自动合并”碎块】=========
     cv::Mat binaryMerged;
     // 半径 r 可以根据图像分辨率来设，也可以放到 Params 里配置
-    int mergeRadius = (params.mergeRadius > 0) ?
-                      params.mergeRadius :
-                      std::max(imgW, imgH) / 150;   // 大概 5~15 像素
+    int mergeRadius = (params.mergeRadius > 0) ? params.mergeRadius : std::max(imgW, imgH) / 150;   // 大概 5~15 像素
 
     mergeRadius = std::max(1, mergeRadius);
-    cv::Mat kernel = cv::getStructuringElement(
-        cv::MORPH_ELLIPSE,
-        cv::Size(2*mergeRadius+1, 2*mergeRadius+1));
+    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(2*mergeRadius+1, 2*mergeRadius+1));
 
     // 闭运算 = 膨胀 + 腐蚀，更能填补物体内部的小空洞
-    cv::morphologyEx(binary, binaryMerged,
-                     cv::MORPH_CLOSE, kernel, cv::Point(-1,-1), 1);
+    cv::morphologyEx(binary, binaryMerged, cv::MORPH_CLOSE, kernel, cv::Point(-1,-1), 1);
 
     // 3) 在 binaryMerged 上做连通域
     cv::Mat labels, stats, centroids;
-    int n = cv::connectedComponentsWithStats(
-        binaryMerged, labels, stats, centroids, 8, CV_32S);
+    int n = cv::connectedComponentsWithStats(binaryMerged, labels, stats, centroids, 8, CV_32S);
 
     // 4) 过滤太小的连通域
     struct Obj {
@@ -574,9 +744,13 @@ Result CalculateLength(const cv::Mat& input, const Params& params, double bias)
 
     int objAreaMin = (params.areaMin > 0) ? params.areaMin : 5000;
 
-    for (int i = 1; i < n; ++i) {  // 0 是背景
+    for (int i = 1; i < n; ++i) 
+    {  // 0 是背景
         int area = stats.at<int>(i, cv::CC_STAT_AREA);
-        if (area < objAreaMin) continue;
+        if (area < objAreaMin) 
+        {
+            continue;
+        }
 
         int x = stats.at<int>(i, cv::CC_STAT_LEFT);
         int y = stats.at<int>(i, cv::CC_STAT_TOP);
@@ -586,17 +760,23 @@ Result CalculateLength(const cv::Mat& input, const Params& params, double bias)
         std::vector<cv::Point> pts;
 
         // ⚠ 这里用的是“binaryMerged 的 label + 原始 binary 作为掩码”
-        for (int yy = y; yy < y + h; ++yy) {
+        for (int yy = y; yy < y + h; ++yy) 
+        {
             const int*   rowL = labels.ptr<int>(yy);
             const uchar* rowB = binary.ptr<uchar>(yy);  // 原始二值
-            for (int xx = x; xx < x + w; ++xx) {
-                if (rowL[xx] == i && rowB[xx] > 0) {
+            for (int xx = x; xx < x + w; ++xx) 
+            {
+                if (rowL[xx] == i && rowB[xx] > 0) 
+                {
                     pts.emplace_back(xx, yy);
                 }
             }
         }
 
-        if (pts.size() < 80) continue;
+        if (pts.size() < 80) 
+        {
+            continue;
+        }
 
         cv::RotatedRect rr = GetOBBByPCA(pts);
         objects.push_back({ rr, area });
@@ -607,7 +787,8 @@ Result CalculateLength(const cv::Mat& input, const Params& params, double bias)
     cv::cvtColor(gray, color, cv::COLOR_GRAY2BGR);
     int thickness = std::max(2, (int)std::round(imgW * 0.002));
 
-    if (objects.empty()) {
+    if (objects.empty()) 
+    {
         std::cerr << "没有满足面积要求的物体\n";
         result.widths.push_back(0);
         result.heights.push_back(0);
@@ -623,18 +804,24 @@ Result CalculateLength(const cv::Mat& input, const Params& params, double bias)
               });
 
     int idx = 1;
-    for (const auto& obj : objects) {
+    for (const auto& obj : objects) 
+    {
         cv::RotatedRect rr = obj.rr;
 
         cv::Point2f v[4];
         rr.points(v);
         for (int k = 0; k < 4; ++k)
+        {
             cv::line(color, v[k], v[(k+1)%4], cv::Scalar(0,255,0), thickness);
+        }
 
         float L = std::max(rr.size.width,  rr.size.height);
         float S = std::min(rr.size.width,  rr.size.height);
         float angle = rr.angle;
-        if (rr.size.width < rr.size.height) angle += 90.0f;
+        if (rr.size.width < rr.size.height) 
+        {
+            angle += 90.0f;
+        }
 
         result.heights.push_back(L * bias);
         result.widths.push_back(S * bias);
@@ -650,13 +837,11 @@ Result CalculateLength(const cv::Mat& input, const Params& params, double bias)
         cv::Point c((int)rr.center.x, (int)rr.center.y);
         cv::Point org(c.x - ts.width/2, c.y + ts.height/2);
 
-        cv::Rect bg(org.x - 8, org.y - ts.height - 8,
-                    ts.width + 16, ts.height + 16);
+        cv::Rect bg(org.x - 8, org.y - ts.height - 8, ts.width + 16, ts.height + 16);
         bg &= cv::Rect(0,0,color.cols,color.rows);
         cv::rectangle(color, bg, cv::Scalar(255,255,255), cv::FILLED);
         cv::rectangle(color, bg, cv::Scalar(0,0,0), 1);
-        cv::putText(color, label, org, fontFace, fontScale,
-                    cv::Scalar(0,255,0), fontThick, cv::LINE_AA);
+        cv::putText(color, label, org, fontFace, fontScale, cv::Scalar(0,255,0), fontThick, cv::LINE_AA);
     }
 
     result.image = color;
