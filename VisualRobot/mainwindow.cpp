@@ -182,9 +182,6 @@ MainWindow::MainWindow(QWidget *parent) :
     on_bnEnum_clicked();
 }
 
-
-
-
 MainWindow::~MainWindow()
 {
     if (m_sysMonitor)
@@ -334,7 +331,8 @@ void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INF
         pMainWindow->m_hasFrame = true;
 
         // 图像缓存清理检查
-        if (pMainWindow->m_lastFrame.size() > pMainWindow->m_maxFrameSize) {
+        if (pMainWindow->m_lastFrame.size() > pMainWindow->m_maxFrameSize) 
+        {
             pMainWindow->AppendLog(QString("图像缓存超过限制 (%1 > %2 字节)，可能内存问题").arg(pMainWindow->m_lastFrame.size()).arg(pMainWindow->m_maxFrameSize), ERROR);
             // 清空旧缓存，避免持续增长
             pMainWindow->m_lastFrame.clear();
@@ -346,7 +344,8 @@ void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INF
         tempFrame = pMainWindow->m_lastFrame;
 
         // 如果是触发模式，通知新帧可用
-        if (pMainWindow->m_isTriggerMode) {
+        if (pMainWindow->m_isTriggerMode) 
+        {
             QMutexLocker locker(&pMainWindow->m_newFrameMutex);
             pMainWindow->m_newFrameAvailable = true;
             pMainWindow->m_newFrameCondition.wakeAll();
@@ -385,7 +384,6 @@ void __stdcall MainWindow::ImageCallBack(unsigned char * pData, MV_FRAME_OUT_INF
         emit pMainWindow->sharpnessValueUpdated(sharpness);
     }
 }
-
 
 void MainWindow::ImageCallBackInner(unsigned char * pData, MV_FRAME_OUT_INFO_EX* pFrameInfo)
 {
@@ -569,12 +567,16 @@ void MainWindow::on_bnOpen_clicked()
 
     // 添加重试机制：如果打开失败，重新枚举设备
     bool openSuccess = false;
-    while (retryCount < maxRetries && !openSuccess) {
+    while (retryCount < maxRetries && !openSuccess) 
+    {
         nRet = m_pcMyCamera->Open(m_stDevList.pDeviceInfo[nIndex]);
-        if (MV_OK == nRet) {
+        if (MV_OK == nRet) 
+        {
             openSuccess = true;
             AppendLog("设备打开成功", INFO);
-        } else {
+        } 
+        else 
+        {
             AppendLog(QString("相机打开失败 (尝试%1/%2): %3").arg(retryCount + 1).arg(maxRetries).arg(nRet), ERROR);
             delete m_pcMyCamera;
             m_pcMyCamera = NULL;
@@ -583,13 +585,15 @@ void MainWindow::on_bnOpen_clicked()
             AppendLog("重新枚举设备...", INFO);
             on_bnEnum_clicked();
             nIndex = ui->ComboDevices->currentIndex();
-            if (nIndex < 0 || nIndex >= MV_MAX_DEVICE_NUM || NULL == m_stDevList.pDeviceInfo[nIndex]) {
+            if (nIndex < 0 || nIndex >= MV_MAX_DEVICE_NUM || NULL == m_stDevList.pDeviceInfo[nIndex]) 
+            {
                 AppendLog("重新枚举后设备无效，停止重试", ERROR);
                 return;
             }
 
             m_pcMyCamera = new (nothrow) CMvCamera;
-            if (NULL == m_pcMyCamera) {
+            if (NULL == m_pcMyCamera) 
+            {
                 AppendLog("新建相机实例失败", ERROR);
                 return;
             }
@@ -598,7 +602,8 @@ void MainWindow::on_bnOpen_clicked()
         }
     }
 
-    if (!openSuccess) {
+    if (!openSuccess) 
+    {
         ShowErrorMsg("Open Fail after retries", nRet);
         AppendLog("相机打开失败，已达最大重试次数", ERROR);
         return;
@@ -625,23 +630,33 @@ void MainWindow::on_bnOpen_clicked()
     // 添加驱动状态检查：打开后验证状态
     MVCC_ENUMVALUE stStatus;
     nRet = m_pcMyCamera->GetEnumValue("AcquisitionStatus", &stStatus);
-    if (MV_OK == nRet) {
-        if (stStatus.nCurValue == 0) { // Idle
+    if (MV_OK == nRet) 
+    {
+        if (stStatus.nCurValue == 0) 
+        { // Idle
             AppendLog("打开后相机状态检查：空闲", INFO);
-        } else {
+        } 
+        else 
+        {
             AppendLog(QString("打开后相机状态异常：%1").arg(stStatus.nCurValue), WARNNING);
         }
-    } else {
+    } 
+    else 
+    {
         AppendLog("无法获取打开后相机状态", WARNNING);
     }
 
     // 对于USB3.0相机，添加额外初始化（如果适用）
-    if (m_stDevList.pDeviceInfo[nIndex]->nTLayerType == MV_USB_DEVICE) {
+    if (m_stDevList.pDeviceInfo[nIndex]->nTLayerType == MV_USB_DEVICE) 
+    {
         // USB3.0特有初始化：设置传输模式等，根据SDK
         nRet = m_pcMyCamera->SetEnumValue("TransportLayerType", 2); // 假设2为USB3.0模式
-        if (MV_OK != nRet) {
+        if (MV_OK != nRet) 
+        {
             AppendLog("USB3.0传输模式设置失败（可选）", WARNNING);
-        } else {
+        } 
+        else 
+        {
             AppendLog("USB3.0传输模式已设置", INFO);
         }
     }
@@ -650,20 +665,24 @@ void MainWindow::on_bnOpen_clicked()
     MVCC_INTVALUE_EX stWidth, stHeight;
     MVCC_ENUMVALUE stPixelFormat;
     nRet = m_pcMyCamera->GetIntValue("Width", &stWidth);
-    if (MV_OK != nRet) {
+    if (MV_OK != nRet) 
+    {
         AppendLog("获取宽度失败", ERROR);
     }
     nRet = m_pcMyCamera->GetIntValue("Height", &stHeight);
-    if (MV_OK != nRet) {
+    if (MV_OK != nRet) 
+    {
         AppendLog("获取高度失败", ERROR);
     }
     nRet = m_pcMyCamera->GetEnumValue("PixelFormat", &stPixelFormat);
-    if (MV_OK != nRet) {
+    if (MV_OK != nRet) 
+    {
         AppendLog("获取像素格式失败", ERROR);
     }
 
     size_t bpp = 1; // 默认Mono8
-    switch (stPixelFormat.nCurValue) {
+    switch (stPixelFormat.nCurValue) 
+    {
         case PixelType_Gvsp_RGB8_Packed:
         case PixelType_Gvsp_BGR8_Packed:
             bpp = 3;
@@ -711,18 +730,25 @@ void MainWindow::on_bnClose_clicked()
 
         // 1. 停止触发模式
         int nRet = m_pcMyCamera->SetEnumValue("TriggerMode", MV_TRIGGER_MODE_OFF);
-        if (MV_OK != nRet) {
+        if (MV_OK != nRet) 
+        {
             AppendLog("设置触发模式为OFF失败", ERROR);
-        } else {
+        } 
+        else 
+        {
             AppendLog("触发模式已关闭", INFO);
         }
 
         // 2. 停止采集（如果正在采集）
-        if (m_bGrabbing) {
+        if (m_bGrabbing) 
+        {
             nRet = m_pcMyCamera->StopGrabbing();
-            if (MV_OK != nRet) {
+            if (MV_OK != nRet) 
+            {
                 AppendLog("停止采集失败", ERROR);
-            } else {
+            } 
+            else 
+            {
                 AppendLog("采集已停止", INFO);
                 m_bGrabbing = false;
             }
@@ -731,33 +757,46 @@ void MainWindow::on_bnClose_clicked()
         // 3. 添加驱动状态检查（可选：检查AcquisitionStatus等）
         MVCC_ENUMVALUE stStatus;
         nRet = m_pcMyCamera->GetEnumValue("AcquisitionStatus", &stStatus);
-        if (MV_OK == nRet) {
-            if (stStatus.nCurValue == 0) { // Idle
+        if (MV_OK == nRet) 
+        {
+            if (stStatus.nCurValue == 0) 
+            { // Idle
                 AppendLog("相机状态检查：空闲", INFO);
-            } else {
+            } 
+            else 
+            {
                 AppendLog(QString("相机状态异常：%1").arg(stStatus.nCurValue), WARNNING);
             }
-        } else {
+        } 
+        else 
+        {
             AppendLog("无法获取相机状态", WARNNING);
         }
 
         // 4. 对于USB3.0相机，添加额外清理（如果适用）
-        if (m_stDevList.nDeviceNum > 0 && m_stDevList.pDeviceInfo[ui->ComboDevices->currentIndex()]->nTLayerType == MV_USB_DEVICE) {
+        if (m_stDevList.nDeviceNum > 0 && m_stDevList.pDeviceInfo[ui->ComboDevices->currentIndex()]->nTLayerType == MV_USB_DEVICE) 
+        {
             // USB3.0特有清理：重置设备或类似，根据SDK文档
             // 这里假设使用CommandExecute("DeviceReset")，但需验证
             nRet = m_pcMyCamera->CommandExecute("DeviceReset");
-            if (MV_OK != nRet) {
+            if (MV_OK != nRet) 
+            {
                 AppendLog("USB3.0设备重置失败（可选）", WARNNING);
-            } else {
+            } 
+            else 
+            {
                 AppendLog("USB3.0设备已重置", INFO);
             }
         }
 
         // 5. 关闭设备
         nRet = m_pcMyCamera->Close();
-        if (MV_OK != nRet) {
+        if (MV_OK != nRet) 
+        {
             AppendLog("设备关闭失败", ERROR);
-        } else {
+        } 
+        else 
+        {
             AppendLog("设备已关闭", INFO);
         }
 
@@ -790,7 +829,8 @@ void MainWindow::on_bnClose_clicked()
     ui->bnGetParam->setEnabled(false);
 
     // 停止软触发定时器
-    if (m_softTriggerTimer && m_softTriggerEnabled) {
+    if (m_softTriggerTimer && m_softTriggerEnabled) 
+    {
         m_softTriggerTimer->stop();
         m_softTriggerEnabled = false;
         AppendLog("软触发定时器已停止", INFO);
@@ -810,7 +850,6 @@ void MainWindow::on_bnContinuesMode_clicked()
     }
     AppendLog("连续模式已开启", INFO);
 }
-
 
 void MainWindow::on_bnTriggerMode_clicked()
 {
@@ -834,7 +873,6 @@ void MainWindow::on_bnTriggerMode_clicked()
     }
     AppendLog("触发模式已开启", INFO);
 }
-
 
 void MainWindow::on_bnStart_clicked()
 {
@@ -914,16 +952,20 @@ void MainWindow::on_cbSoftTrigger_clicked()
     }
 }
 
-
 void MainWindow::onSoftTriggerTimeout()
 {
-    if (!m_softTriggerEnabled || !m_bGrabbing || !m_pcMyCamera || m_softTriggerBusy) {
-        if (m_softTriggerBusy) {
+    if (!m_softTriggerEnabled || !m_bGrabbing || !m_pcMyCamera || m_softTriggerBusy) 
+    {
+        if (m_softTriggerBusy) 
+        {
             // 可选：记录跳过日志，避免频繁
             static int skipCount = 0;
-            if (skipCount % 5 == 0) {
+            if (skipCount % 5 == 0) 
+            {
                 AppendLog(QString("软触发忙碌，跳过本次触发 (已跳过%1次)").arg(++skipCount), WARNNING);
-            } else {
+            } 
+            else 
+            {
                 ++skipCount;
             }
         }
@@ -934,14 +976,20 @@ void MainWindow::onSoftTriggerTimeout()
 
     // 执行软件触发
     int nRet = m_pcMyCamera->CommandExecute("TriggerSoftware");
-    if (MV_OK != nRet) {
+    if (MV_OK != nRet) 
+    {
         AppendLog("间歇软触发执行失败", ERROR);
-    } else {
+    } 
+    else 
+    {
         // 只在第一次或每10次触发时记录日志，避免日志过多
         static int triggerCount = 0;
-        if (triggerCount % 10 == 0 || triggerCount == 0) {
+        if (triggerCount % 10 == 0 || triggerCount == 0) 
+        {
             AppendLog(QString("间歇软触发执行成功 (第%1次)").arg(++triggerCount), INFO);
-        } else {
+        } 
+        else 
+        {
             ++triggerCount;
         }
     }
@@ -965,7 +1013,6 @@ void MainWindow::on_bnTriggerExec_clicked()
         AppendLog("软件触发成功", INFO);
     }
 }
-
 
 void MainWindow::on_bnGetParam_clicked()
 {
@@ -1609,137 +1656,6 @@ void MainWindow::on_GetLength_clicked()
 
 void MainWindow::on_genMatrix_clicked()
 {
-//     // 变量定义
-//     int getCoordsOk;                // 坐标获取结果
-//     Matrix3d transformationMatrix;  // 变换矩阵
-//     int result;                     // 计算结果
-//     QString matrixStr;              // 矩阵字符串
-//     int i;                          // 循环索引
-//     Vector3d pixelHomogeneous;      // 像素齐次坐标
-//     Vector3d worldTransformed;      // 变换后的世界坐标
-//     double x_transformed;           // 变换后的X坐标
-//     double y_transformed;           // 变换后的Y坐标
-//     double error_x;                 // X方向误差
-//     double error_y;                 // Y方向误差
-//     double total_error;             // 总误差
-//     QString message;                // 消息字符串
-
-//     WorldCoord.clear();
-//     PixelCoord.clear();
-//     getCoordsOk = GetCoordsOpenCV(WorldCoord, PixelCoord, 100.0);
-//     if (getCoordsOk != 0)
-//     {
-//         AppendLog("坐标获取错误", ERROR);
-//     }
-
-//     // 在命令行显示坐标结果
-//     cout << "=== 坐标检测结果 ===" << endl;
-//     cout << "检测到的坐标对数量: " << WorldCoord.size() << endl << endl;
-
-//     cout << "世界坐标 (单位:mm):" << endl;
-//     cout << "索引\tX坐标\t\tY坐标" << endl;
-//     cout << "----\t------\t\t------" << endl;
-//     for (i = 0; i < WorldCoord.size(); i++)
-//     {
-//         cout << i << "\t"
-//              << fixed << setprecision(3) << WorldCoord[i].x() << "\t\t"
-//              << fixed << setprecision(3) << WorldCoord[i].y() << endl;
-//     }
-
-//     cout << endl << "像素坐标 (单位:像素):" << endl;
-//     cout << "索引\tX坐标\t\tY坐标" << endl;
-//     cout << "----\t------\t\t------" << endl;
-//     for (i = 0; i < PixelCoord.size(); i++)
-//     {
-//         cout << i << "\t"
-//              << fixed << setprecision(1) << PixelCoord[i].x() << "\t\t"
-//              << fixed << setprecision(1) << PixelCoord[i].y() << endl;
-//     }
-//     cout << "==========================" << endl << endl;
-
-//     // 调用函数计算变换矩阵并保存到文件
-//     result = CalculateTransformationMatrix(WorldCoord, PixelCoord, transformationMatrix, "../matrix.bin");
-
-//     if (result == 0)
-//     {
-//         cout << "变换矩阵计算并保存成功!" << endl;
-//         AppendLog("变换矩阵计算并保存成功", INFO);
-
-//         // 使用变换矩阵将像素坐标转换回世界坐标
-//         cout << endl << "=== 使用变换矩阵转换像素坐标 ===" << endl;
-//         cout << "索引\t原始世界坐标\t\t转换后坐标\t\t误差" << endl;
-//         cout << "----\t------------\t\t------------\t\t------" << endl;
-
-//         for (i = 0; i < PixelCoord.size(); i++)
-//         {
-//             // 将像素坐标转换为齐次坐标 (x, y, 1)
-//             pixelHomogeneous = Vector3d(PixelCoord[i].x(), PixelCoord[i].y(), 1.0);
-
-//             // 应用变换矩阵
-//             worldTransformed = transformationMatrix * pixelHomogeneous;
-
-//             // 转换为非齐次坐标 (除以w分量)
-//             x_transformed = worldTransformed[0] / worldTransformed[2];
-//             y_transformed = worldTransformed[1] / worldTransformed[2];
-
-//             // 计算误差
-//             error_x = fabs(WorldCoord[i].x() - x_transformed);
-//             error_y = fabs(WorldCoord[i].y() - y_transformed);
-//             total_error = sqrt(error_x * error_x + error_y * error_y);
-
-//             // 输出结果
-//             cout << i << "\t"
-//                  << fixed << setprecision(3) << "(" << WorldCoord[i].x() << "," << WorldCoord[i].y() << ")"
-//                  << "\t\t(" << x_transformed << "," << y_transformed << ")"
-//                  << "\t\t" << total_error << " mm" << endl;
-//         }
-//         cout << "=============================================" << endl;
-
-//         // 首先显示变换矩阵
-//         matrixStr = "变换矩阵:\n";
-//         for (int i = 0; i < 3; i++)
-//         {
-//             matrixStr += "| ";
-//             for (int j = 0; j < 3; j++)
-//             {
-//                 matrixStr += QString::number(transformationMatrix(i, j), 'g', 15) + " ";
-//             }
-//             matrixStr += "|\n";
-//         }
-//         AppendLog(matrixStr, INFO);
-
-//         // 然后显示误差结果
-//         for (i = 0; i < PixelCoord.size(); i++)
-//         {
-//             // 将像素坐标转换为齐次坐标 (x, y, 1)
-//             pixelHomogeneous = Vector3d(PixelCoord[i].x(), PixelCoord[i].y(), 1.0);
-
-//             // 应用变换矩阵
-//             worldTransformed = transformationMatrix * pixelHomogeneous;
-
-//             // 转换为非齐次坐标 (除以w分量)
-//             x_transformed = worldTransformed[0] / worldTransformed[2];
-//             y_transformed = worldTransformed[1] / worldTransformed[2];
-
-//             // 计算误差
-//             error_x = fabs(WorldCoord[i].x() - x_transformed);
-//             error_y = fabs(WorldCoord[i].y() - y_transformed);
-//             total_error = sqrt(error_x * error_x + error_y * error_y);
-
-//             // 创建格式化的输出消息
-//             message = QString("点 %1: 理论世界坐标(%2, %3) -> 变换后世界坐标(%4, %5)").arg(i).arg(WorldCoord[i].x(), 0, 'f', 3).arg(WorldCoord[i].y(), 0, 'f', 3).arg(x_transformed, 0, 'f', 3).arg(y_transformed, 0, 'f', 3);
-
-//             // 调用日志函数显示结果
-//             AppendLog(message, INFO, total_error); // 使用信息级别, 并将误差作为value传递
-//         }
-//     }
-//     else
-//     {
-//         cout << "变换矩阵计算失败, 错误码: " << result << endl;
-//         AppendLog(QString("变换矩阵计算失败, 错误码:%1").arg(result), ERROR);
-//     }
-
-    // 新代码: 整合Undistort去畸变模块功能
     // 设置棋盘格参数 (内角点数量)
     Size boardSize(6, 6);                                      // 宽度方向6个内角点，高度方向6个内角点
     float squareSize = 10.0f;                                  // 棋盘格方格实际大小，单位：毫米
@@ -1918,17 +1834,22 @@ void MainWindow::on_CallDLwindow_clicked()
 
     msg.exec();
     QAbstractButton* clicked = msg.clickedButton();
-    if (clicked == btnYOLO) {
+    if (clicked == btnYOLO) 
+    {
         YOLOExample* ywin = new YOLOExample(nullptr);
         ywin->setAttribute(Qt::WA_DeleteOnClose);
         ywin->show();
         AppendLog("YOLO 窗口已打开", INFO);
-    } else if (clicked == btnDL) {
+    } 
+    else if (clicked == btnDL) 
+    {
         DLExample* dlExample = new DLExample(nullptr);
         dlExample->setAttribute(Qt::WA_DeleteOnClose);
         dlExample->show();
         AppendLog("深度学习二分类示例窗口已打开", INFO);
-    } else {
+    } 
+    else 
+    {
         AppendLog("已取消打开深度学习窗口", INFO);
     }
 }
@@ -3439,17 +3360,20 @@ void MainWindow::YoloRealTimeDetectionThread()
     int frameFailCount = 0; // 帧获取失败计数器
     int lastLogTime = 0; // 上次记录日志的时间（毫秒）
 
-    while (true) {
+    while (true) 
+    {
         // 检查是否需要停止检测
         {
             QMutexLocker locker(&m_yoloDetectionMutex);
-            if (!m_yoloDetectionRunning) {
+            if (!m_yoloDetectionRunning) 
+            {
                 break;
             }
         }
 
         // 检查相机是否仍然在采集图像
-        if (!m_bGrabbing) {
+        if (!m_bGrabbing) 
+        {
             // 只记录一次日志
             QMetaObject::invokeMethod(this, [this]() {
                 AppendLog("相机已停止采集图像，自动退出YOLO实时检测", WARNNING);
@@ -3458,14 +3382,19 @@ void MainWindow::YoloRealTimeDetectionThread()
         }
 
         // 如果是触发模式，等待新帧可用
-        if (m_isTriggerMode) {
+        if (m_isTriggerMode) 
+        {
             QMutexLocker locker(&m_newFrameMutex);
-            while (!m_newFrameAvailable && m_yoloDetectionRunning) {
+            while (!m_newFrameAvailable && m_yoloDetectionRunning) 
+            {
                 m_newFrameCondition.wait(&m_newFrameMutex);
             }
-            if (m_yoloDetectionRunning) {
+            if (m_yoloDetectionRunning) 
+            {
                 m_newFrameAvailable = false;
-            } else {
+            } 
+            else 
+            {
                 break;
             }
         }
@@ -3477,7 +3406,8 @@ void MainWindow::YoloRealTimeDetectionThread()
 
             // 限制错误日志的输出频率，每1秒最多输出一次
             int currentTime = QDateTime::currentMSecsSinceEpoch();
-            if (currentTime - lastLogTime > 1000) {
+            if (currentTime - lastLogTime > 1000) 
+            {
                 QMetaObject::invokeMethod(this, [this, frameFailCount]() {
                     AppendLog(QString("无法获取相机图像，已失败 %1 次").arg(frameFailCount), WARNNING);
                 }, Qt::QueuedConnection);
@@ -3485,7 +3415,8 @@ void MainWindow::YoloRealTimeDetectionThread()
             }
 
             // 如果连续100次获取帧失败，自动停止检测
-            if (frameFailCount >= 100) {
+            if (frameFailCount >= 100) 
+            {
                 QMetaObject::invokeMethod(this, [this]() {
                     AppendLog("连续多次无法获取相机图像，自动退出YOLO实时检测", ERROR);
                 }, Qt::QueuedConnection);
@@ -3556,13 +3487,15 @@ void MainWindow::StartYoloRealTimeDetection()
 {
     // 检查是否已经在运行
     QMutexLocker locker(&m_yoloDetectionMutex);
-    if (m_yoloDetectionRunning) {
+    if (m_yoloDetectionRunning) 
+    {
         AppendLog("YOLO实时检测已经在运行", INFO);
         return;
     }
 
     // 检查相机是否正在采集图像
-    if (!m_bGrabbing) {
+    if (!m_bGrabbing) 
+    {
         AppendLog("相机未开始采集图像，无法启动YOLO实时检测", WARNNING);
         return;
     }
@@ -3608,14 +3541,16 @@ void MainWindow::StopYoloRealTimeDetection()
     m_bufferReady.wakeOne();
 
     // 等待检测线程结束
-    if (m_yoloDetectionThread) {
+    if (m_yoloDetectionThread) 
+    {
         m_yoloDetectionThread->wait();
         delete m_yoloDetectionThread;
         m_yoloDetectionThread = nullptr;
     }
 
     // 等待显示线程结束
-    if (m_yoloDisplayThread) {
+    if (m_yoloDisplayThread) 
+    {
         m_yoloDisplayThread->wait();
         delete m_yoloDisplayThread;
         m_yoloDisplayThread = nullptr;
@@ -3630,7 +3565,8 @@ void MainWindow::UpdateYoloStats()
     double elapsedTime = m_yoloStatsStartTime.elapsed() / 1000.0; // 转换为秒
 
     // 防止除以零
-    if (elapsedTime <= 0 || m_yoloFrameCount <= 0) {
+    if (elapsedTime <= 0 || m_yoloFrameCount <= 0) 
+    {
         return;
     }
 
@@ -3643,14 +3579,10 @@ void MainWindow::UpdateYoloStats()
         auto timingStats = m_yoloProcessor->GetTimingStats();
 
         // 输出更详细的统计信息
-        AppendLog(QString("YOLO实时检测统计- 帧率: %1 FPS, 总平均处理延时: %2 ms")
-                  .arg(fps).arg(avgProcessingTime), INFO);
+        AppendLog(QString("YOLO实时检测统计- 帧率: %1 FPS, 总平均处理延时: %2 ms").arg(fps).arg(avgProcessingTime), INFO);
 
         // 新增：输出各阶段详细延时
-        AppendLog(QString("  预处理: %1 ms, 推理: %2 ms, 后处理: %3 ms")
-                  .arg(timingStats.preprocessTime, 0, 'f', 2)
-                  .arg(timingStats.inferenceTime, 0, 'f', 2)
-                  .arg(timingStats.postprocessTime, 0, 'f', 2), INFO);
+        AppendLog(QString("  预处理: %1 ms, 推理: %2 ms, 后处理: %3 ms").arg(timingStats.preprocessTime, 0, 'f', 2).arg(timingStats.inferenceTime, 0, 'f', 2).arg(timingStats.postprocessTime, 0, 'f', 2), INFO);
     }, Qt::QueuedConnection);
 
     // 重置统计信息
@@ -3661,11 +3593,13 @@ void MainWindow::UpdateYoloStats()
 
 void MainWindow::YoloDisplayThread()
 {
-    while (true) {
+    while (true) 
+    {
         // 检查是否需要停止显示
         {
             QMutexLocker locker(&m_yoloDisplayMutex);
-            if (!m_yoloDisplayRunning) {
+            if (!m_yoloDisplayRunning) 
+            {
                 break;
             }
         }
@@ -3678,9 +3612,11 @@ void MainWindow::YoloDisplayThread()
             QMutexLocker locker(&m_bufferMutex);
 
             // 等待新数据或超时
-            if (!m_yoloBuffers[m_readBufferIndex].newDataAvailable) {
+            if (!m_yoloBuffers[m_readBufferIndex].newDataAvailable) 
+            {
                 // 超时等待，避免死锁
-                if (!m_bufferReady.wait(&m_bufferMutex, m_displayUpdateInterval)) {
+                if (!m_bufferReady.wait(&m_bufferMutex, m_displayUpdateInterval)) 
+                {
                     continue; // 超时，继续下一次循环
                 }
             }
@@ -3688,13 +3624,15 @@ void MainWindow::YoloDisplayThread()
             // 检查是否需要停止显示
             {
                 QMutexLocker displayLocker(&m_yoloDisplayMutex);
-                if (!m_yoloDisplayRunning) {
+                if (!m_yoloDisplayRunning) 
+                {
                     break;
                 }
             }
 
             // 检查是否有新数据
-            if (m_yoloBuffers[m_readBufferIndex].newDataAvailable) {
+            if (m_yoloBuffers[m_readBufferIndex].newDataAvailable) 
+            {
                 // 复制检测结果
                 currentResult = m_yoloBuffers[m_readBufferIndex];
                 m_yoloBuffers[m_readBufferIndex].newDataAvailable = false;
@@ -3705,7 +3643,8 @@ void MainWindow::YoloDisplayThread()
             }
         }
 
-        if (hasNewData) {
+        if (hasNewData) 
+        {
             // 绘制检测结果
             Mat displayFrame = currentResult.frame.clone();
             DrawYoloResults(displayFrame, currentResult.results);
@@ -3742,10 +3681,12 @@ void MainWindow::DrawYoloResults(Mat& frame, const vector<DetectionResult>& resu
     };
 
     // 遍历所有检测结果
-    for (const auto& result : results) {
+    for (const auto& result : results) 
+    {
         // 确保类别ID在有效范围内
         int color_idx = result.classId;
-        if (color_idx < 0 || color_idx >= static_cast<int>(colors.size())) {
+        if (color_idx < 0 || color_idx >= static_cast<int>(colors.size())) 
+        {
             color_idx = 0;  // 默认使用第一个颜色
         }
 
@@ -3755,9 +3696,12 @@ void MainWindow::DrawYoloResults(Mat& frame, const vector<DetectionResult>& resu
 
         // 准备标签文本
         string label;
-        if (!result.className.empty()) {
+        if (!result.className.empty()) 
+        {
             label = result.className + " " + cv::format("%.2f", result.confidence);
-        } else {
+        } 
+        else 
+        {
             label = to_string(result.classId) + " " + cv::format("%.2f", result.confidence);
         }
 
@@ -3767,7 +3711,8 @@ void MainWindow::DrawYoloResults(Mat& frame, const vector<DetectionResult>& resu
 
         // 确保标签不会超出图像边界
         int top = result.boundingBox.y - labelSize.height - 3;
-        if (top < 0) {
+        if (top < 0) 
+        {
             top = result.boundingBox.y + 3;
         }
 
@@ -3776,16 +3721,20 @@ void MainWindow::DrawYoloResults(Mat& frame, const vector<DetectionResult>& resu
         Point topRight(result.boundingBox.x + labelSize.width + 6, top - 3);
 
         // 确保标签背景不会超出图像边界
-        if (bottomLeft.x < 0) {
+        if (bottomLeft.x < 0) 
+        {
             bottomLeft.x = 0;
         }
-        if (bottomLeft.y > frame.rows) {
+        if (bottomLeft.y > frame.rows) 
+        {
             bottomLeft.y = frame.rows;
         }
-        if (topRight.x > frame.cols) {
+        if (topRight.x > frame.cols) 
+        {
             topRight.x = frame.cols;
         }
-        if (topRight.y < 0) {
+        if (topRight.y < 0) 
+        {
             topRight.y = 0;
         }
 
@@ -3793,8 +3742,7 @@ void MainWindow::DrawYoloResults(Mat& frame, const vector<DetectionResult>& resu
         rectangle(frame, bottomLeft, topRight, color, FILLED);
 
         // 绘制文本，使用优化的字体
-        putText(frame, label, Point(result.boundingBox.x + 3, top + labelSize.height + baseLine),
-                FONT_HERSHEY_SIMPLEX, 1, Scalar(255, 255, 255), 3);
+        putText(frame, label, Point(result.boundingBox.x + 3, top + labelSize.height + baseLine), FONT_HERSHEY_SIMPLEX, 1, Scalar(255, 255, 255), 3);
     }
 }
 

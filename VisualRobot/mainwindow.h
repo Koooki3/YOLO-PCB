@@ -171,7 +171,7 @@ private:
     bool m_newFrameAvailable;
 
     // 图像缓存优化相关
-    size_t m_maxFrameSize = 20 * 1024 * 1024;  // 最大帧缓存大小 20MB
+    size_t m_maxFrameSize = 30 * 1024 * 1024;  // 最大帧缓存大小 30MB
     size_t m_expectedFrameSize = 0;             // 预期帧大小
 
     // 定时器安全相关
@@ -179,8 +179,6 @@ private:
 
     // 线程资源管理相关
     QElapsedTimer m_yoloThreadTimer;            // YOLO线程超时计时器
-
-
 
     // 将缓存的最新一帧转为BGR Mat（经SDK内存编码为JPEG后imdecode，稳妥）
     bool GrabLastFrameBGR(Mat& outBGR);
@@ -251,7 +249,6 @@ private:
     void UpdateYoloStats();                     // 更新YOLO统计信息
     void DrawYoloResults(Mat& frame, const vector<DetectionResult>& results); // 绘制YOLO检测结果
     void UpdateYoloDisplay();                   // 更新YOLO显示
-
 };
 
 #endif // MAINWINDOW_H
