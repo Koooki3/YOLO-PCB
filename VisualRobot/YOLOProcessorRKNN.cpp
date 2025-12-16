@@ -52,11 +52,11 @@ bool YOLOProcessorRKNN::InitModel(const string& modelPath, const string& labelsP
     model_path_ = modelPath;
 
     // 1. 加载RKNN模型
-    // 修复：需要将const string转换为非const的char*
     char* modelPathChar = const_cast<char*>(modelPath.c_str());
     int ret = rknn_init(&ctx_, modelPathChar, 0, 0, nullptr);
 
-    if (ret < 0) {
+    if (ret < 0) 
+    {
         QString error = QString("rknn_init失败! ret=%1").arg(ret);
         qDebug() << error;
         emit errorOccurred(error);
@@ -66,7 +66,8 @@ bool YOLOProcessorRKNN::InitModel(const string& modelPath, const string& labelsP
     // 2. 获取SDK和驱动版本
     rknn_sdk_version sdk_ver;
     ret = rknn_query(ctx_, RKNN_QUERY_SDK_VERSION, &sdk_ver, sizeof(sdk_ver));
-    if (ret != RKNN_SUCC) {
+    if (ret != RKNN_SUCC) 
+    {
         QString error = QString("rknn_query SDK版本失败! ret=%1").arg(ret);
         qDebug() << error;
         Cleanup();
@@ -82,7 +83,8 @@ bool YOLOProcessorRKNN::InitModel(const string& modelPath, const string& labelsP
 
     // 3. 获取输入输出数量
     ret = rknn_query(ctx_, RKNN_QUERY_IN_OUT_NUM, &io_num_, sizeof(io_num_));
-    if (ret != RKNN_SUCC) {
+    if (ret != RKNN_SUCC) 
+    {
         QString error = QString("rknn_query输入输出数量失败! ret=%1").arg(ret);
         qDebug() << error;
         Cleanup();
@@ -95,10 +97,12 @@ bool YOLOProcessorRKNN::InitModel(const string& modelPath, const string& labelsP
 
     // 4. 获取输入张量属性
     input_attrs_ = new rknn_tensor_attr[io_num_.n_input];
-    for (uint32_t i = 0; i < io_num_.n_input; i++) {
+    for (uint32_t i = 0; i < io_num_.n_input; i++) 
+    {
         input_attrs_[i].index = i;
         ret = rknn_query(ctx_, RKNN_QUERY_INPUT_ATTR, &input_attrs_[i], sizeof(rknn_tensor_attr));
-        if (ret < 0) {
+        if (ret < 0) 
+        {
             QString error = QString("rknn_query输入属性失败! ret=%1").arg(ret);
             qDebug() << error;
             Cleanup();
@@ -107,7 +111,8 @@ bool YOLOProcessorRKNN::InitModel(const string& modelPath, const string& labelsP
         }
 
         // 根据输入格式确定输入尺寸
-        switch (input_attrs_[i].fmt) {
+        switch (input_attrs_[i].fmt) 
+        {
             case RKNN_TENSOR_NHWC:
                 input_size_.width = input_attrs_[i].dims[2];
                 input_size_.height = input_attrs_[i].dims[1];
@@ -124,16 +129,17 @@ bool YOLOProcessorRKNN::InitModel(const string& modelPath, const string& labelsP
         qDebug() << "  名称:" << input_attrs_[i].name;
         qDebug() << "  格式:" << input_attrs_[i].fmt;
         qDebug() << "  类型:" << input_attrs_[i].type;
-        qDebug() << "  尺寸:" << input_attrs_[i].dims[0] << input_attrs_[i].dims[1]
-                 << input_attrs_[i].dims[2] << input_attrs_[i].dims[3];
+        qDebug() << "  尺寸:" << input_attrs_[i].dims[0] << input_attrs_[i].dims[1] << input_attrs_[i].dims[2] << input_attrs_[i].dims[3];
     }
 
     // 5. 获取输出张量属性
     output_attrs_ = new rknn_tensor_attr[io_num_.n_output];
-    for (uint32_t i = 0; i < io_num_.n_output; i++) {
+    for (uint32_t i = 0; i < io_num_.n_output; i++) 
+    {
         output_attrs_[i].index = i;
         ret = rknn_query(ctx_, RKNN_QUERY_OUTPUT_ATTR, &output_attrs_[i], sizeof(rknn_tensor_attr));
-        if (ret != RKNN_SUCC) {
+        if (ret != RKNN_SUCC) 
+        {
             QString error = QString("rknn_query输出属性失败! ret=%1").arg(ret);
             qDebug() << error;
             Cleanup();
@@ -145,8 +151,7 @@ bool YOLOProcessorRKNN::InitModel(const string& modelPath, const string& labelsP
         qDebug() << "  名称:" << output_attrs_[i].name;
         qDebug() << "  格式:" << output_attrs_[i].fmt;
         qDebug() << "  类型:" << output_attrs_[i].type;
-        qDebug() << "  尺寸:" << output_attrs_[i].dims[0] << output_attrs_[i].dims[1]
-                 << output_attrs_[i].dims[2] << output_attrs_[i].dims[3];
+        qDebug() << "  尺寸:" << output_attrs_[i].dims[0] << output_attrs_[i].dims[1] << output_attrs_[i].dims[2] << output_attrs_[i].dims[3];
     }
 
     // 6. 创建输入输出内存
@@ -154,9 +159,11 @@ bool YOLOProcessorRKNN::InitModel(const string& modelPath, const string& labelsP
     output_mems_ = new rknn_tensor_mem*[io_num_.n_output];
 
     // 创建输入内存
-    for (uint32_t i = 0; i < io_num_.n_input; i++) {
+    for (uint32_t i = 0; i < io_num_.n_input; i++) 
+    {
         input_mems_[i] = rknn_create_mem(ctx_, input_attrs_[i].size_with_stride);
-        if (!input_mems_[i]) {
+        if (!input_mems_[i]) 
+        {
             QString error = "创建输入内存失败!";
             qDebug() << error;
             Cleanup();
@@ -167,11 +174,13 @@ bool YOLOProcessorRKNN::InitModel(const string& modelPath, const string& labelsP
     }
 
     // 创建输出内存（浮点型，用于后处理）
-    for (uint32_t i = 0; i < io_num_.n_output; i++) {
+    for (uint32_t i = 0; i < io_num_.n_output; i++) 
+    {
         output_attrs_[i].type = RKNN_TENSOR_FLOAT32;
         int output_size = output_attrs_[i].n_elems * sizeof(float);
         output_mems_[i] = rknn_create_mem(ctx_, output_size);
-        if (!output_mems_[i]) {
+        if (!output_mems_[i]) 
+        {
             QString error = "创建输出内存失败!";
             qDebug() << error;
             Cleanup();
@@ -182,8 +191,10 @@ bool YOLOProcessorRKNN::InitModel(const string& modelPath, const string& labelsP
     }
 
     // 7. 加载标签文件
-    if (!labelsPath.empty()) {
-        if (!LoadLabels(labelsPath)) {
+    if (!labelsPath.empty()) 
+    {
+        if (!LoadLabels(labelsPath)) 
+        {
             qWarning() << "标签文件加载失败，将继续使用默认标签";
         }
     }
@@ -200,16 +211,19 @@ bool YOLOProcessorRKNN::InitModel(const string& modelPath, const string& labelsP
 bool YOLOProcessorRKNN::LoadLabels(const string& labelsPath)
 {
     QFile file(QString::fromStdString(labelsPath));
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) 
+    {
         qWarning() << "无法打开标签文件:" << labelsPath.c_str();
         return false;
     }
 
     class_labels_.clear();
     QTextStream in(&file);
-    while (!in.atEnd()) {
+    while (!in.atEnd()) 
+    {
         QString line = in.readLine().trimmed();
-        if (!line.isEmpty()) {
+        if (!line.isEmpty()) 
+        {
             class_labels_.push_back(line.toStdString());
         }
     }
@@ -240,8 +254,7 @@ bool YOLOProcessorRKNN::PreprocessImage(const Mat& frame, vector<uint8_t>& prepr
     int target_h = input_size_.height;
 
     // 计算缩放比例
-    double r = min(static_cast<double>(target_w) / orig_w,
-                   static_cast<double>(target_h) / orig_h);
+    double r = min(static_cast<double>(target_w) / orig_w, static_cast<double>(target_h) / orig_h);
     img_info.letterboxR = r;
 
     // 计算新尺寸
@@ -256,9 +269,12 @@ bool YOLOProcessorRKNN::PreprocessImage(const Mat& frame, vector<uint8_t>& prepr
 
     // 执行letterbox
     Mat resized;
-    if (orig_w != new_w || orig_h != new_h) {
+    if (orig_w != new_w || orig_h != new_h) 
+    {
         resize(frame, resized, Size(new_w, new_h), 0, 0, INTER_LINEAR);
-    } else {
+    } 
+    else 
+    {
         resized = frame.clone();
     }
 
@@ -269,8 +285,7 @@ bool YOLOProcessorRKNN::PreprocessImage(const Mat& frame, vector<uint8_t>& prepr
     int right = dw - left;
 
     Mat padded;
-    copyMakeBorder(resized, padded, top, bottom, left, right,
-                   BORDER_CONSTANT, Scalar(114, 114, 114));
+    copyMakeBorder(resized, padded, top, bottom, left, right, BORDER_CONSTANT, Scalar(114, 114, 114));
 
     // 2. BGR转RGB
     Mat rgb;
@@ -284,17 +299,21 @@ bool YOLOProcessorRKNN::PreprocessImage(const Mat& frame, vector<uint8_t>& prepr
 
     preprocessed.resize(input_attrs_[0].size_with_stride);
 
-    if (width == stride) {
+    if (width == stride) 
+    {
         // 连续内存，直接拷贝
         memcpy(preprocessed.data(), rgb.data, width * height * channels);
-    } else {
+    } 
+    else 
+    {
         // 带stride的内存，逐行拷贝
         uint8_t* src_ptr = rgb.data;
         uint8_t* dst_ptr = preprocessed.data();
         int src_line_size = width * channels;
         int dst_line_size = stride * channels;
 
-        for (int h = 0; h < height; h++) {
+        for (int h = 0; h < height; h++) 
+        {
             memcpy(dst_ptr, src_ptr, src_line_size);
             src_ptr += src_line_size;
             dst_ptr += dst_line_size;
@@ -317,24 +336,28 @@ bool YOLOProcessorRKNN::DetectObjects(const Mat& frame, vector<DetectionResult>&
 {
     results.clear();
 
-    if (!ctx_) {
+    if (!ctx_) 
+    {
         emit errorOccurred("RKNN模型未初始化!");
         return false;
     }
 
-    if (frame.empty()) {
+    if (frame.empty()) 
+    {
         emit errorOccurred("输入图像为空!");
         return false;
     }
 
     auto total_start = chrono::high_resolution_clock::now();
 
-    try {
+    try 
+    {
         // 1. 预处理
         RKNNImageInfo img_info;
         vector<uint8_t> preprocessed_data;
 
-        if (!PreprocessImage(frame, preprocessed_data, img_info)) {
+        if (!PreprocessImage(frame, preprocessed_data, img_info)) 
+        {
             emit errorOccurred("图像预处理失败!");
             return false;
         }
@@ -343,7 +366,8 @@ bool YOLOProcessorRKNN::DetectObjects(const Mat& frame, vector<DetectionResult>&
         auto inference_start = chrono::high_resolution_clock::now();
 
         int ret = rknn_run(ctx_, nullptr);
-        if (ret < 0) {
+        if (ret < 0) 
+        {
             QString error = QString("rknn_run失败! ret=%1").arg(ret);
             emit errorOccurred(error);
             return false;
@@ -357,7 +381,8 @@ bool YOLOProcessorRKNN::DetectObjects(const Mat& frame, vector<DetectionResult>&
 
         // 收集输出数据
         vector<float*> outputs;
-        for (uint32_t i = 0; i < io_num_.n_output; i++) {
+        for (uint32_t i = 0; i < io_num_.n_output; i++) 
+        {
             outputs.push_back(static_cast<float*>(output_mems_[i]->virt_addr));
         }
 
@@ -370,17 +395,19 @@ bool YOLOProcessorRKNN::DetectObjects(const Mat& frame, vector<DetectionResult>&
         // 4. 计算总时间
         auto total_end = chrono::high_resolution_clock::now();
         timing_stats_.totalTime = chrono::duration<double, milli>(total_end - total_start).count();
-        timing_stats_.fps = (timing_stats_.totalTime > 0) ?
-                            static_cast<int>(1000.0 / timing_stats_.totalTime) : 0;
+        timing_stats_.fps = (timing_stats_.totalTime > 0) ? static_cast<int>(1000.0 / timing_stats_.totalTime) : 0;
 
         // 5. 调试输出
-        if (enable_debug_) {
+        if (enable_debug_) 
+        {
             DebugOutput(img_info, results);
         }
 
         return true;
 
-    } catch (const exception& e) {
+    } 
+    catch (const exception& e) 
+    {
         QString error = QString("检测过程中发生异常: %1").arg(e.what());
         emit errorOccurred(error);
         return false;
@@ -394,7 +421,8 @@ vector<DetectionResult> YOLOProcessorRKNN::PostProcess(const vector<float*>& out
 {
     vector<DetectionResult> results;
 
-    if (outputs.empty()) {
+    if (outputs.empty()) 
+    {
         return results;
     }
 
@@ -403,7 +431,8 @@ vector<DetectionResult> YOLOProcessorRKNN::PostProcess(const vector<float*>& out
 
     // 获取输出形状
     vector<int64_t> output_shape;
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++) 
+    {
         output_shape.push_back(output_attrs_[0].dims[i]);
     }
 
@@ -419,15 +448,19 @@ vector<DetectionResult> YOLOProcessorRKNN::PostProcess(const vector<float*>& out
     ApplyNMS(boxes, scores, indices);
 
     // 生成检测结果
-    for (int idx : indices) {
+    for (int idx : indices) 
+    {
         DetectionResult result;
         result.boundingBox = boxes[idx];
         result.confidence = scores[idx];
         result.classId = class_ids[idx];
 
-        if (result.classId >= 0 && result.classId < static_cast<int>(class_labels_.size())) {
+        if (result.classId >= 0 && result.classId < static_cast<int>(class_labels_.size())) 
+        {
             result.className = class_labels_[result.classId];
-        } else {
+        } 
+        else 
+        {
             result.className = "class_" + to_string(result.classId);
         }
 
@@ -441,54 +474,57 @@ vector<DetectionResult> YOLOProcessorRKNN::PostProcess(const vector<float*>& out
  * @brief 解析YOLO输出
  */
 void YOLOProcessorRKNN::ParseYOLOOutput(const float* output_data, const vector<int64_t>& output_shape,
-                                       const RKNNImageInfo& img_info,
-                                       vector<Rect>& boxes, vector<float>& scores, vector<int>& class_ids)
+                                        const RKNNImageInfo& img_info,
+                                        vector<Rect>& boxes, vector<float>& scores, vector<int>& class_ids)
 {
-    // YOLO11n输出形状通常是[1, 84, 8400]
-    // 其中84 = 4个坐标 + 80个类别（COCO数据集）
+    // 根据用户描述，输出形状为 [1, 10, 8400]
+    // 其中10 = 4个坐标 + 6个类别（用户数据集）
+    // 每列代表一个候选框: [cx, cy, w, h, cls0, cls1, ..., cls5]
+    // 坐标为640-scale像素值
 
     int batch_size = output_shape[0];    // 通常为1
-    int num_features = output_shape[1];  // 特征数
-    int num_boxes = output_shape[2];     // 预测框数量
+    int num_features = output_shape[1];  // 特征数，10
+    int num_boxes = output_shape[2];     // 预测框数量，8400
 
-    // 计算类别数量
-    int num_classes = num_features - 4;
+    // 类别数量固定为6
+    const int NUM_CLASSES = 6;
 
-    for (int i = 0; i < num_boxes; i++) {
-        // 获取当前预测框的数据指针
-        const float* box_data = output_data + i * num_features;
+    // 辅助函数：按 (row, col) 读取值，layout: [1, num_features, num_boxes] -> index = row*num_boxes + col
+    auto get_val = [&](int r, int c)->float {
+        if (r < 0 || r >= num_features || c < 0 || c >= num_boxes) return 0.0f;
+        return output_data[r * num_boxes + c];
+    };
 
-        // 提取坐标
-        float x_center = box_data[0];
-        float y_center = box_data[1];
-        float width = box_data[2];
-        float height = box_data[3];
+    for (int c = 0; c < num_boxes; ++c) {
+        // 提取640-scale像素坐标
+        float cx = get_val(0, c);
+        float cy = get_val(1, c);
+        float w = get_val(2, c);
+        float h = get_val(3, c);
 
-        // 找到最大类别分数
-        float max_score = 0.0f;
-        int max_class_id = -1;
-
-        for (int c = 0; c < num_classes; c++) {
-            float score = box_data[4 + c];
-            if (score > max_score) {
-                max_score = score;
-                max_class_id = c;
+        // 提取6类分数并乘以10000
+        float max_raw = -std::numeric_limits<float>::infinity();
+        int best_cls = 0;
+        for (int k = 0; k < NUM_CLASSES; ++k) {
+            float raw = get_val(4 + k, c);
+            if (raw > max_raw) {
+                max_raw = raw;
+                best_cls = k;
             }
         }
 
-        // 应用置信度阈值
-        if (max_score < conf_threshold_) {
-            continue;
-        }
+        // 按要求将类别分数乘以10000用于筛选
+        float scaled_conf = max_raw * 10000.0f;
 
-        // 将归一化坐标转换为像素坐标
+        // 使用放大后的置信度与阈值比较
+        if (scaled_conf < conf_threshold_) continue;
+
+        // 将640-scale像素坐标映射回原图
         Rect pixel_rect;
-        NormalizedToPixel(x_center, y_center, width, height, img_info, pixel_rect);
+        NormalizedToPixel(cx, cy, w, h, img_info, pixel_rect);
 
         // 确保矩形有效
-        if (pixel_rect.width <= 0 || pixel_rect.height <= 0) {
-            continue;
-        }
+        if (pixel_rect.width <= 0 || pixel_rect.height <= 0) continue;
 
         // 确保矩形在图像范围内
         pixel_rect.x = max(0, pixel_rect.x);
@@ -497,33 +533,26 @@ void YOLOProcessorRKNN::ParseYOLOOutput(const float* output_data, const vector<i
         pixel_rect.height = min(pixel_rect.height, img_info.height - pixel_rect.y);
 
         boxes.push_back(pixel_rect);
-        scores.push_back(max_score);
-        class_ids.push_back(max_class_id);
+        scores.push_back(scaled_conf);
+        class_ids.push_back(best_cls);
     }
 }
 
 /**
- * @brief 将归一化坐标转换为像素坐标
+ * @brief 将像素坐标转换为像素坐标（应用letterbox逆变换）
  */
-void YOLOProcessorRKNN::NormalizedToPixel(float x, float y, float w, float h,
-                                         const RKNNImageInfo& img_info, Rect& rect)
+void YOLOProcessorRKNN::NormalizedToPixel(float x, float y, float w, float h, const RKNNImageInfo& img_info, Rect& rect)
 {
-    // 模型输出是相对于640x640的坐标
-    // 需要先去除letterbox填充，然后映射回原始图像
+    // 根据用户描述，模型输出坐标已经是640-scale像素值
+    // 无需乘以targetWidth，直接使用并应用letterbox逆变换映射回原始图像
 
-    // 1. 转换为letterbox图像上的像素坐标
-    float x_center_pix = x * img_info.targetWidth;
-    float y_center_pix = y * img_info.targetHeight;
-    float width_pix = w * img_info.targetWidth;
-    float height_pix = h * img_info.targetHeight;
+    // 去除letterbox填充
+    float real_x_center = (x - img_info.letterboxDw) / img_info.letterboxR;
+    float real_y_center = (y - img_info.letterboxDh) / img_info.letterboxR;
+    float real_width = w / img_info.letterboxR;
+    float real_height = h / img_info.letterboxR;
 
-    // 2. 去除letterbox填充
-    float real_x_center = (x_center_pix - img_info.letterboxDw) / img_info.letterboxR;
-    float real_y_center = (y_center_pix - img_info.letterboxDh) / img_info.letterboxR;
-    float real_width = width_pix / img_info.letterboxR;
-    float real_height = height_pix / img_info.letterboxR;
-
-    // 3. 转换为左上角坐标
+    // 转换为左上角坐标
     int x1 = static_cast<int>(real_x_center - real_width / 2.0f);
     int y1 = static_cast<int>(real_y_center - real_height / 2.0f);
     int x2 = static_cast<int>(real_x_center + real_width / 2.0f);
@@ -540,7 +569,8 @@ void YOLOProcessorRKNN::NormalizedToPixel(float x, float y, float w, float h,
  */
 void YOLOProcessorRKNN::ApplyNMS(const vector<Rect>& boxes, const vector<float>& scores, vector<int>& indices)
 {
-    if (boxes.empty()) {
+    if (boxes.empty()) 
+    {
         return;
     }
 
@@ -555,7 +585,8 @@ bool YOLOProcessorRKNN::ProcessImage(const string& imagePath, const string& outp
 {
     // 读取图像
     Mat image = imread(imagePath);
-    if (image.empty()) {
+    if (image.empty()) 
+    {
         QString error = QString("无法读取图像: %1").arg(imagePath.c_str());
         emit errorOccurred(error);
         return false;
@@ -563,7 +594,8 @@ bool YOLOProcessorRKNN::ProcessImage(const string& imagePath, const string& outp
 
     // 检测目标
     vector<DetectionResult> results;
-    if (!DetectObjects(image, results)) {
+    if (!DetectObjects(image, results)) 
+    {
         return false;
     }
 
@@ -597,7 +629,8 @@ void YOLOProcessorRKNN::DrawDetectionResults(Mat& frame, const vector<DetectionR
     };
 
     // 绘制每个检测结果
-    for (const auto& result : results) {
+    for (const auto& result : results) 
+    {
         int color_idx = result.classId % colors.size();
         Scalar color = colors[color_idx];
 
@@ -606,9 +639,12 @@ void YOLOProcessorRKNN::DrawDetectionResults(Mat& frame, const vector<DetectionR
 
         // 准备标签文本
         string label;
-        if (!result.className.empty()) {
+        if (!result.className.empty()) 
+        {
             label = result.className + ": " + to_string(static_cast<int>(result.confidence * 100)) + "%";
-        } else {
+        } 
+        else 
+        {
             label = "Class " + to_string(result.classId) + ": " + to_string(static_cast<int>(result.confidence * 100)) + "%";
         }
 
@@ -618,26 +654,27 @@ void YOLOProcessorRKNN::DrawDetectionResults(Mat& frame, const vector<DetectionR
 
         // 绘制文本背景
         Point text_org(result.boundingBox.x, result.boundingBox.y - 5);
-        if (text_org.y < text_size.height + 5) {
+        if (text_org.y < text_size.height + 5) 
+        {
             text_org.y = result.boundingBox.y + text_size.height + 5;
         }
 
         rectangle(frame,
-                 Point(text_org.x, text_org.y - text_size.height - 5),
-                 Point(text_org.x + text_size.width, text_org.y + 5),
-                 color, FILLED);
+                  Point(text_org.x, text_org.y - text_size.height - 5),
+                  Point(text_org.x + text_size.width, text_org.y + 5),
+                  color, FILLED);
 
         // 绘制文本
         putText(frame, label, text_org, FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 255), 1);
     }
 
     // 添加统计信息
-    string stats_text = "FPS: " + to_string(timing_stats_.fps) +
-                       " | Objects: " + to_string(results.size());
+    string stats_text = "FPS: " + to_string(timing_stats_.fps) + " | Objects: " + to_string(results.size());
     putText(frame, stats_text, Point(10, 30), FONT_HERSHEY_SIMPLEX, 0.7, Scalar(0, 255, 0), 2);
 
     // 保存结果 - 修复：直接根据outputPath是否为空来判断
-    if (!outputPath.empty()) {
+    if (!outputPath.empty()) 
+    {
         imwrite(outputPath, frame);
         qDebug() << "结果已保存到:" << outputPath.c_str();
     }
@@ -730,7 +767,8 @@ void YOLOProcessorRKNN::DebugOutput(const RKNNImageInfo& img_info, const vector<
     qDebug() << "检测结果:";
     qDebug() << "  检测到" << results.size() << "个目标";
 
-    for (size_t i = 0; i < results.size(); i++) {
+    for (size_t i = 0; i < results.size(); i++) 
+    {
         const auto& result = results[i];
         qDebug() << "  目标" << i + 1 << ":";
         qDebug() << "    类别:" << result.className.c_str() << "(ID:" << result.classId << ")";
@@ -754,9 +792,12 @@ void YOLOProcessorRKNN::DebugOutput(const RKNNImageInfo& img_info, const vector<
 void YOLOProcessorRKNN::Cleanup()
 {
     // 释放输出内存
-    if (output_mems_) {
-        for (uint32_t i = 0; i < io_num_.n_output; i++) {
-            if (output_mems_[i]) {
+    if (output_mems_) 
+    {
+        for (uint32_t i = 0; i < io_num_.n_output; i++) 
+        {
+            if (output_mems_[i]) 
+            {
                 rknn_destroy_mem(ctx_, output_mems_[i]);
                 output_mems_[i] = nullptr;
             }
@@ -766,9 +807,12 @@ void YOLOProcessorRKNN::Cleanup()
     }
 
     // 释放输入内存
-    if (input_mems_) {
-        for (uint32_t i = 0; i < io_num_.n_input; i++) {
-            if (input_mems_[i]) {
+    if (input_mems_) 
+    {
+        for (uint32_t i = 0; i < io_num_.n_input; i++) 
+        {
+            if (input_mems_[i]) 
+            {
                 rknn_destroy_mem(ctx_, input_mems_[i]);
                 input_mems_[i] = nullptr;
             }
@@ -778,18 +822,21 @@ void YOLOProcessorRKNN::Cleanup()
     }
 
     // 释放张量属性
-    if (input_attrs_) {
+    if (input_attrs_) 
+    {
         delete[] input_attrs_;
         input_attrs_ = nullptr;
     }
 
-    if (output_attrs_) {
+    if (output_attrs_) 
+    {
         delete[] output_attrs_;
         output_attrs_ = nullptr;
     }
 
     // 销毁RKNN上下文
-    if (ctx_) {
+    if (ctx_) 
+    {
         rknn_destroy(ctx_);
         ctx_ = 0;
     }
@@ -800,7 +847,8 @@ void YOLOProcessorRKNN::Cleanup()
  */
 void YOLOProcessorRKNN::PrintModelInfo() const
 {
-    if (!ctx_) {
+    if (!ctx_) 
+    {
         qDebug() << "模型未加载!";
         return;
     }
