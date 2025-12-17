@@ -379,19 +379,22 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
         cv::Mat rgb;
         rgb_umat.copyTo(rgb);
 
-        // HWC -> CHW
+        // HWC -> CHW - 使用OpenMP并行化加速
         vector<int64_t> inputShape = {1, 3, target_h, target_w};
         size_t inputTensorSize = 1 * 3 * target_h * target_w;
         vector<float> inputTensorValues(inputTensorSize);
-        int idx = 0;
+        
+        // 并行化HWC转CHW的过程
+        #pragma omp parallel for collapse(3)
         for (int c = 0; c < 3; ++c) 
         {
             for (int y = 0; y < target_h; ++y) 
             {
                 for (int x = 0; x < target_w; ++x) 
                 {
+                    size_t idx = c * target_h * target_w + y * target_w + x;
                     Vec3f v = rgb.at<Vec3f>(y, x);
-                    inputTensorValues[idx++] = v[c];
+                    inputTensorValues[idx] = v[c];
                 }
             }
         }
@@ -436,22 +439,7 @@ bool YOLOProcessorORT::DetectObjects(const Mat& frame, vector<DetectionResult>& 
 
         // 准备调试信息（仅当启用调试时才会使用）
         YOLODebugInfo debugInfo;
-        if (enableDebug_)
-        {
-            debugInfo.letterbox_r = letterbox_r_;
-            debugInfo.letterbox_dw = letterbox_dw_;
-            debugInfo.letterbox_dh = letterbox_dh_;
-            debugInfo.outputTensorCount = outputTensors.size();
-            
-            // 保存输出形状（在移动张量之前）
-            for (const auto& out : outputTensors)
-            {
-                auto info = out.GetTensorTypeAndShapeInfo();
-                debugInfo.outputShapes.push_back(info.GetShape());
-            }
-        }
 
-        // debug: print output shapes (useful when user reports mismatch)
         // convert FIRST output to mat (mimic TestOnnx.py behavior)
         std::vector<Ort::Value> singleOuts;
         // Ort::Value is move-only; avoid copy by moving the element into the new vector
@@ -583,99 +571,85 @@ std::vector<DetectionResult> YOLOProcessorORT::PostProcess(const std::vector<Ort
     std::vector<int> cand_class_ids;       // 候选框类别ID列表
     std::vector<std::tuple<int, float, float, int>> top_candidates; // 候选框信息元组：(索引, 最大sigmoid分数, 原始分数, 类别ID)
 
-    // 遍历所有候选框 - 使用OpenMP并行化
-    #pragma omp parallel for
-    for (int c = 0; c < cols; ++c) 
+    // 遍历所有候选框 - 使用OpenMP并行化，优化线程竞争
+    #pragma omp parallel
     {
-        // 提取中心点坐标和宽高
-        float cx = get_val(0, c);
-        float cy = get_val(1, c);
-        float w = get_val(2, c);
-        float h = get_val(3, c);
-
-        // 找到最大的类别分数
-        float max_raw = -std::numeric_limits<float>::infinity();
-        int best_cls = 0;
-        for (int k = 0; k < NUM_CLASSES; ++k) 
+        // 每个线程使用局部向量收集结果，减少锁竞争
+        vector<cv::Rect> local_boxes;
+        vector<float> local_scores;
+        vector<int> local_class_ids;
+        
+        #pragma omp for
+        for (int c = 0; c < cols; ++c) 
         {
-            float raw = get_val(4 + k, c);
-            if (raw > max_raw) 
+            // 提取中心点坐标和宽高
+            float cx = get_val(0, c);
+            float cy = get_val(1, c);
+            float w = get_val(2, c);
+            float h = get_val(3, c);
+
+            // 找到最大的类别分数
+            float max_raw = -std::numeric_limits<float>::infinity();
+            int best_cls = 0;
+            for (int k = 0; k < NUM_CLASSES; ++k) 
             {
-                max_raw = raw;
-                best_cls = k;
+                float raw = get_val(4 + k, c);
+                if (raw > max_raw) 
+                {
+                    max_raw = raw;
+                    best_cls = k;
+                }
             }
-        }
 
-        // 按要求将类别分数乘以100用于筛选
-        float scaled_conf = max_raw * 100.0f;
+            // 按要求将类别分数乘以100用于筛选
+            float scaled_conf = max_raw * 100.0f;
+            
+            // 应用置信度阈值过滤
+            if (scaled_conf < confThreshold_) 
+            {
+                continue; // 置信度阈值由调用方设置（请注意阈值单位：scaled）
+            }
+
+            // 将 640-scale 像素映射回原图
+            double x_orig = (static_cast<double>(cx) - letterbox_dw_) / letterbox_r_;
+            double y_orig = (static_cast<double>(cy) - letterbox_dh_) / letterbox_r_;
+            double w_orig = static_cast<double>(w) / letterbox_r_;
+            double h_orig = static_cast<double>(h) / letterbox_r_;
+
+            // 计算边界框的左上角和右下角坐标
+            double x1d = x_orig - w_orig / 2.0;
+            double y1d = y_orig - h_orig / 2.0;
+            double x2d = x_orig + w_orig / 2.0;
+            double y2d = y_orig + h_orig / 2.0;
+
+            // 确保坐标在图像范围内
+            int x1 = static_cast<int>(std::max(0.0, std::min(x1d, static_cast<double>(frameSize.width - 1))));
+            int y1 = static_cast<int>(std::max(0.0, std::min(y1d, static_cast<double>(frameSize.height - 1))));
+            int x2 = static_cast<int>(std::max(0.0, std::min(x2d, static_cast<double>(frameSize.width - 1))));
+            int y2 = static_cast<int>(std::max(0.0, std::min(y2d, static_cast<double>(frameSize.height - 1))));
+
+            // 计算边界框的宽度和高度
+            int bw = x2 - x1;
+            int bh = y2 - y1;
+            
+            // 过滤掉无效的边界框
+            if (bw <= 0 || bh <= 0) 
+            {
+                continue;
+            }
+
+            // 添加到局部候选列表
+            local_boxes.emplace_back(x1, y1, bw, bh);
+            local_scores.push_back(scaled_conf);
+            local_class_ids.push_back(best_cls);
+        }
         
-        // 应用置信度阈值过滤
-        if (scaled_conf < confThreshold_) 
-        {
-            continue; // 置信度阈值由调用方设置（请注意阈值单位：scaled）
-        }
-
-        // 将 640-scale 像素映射回原图
-        double x_orig = (static_cast<double>(cx) - letterbox_dw_) / letterbox_r_;
-        double y_orig = (static_cast<double>(cy) - letterbox_dh_) / letterbox_r_;
-        double w_orig = static_cast<double>(w) / letterbox_r_;
-        double h_orig = static_cast<double>(h) / letterbox_r_;
-
-        // 计算边界框的左上角和右下角坐标
-        double x1d = x_orig - w_orig / 2.0;
-        double y1d = y_orig - h_orig / 2.0;
-        double x2d = x_orig + w_orig / 2.0;
-        double y2d = y_orig + h_orig / 2.0;
-
-        // 确保坐标在图像范围内
-        int x1 = static_cast<int>(std::max(0.0, std::min(x1d, static_cast<double>(frameSize.width - 1))));
-        int y1 = static_cast<int>(std::max(0.0, std::min(y1d, static_cast<double>(frameSize.height - 1))));
-        int x2 = static_cast<int>(std::max(0.0, std::min(x2d, static_cast<double>(frameSize.width - 1))));
-        int y2 = static_cast<int>(std::max(0.0, std::min(y2d, static_cast<double>(frameSize.height - 1))));
-
-        // 计算边界框的宽度和高度
-        int bw = x2 - x1;
-        int bh = y2 - y1;
-        
-        // 过滤掉无效的边界框
-        if (bw <= 0 || bh <= 0) 
-        {
-            continue;
-        }
-
-        // 添加到候选列表 - 使用关键区域确保线程安全
+        // 合并局部结果到全局列表
         #pragma omp critical
         {
-            cand_boxes.emplace_back(x1, y1, bw, bh);
-            cand_scores.push_back(scaled_conf);
-            cand_class_ids.push_back(best_cls);
-        }
-    }
-    
-    // 保存候选框信息用于后续分析（顺序不影响结果）
-    #pragma omp parallel for
-    for (int c = 0; c < cols; ++c) 
-    {
-        float cx = get_val(0, c);
-        float cy = get_val(1, c);
-        float w = get_val(2, c);
-        float h = get_val(3, c);
-        
-        float max_raw = -std::numeric_limits<float>::infinity();
-        int best_cls = 0;
-        for (int k = 0; k < NUM_CLASSES; ++k) 
-        {
-            float raw = get_val(4 + k, c);
-            if (raw > max_raw) 
-            {
-                max_raw = raw;
-                best_cls = k;
-            }
-        }
-        
-        #pragma omp critical
-        {
-            top_candidates.emplace_back(c, 0.0f, max_raw, best_cls);
+            cand_boxes.insert(cand_boxes.end(), local_boxes.begin(), local_boxes.end());
+            cand_scores.insert(cand_scores.end(), local_scores.begin(), local_scores.end());
+            cand_class_ids.insert(cand_class_ids.end(), local_class_ids.begin(), local_class_ids.end());
         }
     }
 
@@ -950,7 +924,7 @@ void YOLOProcessorORT::SetDebugOutput(bool enable)
  * @brief 输出调试信息
  * @param debugInfo 调试信息结构体，包含需要输出的各种调试数据
  * 
- * 集中处理所有调试输出，避免调试输出影响核心处理逻辑的性能
+ * 集中处理所有调试输出，仅保留必要的计时信息，避免调试输出影响核心处理逻辑的性能
  */
 void YOLOProcessorORT::DebugOutput(const YOLODebugInfo& debugInfo)
 {
@@ -959,96 +933,7 @@ void YOLOProcessorORT::DebugOutput(const YOLODebugInfo& debugInfo)
         return; // 调试输出已禁用，直接返回
     }
 
-    // 输出letterbox信息
-    qDebug() << "letterbox r, dw, dh:" << debugInfo.letterbox_r << debugInfo.letterbox_dw << debugInfo.letterbox_dh;
-
-    // 输出模型输出信息
-    qDebug() << "ORT returned" << debugInfo.outputTensorCount << "output(s)";
-    for (size_t oi = 0; oi < debugInfo.outputTensorCount; ++oi) 
-    {
-        QString s = "shape:";
-        for (auto d : debugInfo.outputShapes[oi]) 
-        {
-            s += QString::number(d) + ",";
-        }
-        qDebug() << "  output" << oi << s;
-    }
-
-    // 输出第一个矩阵的基本信息
-    if (!debugInfo.mats.empty()) 
-    {
-        const Mat &m0 = debugInfo.mats[0];
-        qDebug() << "first mat rows,cols:" << m0.rows << m0.cols;
-        int rshow = std::min(3, m0.rows);
-        for (int ri = 0; ri < rshow; ++ri) 
-        {
-            QString rowvals;
-            for (int ci = 0; ci < std::min(6, m0.cols); ++ci) 
-            {
-                rowvals += QString::number(m0.at<float>(ri, ci), 'g', 3) + ",";
-            }
-            qDebug() << "  row" << ri << rowvals;
-        }
-    }
-
-    // 输出检测结果的详细信息
-    if (!debugInfo.dets.empty()) 
-    {
-        int R = debugInfo.dets.rows;
-        int C = debugInfo.dets.cols;
-        qDebug() << "dets rows,cols:" << R << C;
-        
-        // 输出每列的min/max
-        for (int c = 0; c < C; ++c) 
-        {
-            double minv, maxv;
-            cv::minMaxLoc(debugInfo.dets.col(c), &minv, &maxv);
-            qDebug() << "  col" << c << "min" << minv << "max" << maxv;
-        }
-
-        // 计算每行的最大类别分数和置信度分布
-        vector<float> confidences;
-        confidences.reserve(R);
-        int cnt_gt_01 = 0, cnt_gt_05 = 0, cnt_gt_001 = 0;
-        for (int r = 0; r < R; ++r) 
-        {
-            const float* row = debugInfo.dets.ptr<float>(r);
-            float obj = (C > 4) ? row[4] : 1.0f;
-            float maxCls = 0.0f;
-            for (int cc = 5; cc < C; ++cc) 
-            {
-                if (row[cc] > maxCls) maxCls = row[cc];
-            }
-            float conf = obj * maxCls;
-            confidences.push_back(conf);
-            if (maxCls > 0.1f) 
-            {
-                cnt_gt_01++;
-            }
-            if (maxCls > 0.5f) 
-            {
-                cnt_gt_05++;
-            }
-            if (maxCls > 0.001f) 
-            {
-                cnt_gt_001++;
-            }
-        }
-        
-        // 输出top置信度
-        vector<float> sorted = confidences;
-        sort(sorted.begin(), sorted.end(), greater<float>());
-        int showN = min((int)sorted.size(), 10);
-        QString topstr = "top confidences:";
-        for (int i = 0; i < showN; ++i) 
-        {
-            topstr += QString::number(sorted[i], 'g', 6) + ",";
-        }
-        qDebug() << topstr;
-        qDebug() << "counts: >0.001=" << cnt_gt_001 << " >0.1=" << cnt_gt_01 << " >0.5=" << cnt_gt_05;
-    }
-
-    // 输出处理时间统计
+    // 仅输出必要的处理时间统计信息
     qDebug() << "YOLO Processing Timing:";
     qDebug() << "  Preprocess: " << debugInfo.preprocessTime << " ms";
     qDebug() << "  Inference: " << debugInfo.inferenceTime << " ms";
