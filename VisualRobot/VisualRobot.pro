@@ -33,7 +33,6 @@ SOURCES += \
     DataProcessor.cpp \
     MvCamera.cpp \
     SystemMonitor.cpp \
-    YOLOProcessorRKNN.cpp \
     configmanager.cpp \
     main.cpp \
     mainwindow.cpp \
@@ -53,7 +52,6 @@ HEADERS += \
     YOLOProcessorORT.h \
     MvCamera.h \
     SystemMonitor.h \
-    YOLOProcessorRKNN.h \
     configmanager.h \
     mainwindow.h \
     DLExample.h \
@@ -88,10 +86,6 @@ orangepi5_rk3588s {
     LIBS += -L/opt/MVS/lib/aarch64/ -lMvCameraControl -lMvCameraControlWrapper -lMVGigEVisionSDK -lMvUsb3vTL
     
     LIBS += -L/usr/lib/aarch64-linux-gnu -lmali -lOpenCL
-
-    INCLUDEPATH += /home/orangepi/Desktop/rknn-toolkit2-2.3.2/rknpu2/runtime/Linux/librknn_api/include/
-
-    LIBS += -L/home/orangepi/Desktop/rknn-toolkit2-2.3.2/rknpu2/runtime/Linux/librknn_api/aarch64/ -lrknnrt
 }
 
 # Raspberry Pi 4 配置
