@@ -1,3 +1,15 @@
+/**
+ * @file SystemMonitor.cpp
+ * @brief 系统监控模块实现文件
+ * 
+ * 该文件实现了SystemMonitor类的所有方法，提供系统资源监控功能，
+ * 包括CPU使用率、内存使用率和系统温度的实时监控。
+ * 
+ * @author VisualRobot Team
+ * @date 2025-12-30
+ * @version 1.0
+ */
+
 #include "SystemMonitor.h"
 #include <QDebug>
 #include <QProcess>
@@ -19,9 +31,16 @@ using namespace std;
 
 /**
  * @brief SystemMonitor构造函数
- * @param parent 父对象指针
  * 
  * 初始化系统监控对象，创建定时器并连接信号槽
+ * 
+ * @param parent 父对象指针
+ * @note 初始化步骤：
+ *       - 调用父类构造函数
+ *       - 创建定时器对象
+ *       - 初始化CPU统计变量为0
+ *       - 连接定时器超时信号到更新系统状态槽函数
+ * @see updateSystemStats()
  */
 SystemMonitor::SystemMonitor(QObject *parent)
     : QObject(parent)
@@ -39,6 +58,9 @@ SystemMonitor::SystemMonitor(QObject *parent)
  * @brief SystemMonitor析构函数
  * 
  * 停止监控并释放资源
+ * 
+ * @note 调用stopMonitoring()停止定时器
+ * @see stopMonitoring()
  */
 SystemMonitor::~SystemMonitor()
 {
@@ -47,9 +69,12 @@ SystemMonitor::~SystemMonitor()
 
 /**
  * @brief 开始监控系统状态
- * @param interval 监控更新间隔（毫秒）
  * 
  * 启动定时器，开始定期更新系统状态
+ * 
+ * @param interval 监控更新间隔（毫秒）
+ * @note 定时器启动后会定期触发updateSystemStats()槽函数
+ * @see stopMonitoring(), updateSystemStats()
  */
 void SystemMonitor::startMonitoring(int interval)
 {
@@ -60,6 +85,8 @@ void SystemMonitor::startMonitoring(int interval)
  * @brief 停止监控系统状态
  * 
  * 停止定时器，不再更新系统状态
+ * 
+ * @see startMonitoring()
  */
 void SystemMonitor::stopMonitoring()
 {
@@ -68,9 +95,17 @@ void SystemMonitor::stopMonitoring()
 
 /**
  * @brief 获取CPU使用率
- * @return CPU使用率（%）
  * 
  * 通过读取/proc/stat文件获取CPU统计信息，计算CPU使用率
+ * 
+ * @return CPU使用率（%），范围0-100
+ * @note 计算原理：
+ *       - 读取/proc/stat文件获取CPU时间统计
+ *       - 计算时间差：用户态、内核态、空闲时间
+ *       - CPU使用率 = (总时间 - 空闲时间) / 总时间 * 100%
+ * @note 首次调用返回0.0，用于初始化基准值
+ * @note 如果无法打开/proc/stat文件，返回0.0
+ * @see m_lastTotalUser, m_lastTotalUserLow, m_lastTotalSys, m_lastTotalIdle
  */
 float SystemMonitor::GetCpuUsage()
 {
@@ -152,9 +187,16 @@ float SystemMonitor::GetCpuUsage()
 
 /**
  * @brief 获取内存使用率
- * @return 内存使用率（%）
  * 
  * 通过读取/proc/meminfo文件获取内存信息，计算内存使用率
+ * 
+ * @return 内存使用率（%），范围0-100
+ * @note 计算原理：
+ *       - 读取MemTotal、MemFree、Buffers、Cached
+ *       - 实际使用内存 = 总内存 - 空闲内存 - 缓冲区 - 缓存
+ *       - 内存使用率 = 实际使用内存 / 总内存 * 100%
+ * @note 考虑了Linux的内存缓存机制，计算更准确
+ * @note 如果无法打开/proc/meminfo文件或总内存为0，返回0.0
  */
 float SystemMonitor::GetMemoryUsage()
 {
@@ -211,9 +253,17 @@ float SystemMonitor::GetMemoryUsage()
 
 /**
  * @brief 获取系统温度
- * @return 系统温度（摄氏度）
  * 
  * 尝试从多个可能的温度传感器路径读取温度，失败则尝试通过系统命令获取
+ * 
+ * @return 系统温度（摄氏度）
+ * @note 尝试的路径：
+ *       - /sys/class/thermal/thermal_zone0/temp
+ *       - /sys/devices/virtual/thermal/thermal_zone0/temp
+ *       - /sys/class/hwmon/hwmon0/temp1_input
+ * @note 如果文件读取失败，尝试通过系统命令获取
+ * @note 如果温度值大于1000，会自动转换为摄氏度（除以1000）
+ * @note 如果所有方法都失败，返回0.0
  */
 float SystemMonitor::GetTemperature()
 {
@@ -286,6 +336,14 @@ float SystemMonitor::GetTemperature()
  * @brief 更新系统状态槽函数
  * 
  * 定期调用该函数获取系统状态并发送信号
+ * 
+ * @note 处理流程：
+ *       1. 调用GetCpuUsage()获取CPU使用率
+ *       2. 调用GetMemoryUsage()获取内存使用率
+ *       3. 调用GetTemperature()获取系统温度
+ *       4. 发出systemStatsUpdated()信号
+ * @note 每60秒输出一次详细的内存监控日志，包括实际使用量和总容量
+ * @see GetCpuUsage(), GetMemoryUsage(), GetTemperature(), systemStatsUpdated()
  */
 void SystemMonitor::updateSystemStats()
 {
