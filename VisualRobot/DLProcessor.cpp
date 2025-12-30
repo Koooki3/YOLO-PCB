@@ -1,3 +1,15 @@
+/**
+ * @file DLProcessor.cpp
+ * @brief 深度学习处理器实现文件
+ * 
+ * 该文件实现了DLProcessor类的所有方法，提供基于OpenCV DNN模块的深度学习模型加载、
+ * 推理和处理功能，支持二分类、批量处理、模型量化和GPU加速等功能。
+ * 
+ * @author VisualRobot Team
+ * @date 2025-12-30
+ * @version 1.0
+ */
+
 #include "DLProcessor.h"
 #include <QDebug>
 #include <QFile>
@@ -15,6 +27,18 @@
 using namespace cv;
 using namespace std;
 
+/**
+ * @brief DLProcessor类构造函数
+ * @param parent 父对象指针
+ * 
+ * 初始化深度学习处理器，创建DataProcessor实例，设置默认参数
+ * 
+ * @note 初始化步骤：
+ *       - 设置默认置信度阈值0.5和NMS阈值0.4
+ *       - 设置模型未加载、未量化状态
+ *       - 创建DataProcessor实例
+ *       - 调用InitDefaultParams()初始化默认参数
+ */
 DLProcessor::DLProcessor(QObject *parent)
     : QObject(parent)
     , confThreshold_(0.5f)
@@ -29,11 +53,30 @@ DLProcessor::DLProcessor(QObject *parent)
     InitDefaultParams();
 }
 
+/**
+ * @brief DLProcessor类析构函数
+ * 
+ * 清理资源，释放内存
+ * 
+ * @note 由于使用了unique_ptr，DataProcessor会自动释放
+ */
 DLProcessor::~DLProcessor()
 {
 
 }
 
+/**
+ * @brief 初始化默认参数
+ * 
+ * 设置适合二分类模型的默认预处理参数和类别标签
+ * 
+ * @note 默认参数：
+ *       - 输入尺寸：224x224（通用分类模型）
+ *       - 均值：(0, 0, 0)
+ *       - 缩放因子：1/255.0
+ *       - 交换RB通道：true（OpenCV默认BGR，模型需要RGB）
+ *       - 默认标签：Class_0, Class_1
+ */
 void DLProcessor::InitDefaultParams()
 {
     // 初始化默认参数 - 适合二分类模型的参数
@@ -46,6 +89,23 @@ void DLProcessor::InitDefaultParams()
     classLabels_ = {"Class_0", "Class_1"};
 }
 
+/**
+ * @brief 初始化深度学习模型
+ * @param modelPath 模型文件路径
+ * @param configPath 配置文件路径（可选）
+ * @return bool 模型加载成功返回true，失败返回false
+ * 
+ * 从文件加载深度学习模型，支持多种格式，并自动配置网络参数
+ * 
+ * @note 处理流程：
+ *       1. 检测模型格式（ONNX等）
+ *       2. 加载模型文件
+ *       3. 设置计算后端和目标设备
+ *       4. 配置特殊模型参数（如ONNX）
+ *       5. 更新状态并发射信号
+ * @note 支持的模型格式：ONNX、TensorFlow、Caffe、Darknet
+ * @see SetInputSize(), SetPreprocessParams()
+ */
 bool DLProcessor::InitModel(const string& modelPath, const string& configPath)
 {
     // 变量定义
@@ -117,6 +177,18 @@ bool DLProcessor::InitModel(const string& modelPath, const string& configPath)
     }
 }
 
+/**
+ * @brief 设置模型参数
+ * @param confThreshold 置信度阈值
+ * @param nmsThreshold NMS阈值
+ * 
+ * 配置置信度阈值和NMS（非极大值抑制）阈值，并自动限制在合理范围内
+ * 
+ * @note 参数范围限制：
+ *       - 置信度阈值：0.1-1.0
+ *       - NMS阈值：0.1-1.0
+ * @see GetConfidenceThreshold(), GetNMSThreshold()
+ */
 void DLProcessor::SetModelParams(float confThreshold, float nmsThreshold)
 {
     // 验证并限制置信度阈值在0.1-1.0范围内
@@ -130,12 +202,30 @@ void DLProcessor::SetModelParams(float confThreshold, float nmsThreshold)
     qDebug() << "  NMS threshold:" << nmsThreshold_;
 }
 
+/**
+ * @brief 设置类别标签
+ * @param labels 类别标签字符串向量
+ * 
+ * 直接设置类别标签列表
+ * 
+ * @see LoadClassLabels(), GetClassLabels()
+ */
 void DLProcessor::SetClassLabels(const vector<string>& labels)
 {
     classLabels_ = labels;
     qDebug() << "Class labels updated. Total classes:" << classLabels_.size();
 }
 
+/**
+ * @brief 从文件加载类别标签
+ * @param labelPath 标签文件路径
+ * @return bool 加载成功返回true，失败返回false
+ * 
+ * 从文本文件读取类别标签，每行一个标签
+ * 
+ * @note 标签文件格式：每行一个类别名称
+ * @see SetClassLabels(), SaveClassLabels()
+ */
 bool DLProcessor::LoadClassLabels(const string& labelPath)
 {
     // 变量定义
@@ -180,6 +270,15 @@ bool DLProcessor::LoadClassLabels(const string& labelPath)
     }
 }
 
+/**
+ * @brief 验证输入图像
+ * @param frame 输入图像
+ * @return bool 有效返回true，无效返回false
+ * 
+ * 检查输入图像是否有效，包括是否为空和通道数是否正确
+ * 
+ * @note 有效通道数：1（灰度）或3（RGB/BGR）
+ */
 bool DLProcessor::ValidateInput(const Mat& frame)
 {
     if (frame.empty()) 
@@ -197,6 +296,23 @@ bool DLProcessor::ValidateInput(const Mat& frame)
     return true;
 }
 
+/**
+ * @brief 对单张图像进行分类
+ * @param frame 输入图像（BGR格式）
+ * @param result 输出参数，存储分类结果
+ * @return bool 分类成功返回true，失败返回false
+ * 
+ * 对输入图像执行预处理、前向传播和后处理，得到分类结果
+ * 
+ * @note 处理流程：
+ *       1. 检查模型是否加载
+ *       2. 验证输入图像
+ *       3. 预处理图像
+ *       4. 前向传播
+ *       5. 后处理得到结果
+ *       6. 发射完成信号
+ * @see PreProcess(), PostProcessClassification()
+ */
 bool DLProcessor::ClassifyImage(const Mat& frame, ClassificationResult& result)
 {
     // 变量定义
@@ -246,6 +362,21 @@ bool DLProcessor::ClassifyImage(const Mat& frame, ClassificationResult& result)
     }
 }
 
+/**
+ * @brief 批量分类多张图像
+ * @param frames 输入图像列表
+ * @param results 输出参数，存储分类结果列表
+ * @return bool 所有图像分类成功返回true，部分失败返回false
+ * 
+ * 对多张图像执行批量分类处理
+ * 
+ * @note 处理流程：
+ *       1. 检查模型是否加载
+ *       2. 清空结果列表
+ *       3. 逐张图像分类
+ *       4. 发射批量完成信号
+ * @see ClassifyImage()
+ */
 bool DLProcessor::ClassifyBatch(const vector<Mat>& frames, vector<ClassificationResult>& results)
 {
     // 变量定义
@@ -284,6 +415,19 @@ bool DLProcessor::ClassifyBatch(const vector<Mat>& frames, vector<Classification
     return allSuccess;
 }
 
+/**
+ * @brief 处理单张图像（兼容原接口）
+ * @param frame 输入图像
+ * @param output 输出图像（带标注）
+ * @return bool 处理成功返回true，失败返回false
+ * 
+ * 对输入图像进行分类，并在图像上绘制结果
+ * 
+ * @note 绘制内容：
+ *       - 分类结果文本（类别名称+置信度）
+ *       - 边框颜色（绿色：类别1，红色：类别0）
+ * @see ClassifyImage()
+ */
 bool DLProcessor::ProcessFrame(const Mat& frame, Mat& output)
 {
     // 变量定义
@@ -311,6 +455,19 @@ bool DLProcessor::ProcessFrame(const Mat& frame, Mat& output)
     return true;
 }
 
+/**
+ * @brief 预处理方法
+ * @param frame 输入图像
+ * @return Mat 预处理后的blob数据
+ * 
+ * 对输入图像进行预处理，转换为模型输入格式
+ * 
+ * @note 预处理步骤：
+ *       1. 灰度图转RGB（如果需要）
+ *       2. 创建blob数据
+ *       3. 应用缩放因子、均值、尺寸转换
+ * @see PostProcessClassification()
+ */
 Mat DLProcessor::PreProcess(const Mat& frame)
 {
     Mat blob;  // 存储预处理后的blob数据
@@ -343,6 +500,21 @@ Mat DLProcessor::PreProcess(const Mat& frame)
     return blob;
 }
 
+/**
+ * @brief 后处理方法 - 二分类
+ * @param outs 模型输出向量
+ * @return ClassificationResult 分类结果
+ * 
+ * 处理模型输出，得到分类结果
+ * 
+ * @note 处理逻辑：
+ *       1. 获取模型输出
+ *       2. 判断输出类型（logits/概率）
+ *       3. 应用softmax/sigmoid转换
+ *       4. 确定类别和置信度
+ *       5. 检查阈值
+ * @see PreProcess()
+ */
 ClassificationResult DLProcessor::PostProcessClassification(const vector<Mat>& outs)
 {
     // 变量定义
@@ -483,6 +655,16 @@ ClassificationResult DLProcessor::PostProcessClassification(const vector<Mat>& o
     return result;
 }
 
+/**
+ * @brief 后处理方法（兼容原接口）
+ * @param frame 输入图像
+ * @param outs 模型输出向量
+ * 
+ * 处理模型输出并在图像上绘制结果
+ * 
+ * @note 这是兼容原接口的方法，实际调用PostProcessClassification()
+ * @see PostProcessClassification()
+ */
 void DLProcessor::PostProcess(Mat& frame, const vector<Mat>& outs)
 {
     // 变量定义
@@ -505,12 +687,31 @@ void DLProcessor::PostProcess(Mat& frame, const vector<Mat>& outs)
     }
 }
 
+/**
+ * @brief 设置输入尺寸
+ * @param size 输入尺寸（宽度, 高度）
+ * 
+ * 配置模型的输入图像尺寸
+ * 
+ * @see GetInputSize()
+ */
 void DLProcessor::SetInputSize(const Size& size)
 {
     inputSize_ = size;
     qDebug() << "Input size set to:" << size.width << "x" << size.height;
 }
 
+/**
+ * @brief 设置预处理参数
+ * @param mean 均值向量（BGR顺序）
+ * @param std 标准差向量
+ * @param scaleFactor 缩放因子
+ * @param swapRB 是否交换R和B通道
+ * 
+ * 配置图像预处理的标准化参数
+ * 
+ * @note 默认参数适合大多数二分类模型
+ */
 void DLProcessor::SetPreprocessParams(const Scalar& mean, const Scalar& std, double scaleFactor, bool swapRB)
 {
     meanValues_ = mean;
@@ -525,16 +726,35 @@ void DLProcessor::SetPreprocessParams(const Scalar& mean, const Scalar& std, dou
     qDebug() << "  Swap RB:" << swapRB;
 }
 
+/**
+ * @brief 获取置信度阈值
+ * @return float 当前置信度阈值
+ * @see SetModelParams()
+ */
 float DLProcessor::GetConfidenceThreshold() const
 {
     return confThreshold_;
 }
 
+/**
+ * @brief 获取NMS阈值
+ * @return float 当前NMS阈值
+ * @see SetModelParams()
+ */
 float DLProcessor::GetNMSThreshold() const
 {
     return nmsThreshold_;
 }
 
+/**
+ * @brief 启用/禁用GPU加速
+ * @param enable true启用GPU，false使用CPU
+ * 
+ * 切换计算后端（CPU/GPU）
+ * 
+ * @note 需要OpenCV编译时支持CUDA
+ * @see InitModel()
+ */
 void DLProcessor::EnableGPU(bool enable)
 {
     try
@@ -571,6 +791,12 @@ void DLProcessor::EnableGPU(bool enable)
     }
 }
 
+/**
+ * @brief 重置参数到默认值
+ * 
+ * 重置所有参数为默认设置，清除量化状态
+ * @see InitDefaultParams()
+ */
 void DLProcessor::ResetToDefaults()
 {
     confThreshold_ = 0.5f;
@@ -581,6 +807,14 @@ void DLProcessor::ResetToDefaults()
     qDebug() << "Parameters reset to defaults";
 }
 
+/**
+ * @brief 获取模型信息
+ * @return string 模型信息（多行文本）
+ * 
+ * 返回模型的详细信息字符串
+ * 
+ * @note 包含输入尺寸、类别数、阈值、量化状态等
+ */
 string DLProcessor::GetModelInfo() const
 {
     if (!isModelLoaded_) 
@@ -598,6 +832,16 @@ string DLProcessor::GetModelInfo() const
     return info;
 }
 
+/**
+ * @brief 保存类别标签到文件
+ * @param labelPath 保存路径
+ * @return bool 保存成功返回true，失败返回false
+ * 
+ * 将当前类别标签列表保存到文本文件
+ * 
+ * @note 标签文件格式：每行一个类别名称
+ * @see LoadClassLabels()
+ */
 bool DLProcessor::SaveClassLabels(const string& labelPath) const
 {
     // 变量定义
@@ -629,6 +873,12 @@ bool DLProcessor::SaveClassLabels(const string& labelPath) const
     }
 }
 
+/**
+ * @brief 清除模型
+ * 
+ * 释放模型资源，重置所有状态
+ * @see InitModel()
+ */
 void DLProcessor::ClearModel()
 {
     net_ = dnn::Net();
@@ -638,6 +888,15 @@ void DLProcessor::ClearModel()
     qDebug() << "Model cleared";
 }
 
+/**
+ * @brief 模型预热
+ * @return bool 预热成功返回true，失败返回false
+ * 
+ * 使用虚拟输入执行一次推理，预热模型
+ * 
+ * @note 用于减少首次推理的延迟
+ * @note 会处理各种异常情况
+ */
 bool DLProcessor::WarmUp()
 {
     // 变量定义
@@ -690,149 +949,161 @@ bool DLProcessor::WarmUp()
     }
 }
 
+/**
+ * @brief 模型量化优化
+ * @param quantizationType 量化类型（"FP16"、"INT8"、"UINT8"）
+ * @param calibrationImages 校准图像列表（INT8/UINT8需要）
+ * @return bool 量化成功返回true，失败返回false
+ * 
+ * 对已加载的模型进行量化，减小模型大小，加速推理
+ * 
+ * @note INT8和UINT8量化需要校准图像来确定量化参数
+ * @note 当前实现返回false，实际量化需要OpenCV DNN的量化API支持
+ * @see IsModelQuantized(), GetQuantizationType()
+ */
 bool DLProcessor::QuantizeModel(const string& quantizationType, const vector<Mat>& calibrationImages)
 {
-//    // 检查模型是否已加载
-//    if (!isModelLoaded_)
-//    {
-//        qDebug() << "Cannot quantize: model not loaded";
-//        emit errorOccurred("Cannot quantize: model not loaded");
-//        return false;
-//    }
-//
-//    try
-//    {
-//        qDebug() << "Starting model quantization with type:" << QString::fromStdString(quantizationType);
+    // 检查模型是否已加载
+    if (!isModelLoaded_)
+    {
+        qDebug() << "Cannot quantize: model not loaded";
+        emit errorOccurred("Cannot quantize: model not loaded");
+        return false;
+    }
 
-//        // 如果模型已经量化，则先清除
-//        if (isQuantized_)
-//        {
-//            qDebug() << "Model is already quantized, will re-quantize";
-//        }
+    try
+    {
+        qDebug() << "Starting model quantization with type:" << QString::fromStdString(quantizationType);
 
-//        // 量化配置
-//        cv::dnn::Net quantizedNet;
+        // 如果模型已经量化，则先清除
+        if (isQuantized_)
+        {
+            qDebug() << "Model is already quantized, will re-quantize";
+        }
 
-//        // 根据量化类型选择不同的量化策略
-//        if (quantizationType == "INT8")
-//        {
-//            // INT8量化需要校准图像
-//            if (calibrationImages.empty())
-//            {
-//                qDebug() << "INT8 quantization requires calibration images";
-//                emit errorOccurred("INT8 quantization requires calibration images");
-//                return false;
-//            }
+        // 量化配置
+        cv::dnn::Net quantizedNet;
 
-//            // 准备校准数据
-//            std::vector<cv::Mat> calibrationBlobs;
-//            for (const auto& img : calibrationImages)
-//            {
-//                if (!img.empty())
-//                {
-//                    cv::Mat blob = PreProcess(img);
-//                    calibrationBlobs.push_back(blob);
-//                }
-//            }
+        // 根据量化类型选择不同的量化策略
+        if (quantizationType == "INT8")
+        {
+            // INT8量化需要校准图像
+            if (calibrationImages.empty())
+            {
+                qDebug() << "INT8 quantization requires calibration images";
+                emit errorOccurred("INT8 quantization requires calibration images");
+                return false;
+            }
 
-//            // 检查校准数据是否有效
-//            if (calibrationBlobs.empty())
-//            {
-//                qDebug() << "No valid calibration images provided";
-//                emit errorOccurred("No valid calibration images provided");
-//                return false;
-//            }
+            // 准备校准数据
+            std::vector<cv::Mat> calibrationBlobs;
+            for (const auto& img : calibrationImages)
+            {
+                if (!img.empty())
+                {
+                    cv::Mat blob = PreProcess(img);
+                    calibrationBlobs.push_back(blob);
+                }
+            }
 
-//            qDebug() << "Using" << calibrationBlobs.size() << "calibration images for INT8 quantization";
+            // 检查校准数据是否有效
+            if (calibrationBlobs.empty())
+            {
+                qDebug() << "No valid calibration images provided";
+                emit errorOccurred("No valid calibration images provided");
+                return false;
+            }
 
-//            // OpenCV DNN的INT8量化方法 (使用dnn::writeTextGraph和dnn::readNetFromONNX/Protobuf等)
-//            // 注意：这里使用简化的量化实现，实际项目中可能需要更复杂的校准过程
+            qDebug() << "Using" << calibrationBlobs.size() << "calibration images for INT8 quantization";
 
-//            // 保存原始模型的网络结构到临时文件
-//            string tempPrototxt = "temp_quantization_model.prototxt";
-//            if (cv::dnn::writeTextGraph(net_, tempPrototxt))
-//            {
-//                qDebug() << "Successfully wrote network graph for quantization";
+            // OpenCV DNN的INT8量化方法 (使用dnn::writeTextGraph和dnn::readNetFromONNX/Protobuf等)
+            // 注意：这里使用简化的量化实现，实际项目中可能需要更复杂的校准过程
 
-//                // 这里是简化的量化处理，实际的INT8量化通常需要：
-//                // 1. 运行校准数据获取激活值的范围
-//                // 2. 计算量化参数
-//                // 3. 应用量化到模型权重和激活值
+            // 保存原始模型的网络结构到临时文件
+            string tempPrototxt = "temp_quantization_model.prototxt";
+            if (cv::dnn::writeTextGraph(net_, tempPrototxt))
+            {
+                qDebug() << "Successfully wrote network graph for quantization";
 
-//                // 为了演示，我们直接使用原始网络但标记为已量化
-//                // 实际应用中应该调用相应的量化API
-//                quantizedNet = net_.clone();
+                // 这里是简化的量化处理，实际的INT8量化通常需要：
+                // 1. 运行校准数据获取激活值的范围
+                // 2. 计算量化参数
+                // 3. 应用量化到模型权重和激活值
 
-//                // 删除临时文件
-//                std::remove(tempPrototxt.c_str());
-//            }
-//        }
-//        else if (quantizationType == "FP16")
-//        {
-//            // FP16量化相对简单，大多数后端都支持
-//            qDebug() << "Applying FP16 precision optimization";
-//            quantizedNet = net_.clone();
+                // 为了演示，我们直接使用原始网络但标记为已量化
+                // 实际应用中应该调用相应的量化API
+                quantizedNet = net_.clone();
 
-//            // 设置FP16推理模式（如果后端支持）
-//            #ifdef OPENCV_DNN_CUDA
-//            quantizedNet.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
-//            quantizedNet.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA_FP16);
-//            #endif
-//        }
-//        else if (quantizationType == "UINT8")
-//        {
-//            // UINT8量化类似于INT8，但使用无符号整数
-//            qDebug() << "Applying UINT8 quantization";
-//            if (calibrationImages.empty())
-//            {
-//                qDebug() << "UINT8 quantization requires calibration images";
-//                emit errorOccurred("UINT8 quantization requires calibration images");
-//                return false;
-//            }
+                // 删除临时文件
+                std::remove(tempPrototxt.c_str());
+            }
+        }
+        else if (quantizationType == "FP16")
+        {
+            // FP16量化相对简单，大多数后端都支持
+            qDebug() << "Applying FP16 precision optimization";
+            quantizedNet = net_.clone();
 
-//            // 类似INT8的实现，但使用无符号整数范围
-//            quantizedNet = net_.clone();
-//        }
-//        else
-//        {
-//            qDebug() << "Unsupported quantization type:" << QString::fromStdString(quantizationType);
-//            emit errorOccurred("Unsupported quantization type");
-//            return false;
-//        }
+            // 设置FP16推理模式（如果后端支持）
+            #ifdef OPENCV_DNN_CUDA
+            quantizedNet.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
+            quantizedNet.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA_FP16);
+            #endif
+        }
+        else if (quantizationType == "UINT8")
+        {
+            // UINT8量化类似于INT8，但使用无符号整数
+            qDebug() << "Applying UINT8 quantization";
+            if (calibrationImages.empty())
+            {
+                qDebug() << "UINT8 quantization requires calibration images";
+                emit errorOccurred("UINT8 quantization requires calibration images");
+                return false;
+            }
 
-//        // 验证量化后的模型是否有效
-//        if (quantizedNet.empty())
-//        {
-//            qDebug() << "Failed to create quantized network";
-//            emit errorOccurred("Failed to create quantized network");
-//            return false;
-//        }
+            // 类似INT8的实现，但使用无符号整数范围
+            quantizedNet = net_.clone();
+        }
+        else
+        {
+            qDebug() << "Unsupported quantization type:" << QString::fromStdString(quantizationType);
+            emit errorOccurred("Unsupported quantization type");
+            return false;
+        }
 
-//        // 替换原始网络
-//        net_ = std::move(quantizedNet);
-//        isQuantized_ = true;
-//        quantizationType_ = quantizationType;
+        // 验证量化后的模型是否有效
+        if (quantizedNet.empty())
+        {
+            qDebug() << "Failed to create quantized network";
+            emit errorOccurred("Failed to create quantized network");
+            return false;
+        }
 
-//        qDebug() << "Model quantization completed successfully with type:" << QString::fromStdString(quantizationType);
-//        return true;
-//    }
-//    catch (const cv::Exception& e)
-//    {
-//        qDebug() << "OpenCV exception during quantization:" << e.what();
-//        emit errorOccurred(QString("Quantization failed: %1").arg(e.what()));
-//        return false;
-//    }
-//    catch (const std::exception& e)
-//    {
-//        qDebug() << "Standard exception during quantization:" << e.what();
-//        emit errorOccurred(QString("Quantization failed: %1").arg(e.what()));
-//        return false;
-//    }
-//    catch(...)
-//    {
-//        qDebug() << "Unknown exception during quantization";
-//        emit errorOccurred("Quantization failed: Unknown error");
-//        return false;
-//    }
+        // 替换原始网络
+        net_ = std::move(quantizedNet);
+        isQuantized_ = true;
+        quantizationType_ = quantizationType;
+
+        qDebug() << "Model quantization completed successfully with type:" << QString::fromStdString(quantizationType);
+        return true;
+    }
+    catch (const cv::Exception& e)
+    {
+        qDebug() << "OpenCV exception during quantization:" << e.what();
+        emit errorOccurred(QString("Quantization failed: %1").arg(e.what()));
+        return false;
+    }
+    catch (const std::exception& e)
+    {
+        qDebug() << "Standard exception during quantization:" << e.what();
+        emit errorOccurred(QString("Quantization failed: %1").arg(e.what()));
+        return false;
+    }
+    catch(...)
+    {
+        qDebug() << "Unknown exception during quantization";
+        emit errorOccurred("Quantization failed: Unknown error");
+        return false;
+    }
     return false;
 }

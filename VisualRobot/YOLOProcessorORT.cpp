@@ -1,3 +1,15 @@
+/**
+ * @file YOLOProcessorORT.cpp
+ * @brief YOLO处理器模块实现文件（基于ONNX Runtime）
+ * 
+ * 该文件实现了YOLOProcessorORT类的所有方法，提供基于ONNX Runtime的YOLO模型推理功能，
+ * 包括模型加载、目标检测、结果绘制、延时统计和调试输出等功能。
+ * 
+ * @author VisualRobot Team
+ * @date 2025-12-30
+ * @version 1.0
+ */
+
 #include "YOLOProcessorORT.h"
 #include <QDebug>
 #include <vector>
@@ -16,9 +28,19 @@ using namespace std;
 
 /**
  * @brief YOLOProcessorORT构造函数
- * @param parent 父对象指针
  * 
  * 初始化YOLO处理器的各项参数，包括ONNX Runtime环境、会话选项、默认输入尺寸等
+ * 从配置管理器获取优化参数，包括线程数、内存管理、图优化级别等
+ * 
+ * @param parent 父对象指针，默认为nullptr
+ * @note 初始化内容：
+ *       - ONNX Runtime环境（日志级别：警告）
+ *       - 默认输入尺寸：640x640
+ *       - 默认置信度阈值：50.0%
+ *       - 默认NMS阈值：0.45
+ *       - 图像缩放因子：1/255
+ *       - 通道交换：BGR→RGB
+ * @see ConfigManager
  */
 YOLOProcessorORT::YOLOProcessorORT(QObject* parent)
     : QObject(parent)
@@ -105,6 +127,8 @@ YOLOProcessorORT::YOLOProcessorORT(QObject* parent)
  * @brief YOLOProcessorORT析构函数
  * 
  * 释放ONNX Runtime会话资源
+ * 
+ * @note 会话资源会自动释放
  */
 YOLOProcessorORT::~YOLOProcessorORT()
 {
