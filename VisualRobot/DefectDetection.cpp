@@ -1,3 +1,14 @@
+/**
+ * @file DefectDetection.cpp
+ * @brief 缺陷检测模块实现文件
+ * 
+ * 该文件实现了DefectDetection类的所有方法，提供完整的缺陷检测流水线功能
+ * 
+ * @author VisualRobot Team
+ * @date 2025-12-29
+ * @version 1.0
+ */
+
 #include "DefectDetection.h"
 #include <numeric>
 #include <fstream>
@@ -11,7 +22,14 @@ using namespace cv;
 using namespace cv::ml;
 using namespace std;
 
-// 计算特征矩阵的列均值和标准差（double 精度），并保存到成员变量
+/**
+ * @brief 计算特征矩阵的列均值和标准差（double精度）
+ * 
+ * @param samples 输入样本矩阵（CV_32F或CV_64F）
+ * @param meanOut 输出均值向量（1xN CV_64F）
+ * @param stdOut 输出标准差向量（1xN CV_64F）
+ * @note 防止除零错误，标准差小于1e-12时设为1.0
+ */
 static void computeMeanStd(const Mat& samples, Mat& meanOut, Mat& stdOut)
 {
     CV_Assert(samples.type() == CV_32F || samples.type() == CV_64F);
@@ -36,7 +54,15 @@ static void computeMeanStd(const Mat& samples, Mat& meanOut, Mat& stdOut)
     }
 }
 
-// 对样本做列向量标准化（(x-mean)/std），返回 CV_32F
+/**
+ * @brief 对样本做列向量标准化（(x-mean)/std）
+ * 
+ * @param samples 输入样本矩阵
+ * @param mean 均值向量
+ * @param stdv 标准差向量
+ * @return Mat 标准化后的矩阵（CV_32F）
+ * @note 转换为CV_64F进行稳定计算，然后返回CV_32F
+ */
 static Mat applyStandardize(const Mat& samples, const Mat& mean, const Mat& stdv)
 {
     // Convert input to CV_64F for stable arithmetic, then apply (x-mean)/std per column
