@@ -26,6 +26,10 @@ using namespace std;
 
 #include "configmanager.h"
 
+#ifdef USE_RKNPU_EP
+#include <onnxruntime_rknpu_provider_factory.h>
+#endif
+
 /**
  * @brief YOLOProcessorORT构造函数
  * 
@@ -156,7 +160,14 @@ bool YOLOProcessorORT::InitModel(const string& modelPath, bool useCUDA)
         } else {
             sessionOptions_.AddConfigEntry("session.enable_opencl","0");
         }
-        
+
+#ifdef USE_RKNPU_EP
+        // RK3588 NPU：当 accelerators.npu 为 true 且 ONNX Runtime 带 RKNPU EP 时，优先使用 NPU 推理
+        if (config->isAcceleratorEnabled("npu")) {
+            Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_RKNPU(sessionOptions_));
+        }
+#endif
+
         session_ = std::make_unique<Ort::Session>(env_, modelPath.c_str(), sessionOptions_);
         return true;
     } 

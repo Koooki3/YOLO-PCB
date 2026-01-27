@@ -70,6 +70,8 @@ struct YOLODebugInfo {
  * 支持不同版本的YOLO模型，通过后处理适配不同的输出格式
  * 
  * @note 支持CUDA加速和OpenCL加速
+ * @note 支持 RK3588 NPU：当 hardware_config.accelerators.npu 为 true 且以 CONFIG+=rknpu
+ *       构建、并使用带 RKNPU EP 的 ONNX Runtime 时，优先使用 NPU 推理
  * @note 支持自动从配置管理器获取优化参数
  * @note 支持延时统计和调试输出
  * @see DetectionResult, YOLOTimingStats, YOLODebugInfo
@@ -116,6 +118,7 @@ public:
      * @note 支持的加速方式：
      *       - CUDA：通过useCUDA参数启用
      *       - OpenCL：从配置管理器自动检测
+     *       - NPU（RK3588）：当 accelerators.npu 为 true 且以 USE_RKNPU_EP 构建时，通过 RKNPU EP 推理
      * @note 异常处理：捕获Ort::Exception并发射errorOccurred信号
      * @see ConfigManager::isAcceleratorEnabled()
      */

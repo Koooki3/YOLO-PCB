@@ -23,6 +23,13 @@ DEFINES += QT_DEPRECATED_WARNINGS
 # 可通过qmake命令行参数指定: qmake CONFIG+=orangepi5_rk3588s
 # 或: qmake CONFIG+=raspberrypi4
 # 或: qmake CONFIG+=x86_64_pc
+# RK3588 NPU 推理：qmake CONFIG+=rknpu 启用 USE_RKNPU_EP，需 ONNX Runtime 带 RKNPU EP
+
+# 可选：RK3588 NPU 推理（CONFIG+=rknpu 时定义 USE_RKNPU_EP，并需 accelerators.npu=true）
+contains(CONFIG, rknpu) {
+    DEFINES += USE_RKNPU_EP
+    message("RK3588 NPU (RKNPU EP) support enabled")
+}
 
 # 默认配置
 CONFIG += orangepi5_rk3588s
@@ -67,6 +74,7 @@ INCLUDEPATH += /opt/MVS/include
 INCLUDEPATH += /usr/include/eigen3/Eigen
 
 # OrangePi 5 RK3588S 配置
+# 启用 NPU：qmake CONFIG+=rknpu，并在 hardware_config.json 的 accelerators 中设 "npu": true
 orangepi5_rk3588s {
     message("Configuring for OrangePi 5 RK3588S")
     
