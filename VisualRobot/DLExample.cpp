@@ -1,3 +1,15 @@
+/**
+ * @file DLExample.cpp
+ * @brief 深度学习二分类演示应用实现文件
+ * 
+ * 该文件实现了DLExample类的所有方法，提供完整的深度学习二分类GUI应用功能，
+ * 包括模型加载、参数配置、图像分类、批量处理和模型量化等功能。
+ * 
+ * @author VisualRobot Team
+ * @date 2025-12-30
+ * @version 1.0
+ */
+
 #include "DLExample.h"
 #include <QDebug>
 #include <QFileDialog>
@@ -19,6 +31,13 @@ using namespace std;
  * @param parent 父窗口指针
  * 
  * 初始化深度学习示例应用，创建DLProcessor实例，设置UI和连接信号槽
+ * 
+ * @note 初始化步骤：
+ *       - 创建DLProcessor实例
+ *       - 设置模型加载状态为false
+ *       - 初始化量化相关组件为nullptr
+ *       - 调用SetupUI()创建界面
+ *       - 调用ConnectSignals()连接信号槽
  */
 DLExample::DLExample(QWidget *parent)
     : QWidget(parent)
@@ -40,6 +59,8 @@ DLExample::DLExample(QWidget *parent)
  * @brief DLExample类析构函数
  * 
  * 清理资源，释放内存
+ * 
+ * @note 由于使用了Qt的对象树机制，大部分组件会自动释放
  */
 DLExample::~DLExample()
 {
@@ -50,6 +71,18 @@ DLExample::~DLExample()
  * @brief 设置用户界面
  * 
  * 创建并布局所有UI组件，包括模型加载、参数设置、图像显示和结果展示区域
+ * 
+ * @note UI布局结构：
+ *       - 主布局：垂直布局
+ *       - 模型加载区域：水平布局（路径输入、浏览、加载按钮）
+ *       - 标签文件区域：水平布局（路径输入、浏览按钮）
+ *       - 参数设置区域：水平布局（任务类型、置信度、输入尺寸、设置按钮）
+ *       - 量化设置区域：水平布局（量化类型、校准图像、量化按钮）
+ *       - 图像处理区域：水平布局（选择图像、分类、批量处理按钮）
+ *       - 进度条：显示批量处理进度
+ *       - 结果显示区域：显示分类结果
+ *       - 图像显示区域：显示选中的图像
+ *       - 状态显示区域：显示当前操作状态
  */
 void DLExample::SetupUI()
 {
@@ -197,6 +230,11 @@ void DLExample::SetupUI()
  * @brief 连接信号和槽
  * 
  * 连接DLProcessor的信号到DLExample的槽函数，处理分类结果和错误信息
+ * 
+ * @note 连接的信号：
+ *       - classificationComplete -> OnClassificationComplete
+ *       - batchProcessingComplete -> OnBatchProcessingComplete
+ *       - errorOccurred -> OnDLError
  */
 void DLExample::ConnectSignals()
 {
@@ -210,6 +248,13 @@ void DLExample::ConnectSignals()
  * @brief 浏览并选择模型文件
  * 
  * 打开文件对话框，让用户选择深度学习模型文件（支持ONNX、PB、Caffe等格式）
+ * 
+ * @note 支持的模型格式：
+ *       - ONNX (.onnx)
+ *       - TensorFlow (.pb)
+ *       - Caffe (.caffemodel)
+ *       - Darknet (.weights)
+ * @see LoadModel()
  */
 void DLExample::BrowseModel()
 {
@@ -230,6 +275,9 @@ void DLExample::BrowseModel()
  * @brief 浏览并选择标签文件
  * 
  * 打开文件对话框，让用户选择类别标签文件（文本文件，每行一个标签）
+ * 
+ * @note 标签文件格式：每行一个类别名称
+ * @see LoadLabels()
  */
 void DLExample::BrowseLabels()
 {
@@ -252,6 +300,13 @@ void DLExample::BrowseLabels()
  * @brief 加载标签文件
  * 
  * 从文件中读取类别标签，并更新DLProcessor的标签列表
+ * 
+ * @note 处理流程：
+ *       1. 获取标签文件路径
+ *       2. 检查文件是否存在
+ *       3. 调用DLProcessor加载标签
+ *       4. 更新状态显示
+ * @see DLProcessor::LoadClassLabels()
  */
 void DLExample::LoadLabels()
 {
@@ -293,6 +348,14 @@ void DLExample::LoadLabels()
  * @brief 加载深度学习模型
  * 
  * 从文件中加载深度学习模型，并初始化DLProcessor
+ * 
+ * @note 处理流程：
+ *       1. 获取模型文件路径
+ *       2. 根据模型格式自动查找配置文件
+ *       3. 调用DLProcessor初始化模型
+ *       4. 加载标签文件
+ *       5. 更新UI状态
+ * @see DLProcessor::InitModel()
  */
 void DLExample::LoadModel()
 {
@@ -375,6 +438,12 @@ void DLExample::LoadModel()
  * @brief 设置模型参数
  * 
  * 从UI控件中获取参数，并设置到DLProcessor
+ * 
+ * @note 参数验证：
+ *       - 置信度阈值：0.0-1.0
+ *       - 输入尺寸：32-1024
+ * @see DLProcessor::SetModelParams()
+ * @see DLProcessor::SetInputSize()
  */
 void DLExample::SetParameters()
 {
@@ -419,6 +488,9 @@ void DLExample::SetParameters()
  * @brief 选择要分类的图像
  * 
  * 打开文件对话框，让用户选择单张图像文件
+ * 
+ * @note 支持的图像格式：JPG、JPEG、PNG、BMP、TIFF
+ * @see ClassifyImage()
  */
 void DLExample::SelectImage()
 {
@@ -454,6 +526,14 @@ void DLExample::SelectImage()
  * @brief 对单张图像进行分类
  * 
  * 加载当前选择的图像，调用DLProcessor进行分类，并显示结果
+ * 
+ * @note 处理流程：
+ *       1. 检查模型是否加载
+ *       2. 检查是否选择图像
+ *       3. 加载图像
+ *       4. 调用DLProcessor分类
+ *       5. 结果通过信号槽异步处理
+ * @see OnClassificationComplete()
  */
 void DLExample::ClassifyImage()
 {
@@ -504,6 +584,15 @@ void DLExample::ClassifyImage()
  * @brief 批量分类多张图像
  * 
  * 选择多张图像，调用DLProcessor进行批量分类，并显示结果
+ * 
+ * @note 处理流程：
+ *       1. 检查模型是否加载
+ *       2. 选择多个图像文件
+ *       3. 加载所有图像
+ *       4. 显示进度条
+ *       5. 调用DLProcessor批量分类
+ *       6. 结果通过信号槽异步处理
+ * @see OnBatchProcessingComplete()
  */
 void DLExample::BatchClassify()
 {
@@ -567,6 +656,12 @@ void DLExample::BatchClassify()
  * @param result 分类结果
  * 
  * 显示单张图像的分类结果，包括类别名称、ID、置信度和有效性
+ * 
+ * @note 结果显示格式：
+ *       类别: [类别名称] (ID: [类别ID])
+ *       置信度: [置信度值]
+ *       状态: [有效/无效]
+ * @see DLProcessor::classificationComplete
  */
 void DLExample::OnClassificationComplete(const ClassificationResult& result)
 {
@@ -604,6 +699,10 @@ void DLExample::OnClassificationComplete(const ClassificationResult& result)
  * @param results 批量分类结果列表
  * 
  * 显示批量分类的结果，包括每张图像的文件名、类别和置信度
+ * 
+ * @note 结果显示格式：
+ *       [文件名]: [类别名称] ([置信度])
+ * @see DLProcessor::batchProcessingComplete
  */
 void DLExample::OnBatchProcessingComplete(const vector<ClassificationResult>& results)
 {
@@ -640,6 +739,9 @@ void DLExample::OnBatchProcessingComplete(const vector<ClassificationResult>& re
  * @param error 错误信息
  * 
  * 显示错误消息框，并更新状态标签
+ * 
+ * @note 会显示错误消息框，并将状态标签设置为红色
+ * @see DLProcessor::errorOccurred
  */
 void DLExample::OnDLError(const QString& error)
 {
@@ -658,6 +760,9 @@ void DLExample::OnDLError(const QString& error)
  * @brief 选择校准图像用于量化
  * 
  * 打开文件对话框，让用户选择用于模型量化的校准图像
+ * 
+ * @note INT8和UINT8量化需要校准图像来确定量化参数
+ * @see QuantizeModel()
  */
 void DLExample::SelectCalibrationImages()
 {
@@ -681,6 +786,12 @@ void DLExample::SelectCalibrationImages()
  * @brief 执行模型量化
  * 
  * 对已加载的模型进行量化，减小模型大小，加速推理
+ * 
+ * @note 量化类型：
+ *       - FP16：半精度浮点，减小模型大小约50%
+ *       - INT8：8位整数量化，减小模型大小约75%，需要校准图像
+ *       - UINT8：8位无符号整数量化，需要校准图像
+ * @see DLProcessor::QuantizeModel()
  */
 void DLExample::QuantizeModel()
 {
@@ -761,6 +872,8 @@ void DLExample::QuantizeModel()
  * @param index 选择的任务类型索引
  * 
  * 当任务类型改变时，更新UI控件文本
+ * 
+ * @note 当前仅支持图像分类任务，未来可扩展其他任务类型
  */
 void DLExample::OnTaskTypeChanged(int index)
 {
@@ -773,6 +886,9 @@ void DLExample::OnTaskTypeChanged(int index)
  * @brief 图像分类处理方法
  * 
  * 加载当前选择的图像，调用DLProcessor进行分类，并显示结果
+ * 
+ * @note 这是ClassifyImage()的别名，用于处理按钮点击事件
+ * @see ClassifyImage()
  */
 void DLExample::ProcessImage()
 {
@@ -823,6 +939,9 @@ void DLExample::ProcessImage()
  * @brief 批量分类处理方法
  * 
  * 选择多张图像，调用DLProcessor进行批量分类，并显示结果
+ * 
+ * @note 这是BatchClassify()的别名，用于处理按钮点击事件
+ * @see BatchClassify()
  */
 void DLExample::BatchProcess()
 {
@@ -880,5 +999,3 @@ void DLExample::BatchProcess()
     // 执行批量分类，结果会通过信号槽处理
     dlProcessor_->ClassifyBatch(images, results);
 }
-
-

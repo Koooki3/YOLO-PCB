@@ -1,3 +1,15 @@
+/**
+ * @file FeatureAlignment.cpp
+ * @brief 特征对齐模块实现文件
+ * 
+ * 该文件实现了FeatureAlignment类的所有方法，提供基于特征匹配的图像对齐功能，
+ * 包括特征检测、匹配、几何验证、变换矩阵计算和图像变换等完整流程。
+ * 
+ * @author VisualRobot Team
+ * @date 2025-12-30
+ * @version 1.0
+ */
+
 #include "FeatureAlignment.h"
 #include <opencv2/calib3d.hpp>
 #include <opencv2/imgproc.hpp>
@@ -7,6 +19,14 @@
  * @brief 构造函数
  * 
  * 初始化各类特征检测器和匹配器，默认使用SIFT特征提取器
+ * 
+ * @note 初始化步骤：
+ *       - 创建SIFT特征检测器
+ *       - 创建ORB特征检测器（参数：500特征点，1.2缩放因子，8层金字塔）
+ *       - 创建AKAZE特征检测器
+ *       - 设置默认特征类型为SIFT
+ *       - 调用UpdateFeatureDetector()初始化检测器和匹配器
+ * @see UpdateFeatureDetector()
  */
 FeatureAlignment::FeatureAlignment()
 {
@@ -39,6 +59,9 @@ FeatureAlignment::FeatureAlignment()
  * @brief 设置特征提取器类型
  * 
  * @param type 特征提取器类型（SIFT、ORB或AKAZE）
+ * 
+ * @note 如果类型发生变化，会自动更新检测器和匹配器
+ * @see GetFeatureType(), UpdateFeatureDetector()
  */
 void FeatureAlignment::SetFeatureType(FeatureType type)
 {
@@ -53,6 +76,7 @@ void FeatureAlignment::SetFeatureType(FeatureType type)
  * @brief 获取当前特征提取器类型
  * 
  * @return 当前使用的特征提取器类型
+ * @see SetFeatureType()
  */
 FeatureType FeatureAlignment::GetFeatureType() const
 {
@@ -63,7 +87,11 @@ FeatureType FeatureAlignment::GetFeatureType() const
  * @brief 更新特征检测器和匹配器
  * 
  * 根据当前设置的特征类型，更新内部使用的特征检测器和匹配器
- * SIFT使用FLANN匹配器，ORB和AKAZE使用汉明距离匹配器
+ * 
+ * @note 匹配器选择规则：
+ *       - SIFT：FLANN匹配器（适用于浮点型描述符）
+ *       - ORB/AKAZE：汉明距离匹配器（适用于二进制描述符）
+ * @see SetFeatureType()
  */
 void FeatureAlignment::UpdateFeatureDetector()
 {
@@ -97,6 +125,8 @@ void FeatureAlignment::UpdateFeatureDetector()
  * @brief 析构函数
  * 
  * 清理资源
+ * 
+ * @note 由于使用OpenCV智能指针，资源会自动释放
  */
 FeatureAlignment::~FeatureAlignment()
 {
@@ -106,10 +136,16 @@ FeatureAlignment::~FeatureAlignment()
 /**
  * @brief 使用特征匹配对齐两幅图像
  * 
- * @param srcImage 源图像
- * @param dstImage 目标图像
+ * @param srcImage 源图像（支持彩色或灰度）
+ * @param dstImage 目标图像（支持彩色或灰度）
  * @param params 对齐参数
- * @return 对齐结果，包含变换矩阵和匹配信息
+ * @return AlignmentResult 对齐结果，包含变换矩阵和匹配信息
+ * 
+ * @note 处理流程：
+ *       1. 转换为灰度图像
+ *       2. 调用AlignImagesGray()进行核心对齐处理
+ *       3. 记录处理时间
+ * @see AlignImagesGray()
  */
 AlignmentResult FeatureAlignment::AlignImages(
     const cv::Mat& srcImage,
@@ -153,7 +189,14 @@ AlignmentResult FeatureAlignment::AlignImages(
  * @param srcGray 源灰度图像
  * @param dstGray 目标灰度图像
  * @param params 对齐参数
- * @return 对齐结果，包含变换矩阵和匹配信息
+ * @return AlignmentResult 对齐结果，包含变换矩阵和匹配信息
+ * 
+ * @note 核心对齐流程：
+ *       1. 特征检测和描述符提取
+ *       2. 特征匹配
+ *       3. 几何验证和变换矩阵计算
+ *       4. 提取内点和计算重投影误差
+ * @see ExtractFeatures(), MatchFeatures(), GeometricVerification()
  */
 AlignmentResult FeatureAlignment::AlignImagesGray(
     const cv::Mat& srcGray, 
@@ -244,12 +287,13 @@ AlignmentResult FeatureAlignment::AlignImagesGray(
 /**
  * @brief 快速对齐：当匹配到足够内点时立即停止
  * 
- * 与普通对齐相比，快速对齐在找到足够内点后立即返回结果，不进行额外计算
- * 
  * @param srcImage 源图像
  * @param dstImage 目标图像
  * @param params 对齐参数
- * @return 对齐结果，包含变换矩阵和匹配信息
+ * @return AlignmentResult 对齐结果，包含变换矩阵和匹配信息
+ * 
+ * @note 与普通对齐相比，找到足够内点后立即返回，不进行额外计算
+ * @see AlignImages()
  */
 AlignmentResult FeatureAlignment::FastAlignImages(
     const cv::Mat& srcImage, 
@@ -390,7 +434,10 @@ AlignmentResult FeatureAlignment::FastAlignImages(
  * @param srcImage 源图像
  * @param transformMatrix 变换矩阵（单应性矩阵）
  * @param dstSize 目标图像尺寸
- * @return 变换后的图像
+ * @return cv::Mat 变换后的图像
+ * 
+ * @note 使用透视变换，边界填充为白色
+ * @see AlignImages()
  */
 cv::Mat FeatureAlignment::WarpImage(
     const cv::Mat& srcImage, 
@@ -431,7 +478,10 @@ cv::Mat FeatureAlignment::WarpImage(
  * @brief 获取对齐状态信息
  * 
  * @param result 对齐结果
- * @return 格式化的对齐状态字符串
+ * @return QString 格式化的对齐状态字符串
+ * 
+ * @note 返回格式："对齐成功 - 内点数量: X, 重投影误差: Y" 或 "对齐失败"
+ * @see AlignmentResult
  */
 QString FeatureAlignment::GetAlignmentInfo(const AlignmentResult& result) const
 {
@@ -447,10 +497,13 @@ QString FeatureAlignment::GetAlignmentInfo(const AlignmentResult& result) const
 /**
  * @brief 特征检测和描述符提取
  * 
- * @param image 输入图像
+ * @param image 输入图像（灰度）
  * @param keypoints 输出的特征点
  * @param descriptors 输出的特征描述符
- * @return 是否成功提取特征
+ * @return bool 是否成功提取特征
+ * 
+ * @note 使用当前设置的特征检测器
+ * @see UpdateFeatureDetector()
  */
 bool FeatureAlignment::ExtractFeatures(
     const cv::Mat& image,
@@ -484,7 +537,10 @@ bool FeatureAlignment::ExtractFeatures(
  * @param descriptors1 第一幅图像的特征描述符
  * @param descriptors2 第二幅图像的特征描述符
  * @param matches 输出的匹配结果
- * @return 是否成功匹配特征
+ * @return bool 是否成功匹配特征
+ * 
+ * @note 使用KNN匹配和比率测试筛选优质匹配
+ * @see GeometricVerification()
  */
 bool FeatureAlignment::MatchFeatures(
     const cv::Mat& descriptors1,
@@ -535,7 +591,10 @@ bool FeatureAlignment::MatchFeatures(
  * @param transformMatrix 输出的变换矩阵
  * @param inlierMatches 输出的内点匹配结果
  * @param params 对齐参数
- * @return 是否成功计算变换矩阵
+ * @return bool 是否成功计算变换矩阵
+ * 
+ * @note 使用RANSAC算法计算单应性矩阵
+ * @see ComputeReprojectionError()
  */
 bool FeatureAlignment::GeometricVerification(
     const std::vector<cv::KeyPoint>& keypoints1,
@@ -601,7 +660,10 @@ bool FeatureAlignment::GeometricVerification(
  * @param points1 第一组特征点（源图像）
  * @param points2 第二组特征点（目标图像）
  * @param transformMatrix 变换矩阵
- * @return 平均重投影误差
+ * @return double 平均重投影误差
+ * 
+ * @note 重投影误差越小，对齐精度越高
+ * @see GeometricVerification()
  */
 double FeatureAlignment::ComputeReprojectionError(
     const std::vector<cv::Point2f>& points1,

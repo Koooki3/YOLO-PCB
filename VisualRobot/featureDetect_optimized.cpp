@@ -1,3 +1,15 @@
+/**
+ * @file featureDetect_optimized.cpp
+ * @brief 优化的特征检测模块实现文件
+ * 
+ * 该文件实现了FeatureDetectorOptimized类的所有方法，提供并行优化的特征检测、
+ * 匹配和几何验证功能，支持多线程处理，显著提高了特征检测的效率。
+ * 
+ * @author VisualRobot Team
+ * @date 2025-12-30
+ * @version 1.0
+ */
+
 #include "featureDetect_optimized.h"
 #include "DataProcessor.h"
 #include "DLProcessor.h"
@@ -15,6 +27,11 @@ static std::condition_variable g_threadPoolCV;             // 线程池条件变
  * @brief 构造函数
  * 
  * 初始化优化版特征检测器，默认创建4线程的线程池
+ * 
+ * @note 初始化步骤：
+ *       - 调用InitializeThreadPool()创建线程池
+ *       - 默认使用4个线程
+ * @see InitializeThreadPool()
  */
 FeatureDetectorOptimized::FeatureDetectorOptimized()
 {
@@ -26,6 +43,9 @@ FeatureDetectorOptimized::FeatureDetectorOptimized()
  * @brief 析构函数
  * 
  * 关闭线程池，释放资源
+ * 
+ * @note 调用ShutdownThreadPool()清理线程池
+ * @see ShutdownThreadPool()
  */
 FeatureDetectorOptimized::~FeatureDetectorOptimized()
 {
@@ -35,7 +55,13 @@ FeatureDetectorOptimized::~FeatureDetectorOptimized()
 /**
  * @brief 初始化线程池
  * 
+ * 创建并启动指定数量的工作线程，用于并行处理任务
+ * 
  * @param numThreads 线程池大小
+ * 
+ * @note 线程池使用全局静态变量管理，支持多实例共享
+ * @note 线程会等待任务分配，通过条件变量进行同步
+ * @see ShutdownThreadPool()
  */
 void FeatureDetectorOptimized::InitializeThreadPool(int numThreads)
 {
@@ -72,6 +98,13 @@ void FeatureDetectorOptimized::InitializeThreadPool(int numThreads)
  * @brief 关闭线程池
  * 
  * 停止所有线程并释放资源
+ * 
+ * @note 关闭流程：
+ *       1. 设置运行标志为false
+ *       2. 通知所有等待的线程
+ *       3. 等待所有线程结束
+ *       4. 清理线程容器
+ * @see InitializeThreadPool()
  */
 void FeatureDetectorOptimized::ShutdownThreadPool()
 {
@@ -97,15 +130,24 @@ void FeatureDetectorOptimized::ShutdownThreadPool()
 }
 
 /**
- * @brief 并行特征匹配和筛选
+ * @brief 特征匹配和几何验证函数 - 并行优化版本
+ * 
+ * 对特征匹配进行多阶段并行筛选，包括响应值筛选、比率测试和RANSAC几何验证
  * 
  * @param keypoints1 第一张图像的特征点
  * @param keypoints2 第二张图像的特征点
  * @param knnMatches KNN匹配结果
- * @param points1 输出的第一张图像匹配点坐标
- * @param points2 输出的第二张图像匹配点坐标
+ * @param points1 输出的第一张图像的匹配点坐标
+ * @param points2 输出的第二张图像的匹配点坐标
  * @param params 特征检测参数
- * @return 筛选后的匹配点对
+ * @return std::vector<cv::DMatch> 筛选后的匹配点对
+ * 
+ * @note 处理流程：
+ *       1. 根据响应值并行筛选特征点
+ *       2. 并行比率测试筛选优质匹配
+ *       3. 并行RANSAC几何验证
+ * @note 如果禁用并行处理，会回退到串行算法
+ * @see ParallelKeypointFilter(), ParallelRatioTest(), ParallelRANSAC()
  */
 std::vector<cv::DMatch> FeatureDetectorOptimized::FilterMatchesParallel(
     const std::vector<cv::KeyPoint>& keypoints1,
@@ -290,11 +332,16 @@ std::vector<cv::DMatch> FeatureDetectorOptimized::FilterMatchesParallel(
 /**
  * @brief 并行特征点筛选函数
  * 
+ * 并行筛选符合响应值阈值的特征点
+ * 
  * @param keypoints 特征点列表
- * @param validFlags 有效特征点标志
+ * @param validFlags 输出的有效特征点标志
  * @param responseThresh 响应值阈值
  * @param startIdx 起始索引
  * @param endIdx 结束索引
+ * 
+ * @note 该函数由多个线程并行执行，处理特征点列表的不同段
+ * @see FilterMatchesParallel()
  */
 void FeatureDetectorOptimized::ParallelKeypointFilter(
     const std::vector<cv::KeyPoint>& keypoints,
@@ -316,6 +363,8 @@ void FeatureDetectorOptimized::ParallelKeypointFilter(
 /**
  * @brief 并行比率测试函数
  * 
+ * 并行进行比率测试，筛选优质匹配
+ * 
  * @param knnMatches KNN匹配结果
  * @param validKeypoints1 第一张图像的有效特征点标志
  * @param validKeypoints2 第二张图像的有效特征点标志
@@ -327,6 +376,9 @@ void FeatureDetectorOptimized::ParallelKeypointFilter(
  * @param ratioThresh 比率阈值
  * @param startIdx 起始索引
  * @param endIdx 结束索引
+ * 
+ * @note 该函数由多个线程并行执行，处理匹配列表的不同段
+ * @see FilterMatchesParallel()
  */
 void FeatureDetectorOptimized::ParallelRatioTest(
     const std::vector<std::vector<cv::DMatch>>& knnMatches,
@@ -357,11 +409,17 @@ void FeatureDetectorOptimized::ParallelRatioTest(
 /**
  * @brief 并行RANSAC函数
  * 
+ * 并行进行多次RANSAC，选择最佳结果
+ * 
  * @param goodMatches 优质匹配结果
  * @param points1 第一张图像的匹配点坐标
  * @param points2 第二张图像的匹配点坐标
  * @param params 特征检测参数
- * @return 经过RANSAC验证的匹配点对
+ * @return std::vector<cv::DMatch> 经过RANSAC验证的匹配点对
+ * 
+ * @note 由于RANSAC算法本身是随机采样，难以直接并行化
+ *       这里采用多次RANSAC并行执行，选择最佳结果的方法
+ * @see FilterMatchesParallel()
  */
 std::vector<cv::DMatch> FeatureDetectorOptimized::ParallelRANSAC(
     const std::vector<cv::DMatch>& goodMatches,
@@ -439,10 +497,16 @@ std::vector<cv::DMatch> FeatureDetectorOptimized::ParallelRANSAC(
 /**
  * @brief 并行特征检测测试函数
  * 
+ * 测试不同特征提取器的并行处理性能，包括SIFT、ORB和AKAZE
+ * 
  * @param imagePath1 第一张图像路径
  * @param imagePath2 第二张图像路径
  * 
- * 测试不同特征提取器的性能，包括SIFT、ORB和AKAZE
+ * @note 输出内容：
+ *       - 各特征提取器的处理时间
+ *       - 匹配数量和内点数量
+ *       - 相对性能提升倍数
+ * @see ProcessImagePair()
  */
 void FeatureDetectorOptimized::TestFeatureDetectionParallel(const QString& imagePath1, const QString& imagePath2)
 {
@@ -530,10 +594,19 @@ void FeatureDetectorOptimized::TestFeatureDetectionParallel(const QString& image
 /**
  * @brief 处理图像对
  * 
+ * 处理单对图像的特征检测和匹配
+ * 
  * @param imagePath1 第一张图像路径
  * @param imagePath2 第二张图像路径
  * @param params 特征检测参数
- * @return 并行处理结果
+ * @return ParallelResult 处理结果
+ * 
+ * @note 处理流程：
+ *       1. 图像读取和预处理（并行）
+ *       2. 特征点检测（并行）
+ *       3. 特征匹配
+ *       4. 匹配筛选（并行）
+ * @see FilterMatchesParallel()
  */
 ParallelResult FeatureDetectorOptimized::ProcessImagePair(
     const QString& imagePath1,
@@ -604,9 +677,14 @@ ParallelResult FeatureDetectorOptimized::ProcessImagePair(
 /**
  * @brief 批量特征检测
  * 
- * @param imagePairs 图像对列表
+ * 并行处理多对图像，提高批量处理效率
+ * 
+ * @param imagePairs 图像对列表，每个元素为(路径1, 路径2)
  * @param params 特征检测参数
- * @return 批量处理结果
+ * @return std::vector<ParallelResult> 批量处理结果列表
+ * 
+ * @note 使用std::async并行处理所有图像对
+ * @see ProcessImagePair()
  */
 std::vector<ParallelResult> FeatureDetectorOptimized::BatchFeatureDetection(
     const std::vector<std::pair<QString, QString>>& imagePairs,
@@ -640,10 +718,15 @@ std::vector<ParallelResult> FeatureDetectorOptimized::BatchFeatureDetection(
 /**
  * @brief 异步特征检测
  * 
+ * 异步处理特征检测，不阻塞主线程
+ * 
  * @param imagePath1 第一张图像路径
  * @param imagePath2 第二张图像路径
  * @param params 特征检测参数
- * @return 异步处理结果的future对象
+ * @return std::future<ParallelResult> 异步处理结果的future对象
+ * 
+ * @note 可以通过future.get()获取结果，或使用wait_for()检查完成状态
+ * @see ProcessImagePair()
  */
 std::future<ParallelResult> FeatureDetectorOptimized::AsyncFeatureDetection(
     const QString& imagePath1,
@@ -660,8 +743,12 @@ std::future<ParallelResult> FeatureDetectorOptimized::AsyncFeatureDetection(
 /**
  * @brief 记录性能指标
  * 
+ * 记录并输出性能指标
+ * 
  * @param operation 操作名称
  * @param elapsedMs 耗时（毫秒）
+ * 
+ * @note 使用qDebug输出到控制台
  */
 void FeatureDetectorOptimized::LogPerformanceMetrics(const QString& operation, qint64 elapsedMs)
 {

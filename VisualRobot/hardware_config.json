@@ -30,7 +30,8 @@
       "accelerators": {
         "opencl": true,
         "cuda": false,
-        "tensorrt": false
+        "tensorrt": false,
+        "npu": false
       },
       "paths": {
         "models": "../models",
@@ -71,7 +72,8 @@
       "accelerators": {
         "opencl": false,
         "cuda": false,
-        "tensorrt": false
+        "tensorrt": false,
+        "npu": false
       },
       "paths": {
         "models": "../models",
@@ -117,7 +119,8 @@
       "accelerators": {
         "opencl": true,
         "cuda": true,
-        "tensorrt": true
+        "tensorrt": true,
+        "npu": false
       },
       "paths": {
         "models": "../models",

@@ -1,3 +1,14 @@
+/**
+ * @file DataProcessor.cpp
+ * @brief 数据处理器实现文件
+ * 
+ * 该文件实现了DataProcessor类的所有方法，提供图像预处理、特征提取和数据增强功能
+ * 
+ * @author VisualRobot Team
+ * @date 2025-12-29
+ * @version 1.0
+ */
+
 #include "DataProcessor.h"
 #include <QDebug>
 
@@ -9,7 +20,12 @@ using namespace cv;
  * 
  * 初始化数据处理器，设置默认特征提取器类型为SIFT，并初始化所有特征检测器
  * 
- * @param parent 父对象指针
+ * @param parent 父对象指针，默认为nullptr
+ * @note 初始化过程：
+ *       -# 初始化随机数生成器（Mersenne Twister算法）
+ *       -# 设置默认特征提取器为SIFT
+ *       -# 调用InitializeDetectors()初始化所有检测器
+ * @see InitializeDetectors()
  */
 DataProcessor::DataProcessor(QObject *parent)
     : QObject(parent)
@@ -23,6 +39,13 @@ DataProcessor::DataProcessor(QObject *parent)
  * @brief 初始化特征检测器
  * 
  * 尝试初始化SIFT、ORB和AKAZE特征检测器，并处理可能的异常
+ * 
+ * @note 检测器参数说明：
+ *       - SIFT: 默认参数
+ *       - ORB: 500特征点, 1.2缩放因子, 8层金字塔, 31边缘阈值
+ *       - AKAZE: 默认参数
+ * @warning 可能因OpenCV版本或依赖库缺失导致初始化失败
+ * @see DataProcessor()
  */
 void DataProcessor::InitializeDetectors()
 {
@@ -69,7 +92,11 @@ void DataProcessor::InitializeDetectors()
 /**
  * @brief 设置特征提取器类型
  * 
- * @param type 特征提取器类型
+ * 切换当前使用的特征提取算法
+ * 
+ * @param type 特征提取器类型（SIFT、ORB或AKAZE）
+ * @see GetFeatureType()
+ * @see DetectKeypoints()
  */
 void DataProcessor::SetFeatureType(FeatureType type)
 {
@@ -79,7 +106,10 @@ void DataProcessor::SetFeatureType(FeatureType type)
 /**
  * @brief 获取当前特征提取器类型
  * 
- * @return 当前使用的特征提取器类型
+ * 查询当前激活的特征提取算法
+ * 
+ * @return FeatureType 当前使用的特征提取器类型
+ * @see SetFeatureType()
  */
 FeatureType DataProcessor::GetFeatureType() const
 {
@@ -91,10 +121,16 @@ FeatureType DataProcessor::GetFeatureType() const
  * 
  * 将图像像素值归一化到指定的均值和标准差
  * 
- * @param input 输入图像
+ * @param input 输入图像（支持多通道）
  * @param targetMean 目标均值
  * @param targetStd 目标标准差
- * @return 归一化后的图像
+ * @return Mat 归一化后的图像（CV_32F类型）
+ * @note 处理流程：
+ *       -# 转换为浮点型（CV_32F）
+ *       -# 计算当前均值和标准差
+ *       -# 标准化：(x - mean) / stddev
+ *       -# 调整到目标分布：x * targetStd + targetMean
+ * @see StandardizeImage()
  */
 Mat DataProcessor::NormalizeImage(const Mat& input, double targetMean, double targetStd)
 {
@@ -121,10 +157,12 @@ Mat DataProcessor::NormalizeImage(const Mat& input, double targetMean, double ta
 /**
  * @brief 图像标准化处理
  * 
- * 将图像像素值映射到0-255范围
+ * 将图像像素值线性映射到0-255范围
  * 
  * @param input 输入图像
- * @return 标准化后的图像
+ * @return Mat 标准化后的图像（CV_8U类型）
+ * @note 使用公式：output = 255 * (input - min) / (max - min)
+ * @see NormalizeImage()
  */
 Mat DataProcessor::StandardizeImage(const Mat& input)
 {
@@ -145,11 +183,13 @@ Mat DataProcessor::StandardizeImage(const Mat& input)
 /**
  * @brief 保持宽高比调整图像大小
  * 
- * 按照指定的目标大小，保持图像宽高比进行缩放
+ * 按照指定的目标大小，保持图像原始宽高比进行等比例缩放
  * 
  * @param input 输入图像
- * @param targetSize 目标最大尺寸
- * @return 调整大小后的图像
+ * @param targetSize 目标最大尺寸（宽度或高度中的较大值）
+ * @return Mat 调整大小后的图像
+ * @note 使用INTER_AREA插值方法，适合下采样
+ * @warning 图像尺寸可能小于targetSize，但不会超过
  */
 Mat DataProcessor::ResizeWithAspectRatio(const Mat& input, int targetSize)
 {
@@ -171,8 +211,10 @@ Mat DataProcessor::ResizeWithAspectRatio(const Mat& input, int targetSize)
  * 
  * 从输入图像中提取HOG（方向梯度直方图）特征
  * 
- * @param input 输入图像
- * @return HOG特征矩阵
+ * @param input 输入图像（自动转换为灰度）
+ * @return Mat HOG特征向量（一维矩阵）
+ * @note 处理流程：灰度转换 → 调整为64x128 → HOG特征计算
+ * @warning 输出特征为一维向量，需要根据实际应用进行reshape
  */
 Mat DataProcessor::ExtractHOGFeatures(const Mat& input)
 {
@@ -209,9 +251,12 @@ Mat DataProcessor::ExtractHOGFeatures(const Mat& input)
  * 
  * 根据当前设置的特征提取器类型，检测图像中的特征点并计算相应的描述符
  * 
- * @param input 输入图像
- * @param descriptors 输出的特征描述符
- * @return 检测到的特征点
+ * @param input 输入图像（单通道灰度图效果最佳）
+ * @param descriptors 输出的特征描述符矩阵
+ * @return vector<KeyPoint> 检测到的特征点集合
+ * @note 支持SIFT、ORB、AKAZE三种特征提取器
+ * @see SetFeatureType()
+ * @see GetFeatureType()
  */
 vector<KeyPoint> DataProcessor::DetectKeypoints(const Mat& input, Mat& descriptors)
 {
@@ -272,9 +317,13 @@ vector<KeyPoint> DataProcessor::DetectKeypoints(const Mat& input, Mat& descripto
 /**
  * @brief 调整图像亮度
  * 
+ * 线性调整图像的亮度值
+ * 
  * @param input 输入图像
  * @param alpha 亮度调整值，正值增加亮度，负值降低亮度
- * @return 调整亮度后的图像
+ * @return Mat 调整亮度后的图像
+ * @note 使用公式：output = input + alpha
+ * @see AdjustContrast()
  */
 Mat DataProcessor::AdjustBrightness(const Mat& input, double alpha)
 {
@@ -294,9 +343,13 @@ Mat DataProcessor::AdjustBrightness(const Mat& input, double alpha)
 /**
  * @brief 调整图像对比度
  * 
+ * 线性调整图像的对比度
+ * 
  * @param input 输入图像
  * @param beta 对比度调整值，大于1增加对比度，小于1降低对比度
- * @return 调整对比度后的图像
+ * @return Mat 调整对比度后的图像
+ * @note 使用公式：output = input * beta
+ * @see AdjustBrightness()
  */
 Mat DataProcessor::AdjustContrast(const Mat& input, double beta)
 {
@@ -316,10 +369,14 @@ Mat DataProcessor::AdjustContrast(const Mat& input, double beta)
 /**
  * @brief 为图像添加高斯噪声
  * 
+ * 在图像上叠加高斯分布的随机噪声
+ * 
  * @param input 输入图像
  * @param mean 噪声均值，默认为0
  * @param stddev 噪声标准差，默认为25
- * @return 添加噪声后的图像
+ * @return Mat 添加噪声后的图像
+ * @note 噪声添加后会进行归一化处理确保像素值在0-255范围
+ * @see RandomRotate()
  */
 Mat DataProcessor::AddNoise(const Mat& input, double mean, double stddev)
 {
@@ -347,9 +404,13 @@ Mat DataProcessor::AddNoise(const Mat& input, double mean, double stddev)
 /**
  * @brief 随机旋转图像
  * 
+ * 在指定角度范围内随机旋转图像
+ * 
  * @param input 输入图像
  * @param maxAngle 最大旋转角度（正负），默认为30度
- * @return 旋转后的图像
+ * @return Mat 旋转后的图像
+ * @note 旋转角度在[-maxAngle, maxAngle]范围内随机选择
+ * @see RandomFlip()
  */
 Mat DataProcessor::RandomRotate(const Mat& input, double maxAngle)
 {
@@ -380,7 +441,9 @@ Mat DataProcessor::RandomRotate(const Mat& input, double maxAngle)
  * 随机选择水平翻转或垂直翻转
  * 
  * @param input 输入图像
- * @return 翻转后的图像
+ * @return Mat 翻转后的图像
+ * @note 50%概率水平翻转，50%概率垂直翻转
+ * @see RandomRotate()
  */
 Mat DataProcessor::RandomFlip(const Mat& input)
 {
@@ -407,9 +470,13 @@ Mat DataProcessor::RandomFlip(const Mat& input)
 /**
  * @brief 随机裁剪图像
  * 
+ * 按指定比例随机裁剪图像并调整回原始尺寸
+ * 
  * @param input 输入图像
- * @param scale 裁剪比例，默认为0.8（裁剪为原图像的80%大小）
- * @return 裁剪并调整大小后的图像
+ * @param scale 裁剪比例，默认为0.8
+ * @return Mat 裁剪并调整大小后的图像
+ * @note 裁剪区域在图像内部随机选择
+ * @see ApplyAugmentation()
  */
 Mat DataProcessor::RandomCrop(const Mat& input, double scale)
 {
@@ -448,7 +515,9 @@ Mat DataProcessor::RandomCrop(const Mat& input, double scale)
  * 
  * @param input 输入图像
  * @param numAugmentations 增强版本数量，默认为5
- * @return 增强后的图像集合
+ * @return vector<Mat> 增强后的图像集合
+ * @note 每个增强版本随机应用亮度、对比度调整和翻转操作
+ * @see RandomCrop()
  */
 vector<Mat> DataProcessor::ApplyAugmentation(const Mat& input, int numAugmentations)
 {
@@ -495,9 +564,13 @@ vector<Mat> DataProcessor::ApplyAugmentation(const Mat& input, int numAugmentati
 /**
  * @brief 生成指定范围内的随机浮点数
  * 
+ * 使用均匀分布生成指定范围内的随机浮点数
+ * 
  * @param min 最小值
  * @param max 最大值
- * @return 随机浮点数
+ * @return double 随机浮点数
+ * @note 使用std::uniform_real_distribution
+ * @see RandomInt()
  */
 double DataProcessor::RandomDouble(double min, double max)
 {
@@ -511,9 +584,13 @@ double DataProcessor::RandomDouble(double min, double max)
 /**
  * @brief 生成指定范围内的随机整数
  * 
- * @param min 最小值
- * @param max 最大值
- * @return 随机整数
+ * 使用均匀分布生成指定范围内的随机整数
+ * 
+ * @param min 最小值（包含）
+ * @param max 最大值（包含）
+ * @return int 随机整数
+ * @note 使用std::uniform_int_distribution
+ * @see RandomDouble()
  */
 int DataProcessor::RandomInt(int min, int max)
 {

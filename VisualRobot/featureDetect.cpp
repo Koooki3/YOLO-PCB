@@ -1,34 +1,62 @@
+/**
+ * @file featureDetect.cpp
+ * @brief 特征检测模块实现文件
+ * 
+ * 该文件实现了featureDetector类的所有方法，提供基础的特征检测、匹配和几何验证功能，
+ * 包括特征匹配筛选、RANSAC几何验证和完整的特征检测流程测试。
+ * 
+ * @author VisualRobot Team
+ * @date 2025-12-30
+ * @version 1.0
+ */
+
 #include "featureDetect.h"
 #include "DataProcessor.h"
 #include "DLProcessor.h"
 
 /**
  * @brief 构造函数
+ * 
+ * 初始化特征检测器
+ * 
+ * @note 默认初始化，无特殊操作
  */
 featureDetector::featureDetector()
 {
-
+    // 构造函数实现
 }
 
 /**
  * @brief 析构函数
+ * 
+ * 清理资源
+ * 
+ * @note 由于使用OpenCV智能指针，资源会自动释放
  */
 featureDetector::~featureDetector()
 {
-
+    // 析构函数实现
 }
 
 /**
  * @brief 特征匹配和几何验证函数
+ * 
+ * 对特征匹配进行多阶段筛选，包括响应值筛选、比率测试和RANSAC几何验证
+ * 
  * @param keypoints1 第一张图像的特征点
  * @param keypoints2 第二张图像的特征点
  * @param knnMatches KNN匹配结果
  * @param points1 输出的第一张图像的匹配点坐标
  * @param points2 输出的第二张图像的匹配点坐标
  * @param params 特征检测参数
- * @return 筛选后的匹配点对
+ * @return std::vector<cv::DMatch> 筛选后的匹配点对
  * 
- * 对特征匹配进行多阶段筛选，包括响应值筛选、比率测试和RANSAC几何验证
+ * @note 处理流程：
+ *       1. 根据响应值筛选特征点
+ *       2. 应用比率测试进行初步筛选
+ *       3. 使用RANSAC进行几何验证
+ * @note 如果RANSAC验证失败或未启用，返回初步筛选后的匹配
+ * @see FeatureParams
  */
 std::vector<cv::DMatch> featureDetector::FilterMatches(
     const std::vector<cv::KeyPoint>& keypoints1,
@@ -50,6 +78,7 @@ std::vector<cv::DMatch> featureDetector::FilterMatches(
     validKeypoints1.resize(keypoints1.size(), false);
     validKeypoints2.resize(keypoints2.size(), false);
 
+    // 遍历图像1的特征点，筛选响应值大于阈值的点
     for (size_t i = 0; i < keypoints1.size(); i++)
     {
         if (keypoints1[i].response > params.responseThresh)
@@ -58,6 +87,7 @@ std::vector<cv::DMatch> featureDetector::FilterMatches(
         }
     }
     
+    // 遍历图像2的特征点，筛选响应值大于阈值的点
     for (size_t i = 0; i < keypoints2.size(); i++)
     {
         if (keypoints2[i].response > params.responseThresh)
@@ -70,7 +100,7 @@ std::vector<cv::DMatch> featureDetector::FilterMatches(
     for (const auto& match : knnMatches)
     {
         // 比率测试：最佳匹配与次佳匹配的距离比率小于阈值，且特征点响应值有效
-        if (match[0].distance < params.ratioThresh * match[1].distance && validKeypoints1[match[0].queryIdx] && validKeypoints2[match[0].trainIdx])
+        if (match.size() >= 2 && match[0].distance < params.ratioThresh * match[1].distance && validKeypoints1[match[0].queryIdx] && validKeypoints2[match[0].trainIdx])
         {
             goodMatches.push_back(match[0]);
             points1.push_back(keypoints1[match[0].queryIdx].pt);
@@ -120,10 +150,25 @@ std::vector<cv::DMatch> featureDetector::FilterMatches(
 
 /**
  * @brief 特征识别测试函数
+ * 
+ * 完整的特征检测流程测试，包括图像读取、预处理、特征提取、匹配和结果可视化
+ * 
  * @param imagePath1 第一张图像的路径
  * @param imagePath2 第二张图像的路径
  * 
- * 完整的特征检测流程测试，包括图像读取、预处理、特征提取、匹配和结果可视化
+ * @note 处理流程：
+ *       1. 图像读取和预处理
+ *       2. 特征提取
+ *       3. 特征匹配
+ *       4. 匹配筛选和几何验证
+ *       5. 结果可视化和保存
+ * @note 输出内容：
+ *       - 特征提取器类型
+ *       - 特征点数量
+ *       - 匹配数量
+ *       - 筛选后匹配数量
+ *       - 内点数量
+ * @see FilterMatches()
  */
 void featureDetector::TestFeatureDetection(const QString& imagePath1, const QString& imagePath2)
 {
@@ -220,13 +265,14 @@ void featureDetector::TestFeatureDetection(const QString& imagePath1, const QStr
     QString featureTypeName;
     if (params.featureType == FeatureType::SIFT) {
         featureTypeName = "SIFT";
-    }else if (params.featureType == FeatureType::ORB) {
+    } else if (params.featureType == FeatureType::ORB) {
         featureTypeName = "ORB";
     } else if (params.featureType == FeatureType::AKAZE) {
         featureTypeName = "AKAZE";
     } else {
         featureTypeName = "未知";
     }
+    
     qDebug() << "使用特征提取器:" << featureTypeName;
     qDebug() << "Total keypoints in image1:" << keypoints1.size();
     qDebug() << "Total keypoints in image2:" << keypoints2.size();
