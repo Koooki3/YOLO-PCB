@@ -543,9 +543,3 @@ yoloProcessor.DrawDetectionResults(resultImage, results);
 - 提供复现步骤
 - 包含相关日志和截图
 - 说明期望的行为和实际行为
-
----
-
-**最后更新日期：2025年12月09日**
-
-**项目仓库：https://gitee.com/visual-team-arcuchi/VisualRobot.git**
