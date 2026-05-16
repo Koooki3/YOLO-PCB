@@ -1,6 +1,6 @@
-# VisualRobot
+# YOLO-PCB
 
-基于 Qt 和 C++ 开发的工业视觉机器人控制系统，提供完整的相机控制、图像处理、深度学习解决方案和高级视觉分析功能。
+基于 Qt 和 C++ 开发的工业视觉缺陷检测系统，提供完整的相机控制、图像处理、深度学习解决方案和高级视觉分析功能。
 
 ## ✨ 主要特性
 
@@ -543,9 +543,3 @@ yoloProcessor.DrawDetectionResults(resultImage, results);
 - 提供复现步骤
 - 包含相关日志和截图
 - 说明期望的行为和实际行为
-
----
-
-**最后更新日期：2025年12月09日**
-
-**项目仓库：https://gitee.com/visual-team-arcuchi/VisualRobot.git**
